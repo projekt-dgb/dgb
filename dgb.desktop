@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Digitales Grundbuch
+GenericName=dgb
+Keywords=dgb;verfahren;digital;
+GenericName[de]=Grundbuchblätter abdigitalisieren
+Exec=dgb
+Icon=/usr/share/pixmaps/dgb.xpm
+Terminal=false
+Type=Application
+StartupNotify=false
+MimeType=application/pdf
+SingleMainWindow=true

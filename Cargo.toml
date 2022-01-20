@@ -1,0 +1,43 @@
+[package]
+name = "dgb"
+version = "1.0.0"
+edition = "2021"
+description = "Tool zur Abdigitalisierung von Grundbuchblättern"
+authors = ["Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"]
+license = "MIT"
+build = "build.rs"
+readme = "README.md"
+
+[dependencies]
+web-view = "0.1.3"
+urlencoding = "1.0.0"
+serde = "1" 
+serde_derive = "1" 
+itertools = "0.7.7"
+lopdf = "0.26.0"
+serde_json = "1"
+base64 = "0.13"
+regex = "1"
+lazy_static = "1"
+image = "0.23.14"
+rayon = "1.5.1"
+kuchiki = "0.8.1"
+tinyfiledialogs = "3.8.3"
+chrono = { version = "0.4.19", features = ["serde"] }
+toml = "0.5"
+
+[dependencies.pyo3]
+version = "0.15.1"
+features = ["auto-initialize"]
+
+[package.metadata.deb]
+maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
+depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2)"
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/dgb", "usr/bin/", "755"],
+    ["dgb.desktop", "usr/local/share/applications/", "755"],
+    ["dgb.xpm", "usr/share/pixmaps/", "755"],
+    ["README.md", "usr/local/share/doc/dgb/README", "644"],
+]

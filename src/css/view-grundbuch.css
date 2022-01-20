@@ -1,0 +1,172 @@
+#__application-main {
+	display: flex;
+	flex-grow: 1;
+}
+
+#__application-main #__application-file-list {
+  max-width: 200px;
+  min-width: 200px;
+  display: flex;
+  background: #efefef;
+  box-shadow: 0px 0px 3px black;
+  flex-grow: 1;
+  flex-direction: column;
+}
+
+#__application-main #__application-file-list p {
+  font-size: 12px;
+  font-family: monospace;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+#__application-main #__application-file-list p.active {
+  background: antiquewhite;
+}
+
+#__application-main #__application-file-list p:hover {
+  background: #ccc;
+}
+
+#__application-main #__application-file-list p:active {
+  background: #aaa;
+}
+
+#__application-main #__application-page-list {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  max-height:1000px;
+  display: block;
+  background: white;
+  overflow-y: auto;
+}
+
+#__application-main #__application-page-list h5 {
+    margin: 10px;
+}
+
+#__application-main #__application-page-list .__application-page {
+  width: 40px;
+  cursor: pointer;
+  margin: 6px;
+  font-family: sans-serif;
+  font-size: 16px;
+  background: white;
+  border: 1px solid #efefef;
+  color: #bbb;
+  text-align: center;
+  height: 55px;  
+  display: inline-flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+#__application-main #__application-page-list .__application-page.loaded {
+  background: aliceblue;
+  color: black;
+  border: 1px solid #bbb;
+}
+
+#__application-main #__application-page-list .__application-page.loaded.active {
+  background: darkblue;
+  color: white;
+  border: 1px solid white;
+}
+
+#__application-main #__application-page-list .__application-page:hover {
+  border: 1px solid aliceblue;
+}
+
+#__application-main #__application-main-container {
+    display: block;
+    height: 600px;
+    background: white;
+    overflow-y: scroll;
+    overflow-x: auto;
+}
+
+#__application-main #__application-main-container:hover {
+    z-index: 1;
+}
+
+#__application-main #__application-main-container > * {
+  display: block;
+  overflow: hidden;
+}
+
+#__application-main #__application-main-container > * > h4 {
+  font-family: sans-serif;
+  font-size: 16px;
+}
+
+#__application-main #__application-main-container .__application-table-header {
+  margin: 5px 0px;
+  margin-top: 10px;
+  display: block;
+  white-space: nowrap;
+}
+
+#__application-main #__application-main-container .__application-table-header p {
+  font-family: sans-serif;
+  font-weight: bold;
+  white-space: nowrap;
+  margin-right: 10px;
+  display: inline-block;
+}
+
+#__application-main input {
+  margin-right: 10px;
+  margin-bottom: 2px;
+  font-family: sans-serif;
+  border: 1px solid grey;
+}
+
+#__application-main textarea {
+  font-family: sans-serif;
+  border: 1px solid grey;
+}
+
+#__application-main #__application-main-container > #__application-abteilung-3 {
+    background: LightCyan;
+}
+
+#__application-main #__application-pdf-page-image {
+  background: #444;
+  display:flex;
+  flex-grow:1;
+  overflow: scroll;
+  max-height:400px;
+}
+
+#__application-main #__application-pdf-page-image > div {
+    margin: 0px auto;
+}
+
+#__application-main #__application-pdf-page-image img {
+    width: 1200px;
+    height: intrinsic;
+    box-shadow: 0px 0px 20px black;
+}
+
+.kontextmenü-eintrag {
+    padding: 0px 10px;
+    cursor:pointer;
+    user-select: none;
+}
+
+.kontextmenü-eintrag:hover {
+    background: #efefef;    
+    cursor:pointer;
+}
+
+.kontextmenü-eintrag:active {
+    background: #aaa;
+    cursor:pointer;
+}
+
+.kontextmenü-eintrag:active p {
+    color:white;
+    cursor:pointer;
+}

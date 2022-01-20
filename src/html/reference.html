@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>JS Bin</title>
+  <style>
+  * {
+        padding: 0px;
+        margin: 0px;
+        font-size: 14px;
+
+        cursor: default;
+        border: none;
+        outline: none;
+        color: #222222;
+        box-sizing: border-box;
+    }
+
+    body, html {
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+    }
+
+    body, body * {
+      display: flex;
+      flex-direction: row;
+      margin: 0px;
+    }
+
+    body {
+      background: white;
+      max-height: 100%;
+      overflow: hidden;
+    }
+
+    html {
+      height: 100%;
+      max-height: 100%;
+      overflow: hidden;
+    }
+
+    textarea {
+        resize: none;
+    }
+
+    script {
+        display: none;
+    }
+
+    /* Chrome, Safari, Edge, Opera */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    /* Firefox */
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+
+    #__application-file-list {
+      max-width: 200px;
+      display: flex;
+      background: #efefef;
+      box-shadow: 0px 0px 3px black;
+      flex-grow: 1;
+      flex-direction: column;
+    }
+
+    #__application-file-list p {
+      font-size: 12px;
+      font-family: monospace;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+
+    #__application-file-list p.active {
+      background: antiquewhite;
+    }
+
+    #__application-file-list p:hover {
+      background: #ccc;
+    }
+
+    #__application-file-list p:active {
+      background: #aaa;
+    }
+
+    #__application-page-list {
+      width: 185px;
+      min-width: 70px;
+      display: block;
+      background: white;
+      overflow-y: scroll;
+    }
+
+    #__application-page-list > .__application-page {
+      width: 40px;
+      cursor: pointer;
+      margin: 6px;
+      font-family: sans-serif;
+      font-size: 16px;
+      background: white;
+      border: 1px solid #efefef;
+      color: #bbb;
+      text-align: center;
+      height: 55px;  
+      display: inline-flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #__application-page-list > .__application-page.loaded {
+      background: aliceblue;
+      color: black;
+      border: 1px solid #bbb;
+    }
+
+    #__application-page-list > .__application-page.loaded.active {
+      background: darkblue;
+      color: white;
+      border: 1px solid white;
+    }
+
+    #__application-page-list > .__application-page:hover {
+      border: 1px solid aliceblue;
+    }
+
+    #__application-main-container {
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+      background: white;
+      overflow-y: scroll;
+      overflow-x: auto;
+      padding: 10px;
+    }
+
+    #__application-main-container > * {
+      display: block;
+      margin-bottom: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    #__application-main-container > * > h4 {
+      font-family: sans-serif;
+      font-size: 16px;
+    }
+
+    #__application-main-container .__application-table-header {
+      margin: 5px 0px;
+      margin-top: 10px;
+      display: block;
+      white-space: nowrap;
+    }
+
+    #__application-main-container .__application-table-header p {
+      font-family: sans-serif;
+      font-weight: bold;
+      margin-right: 10px;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    #__application-main-container > #__application-bestandsverzeichnis {
+        background: #FFFACD;
+    }
+
+    .__application-bestandsverzeichnis-eintrag input {
+        margin-right: 10px;
+      margin-bottom: 2px;
+      border: 1px solid grey;
+    }
+
+    #__application-main-container > #__application-abteilung-1 {
+        
+    }
+
+    #__application-main-container > #__application-abteilung-2 {
+        
+    }
+
+    textarea {
+      font-family: sans-serif;
+      border: 1px solid grey;
+    }
+
+    #__application-main-container > #__application-abteilung-3 {
+        background: LightCyan;
+    }
+
+    #__application-pdf-page-image {
+      display: flex;
+      flex-grow: 1;
+      background: #444;
+    }
+
+    #__application-pdf-page-image {
+      max-width: 800px;
+      min-width: 500px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-height: 100%;
+      overflow: auto;
+    }
+
+    #__application-pdf-page-image img {
+      max-width:100%;
+      max-height:100%;
+      object-fit: fill;
+    }
+  </style>
+</head>
+<body>
+  <!-- 
+    "__application-ribbon-content"
+    "__application-file-list"
+    "__application-page-list"
+    "__application-bestandsverzeichnis"
+
+    "__application-abteilung-1"
+    "__application-abteilung-2"
+    "__application-abteilung-3"
+
+    "__application-pdf-page-image"
+  -->
+  <div id="__application-file-list">
+    <p class="active">Schenkenberg Bl. 200</p>
+    <p>Ludwigsburg Bl. 10</p>
+  </div>
+  
+  <div id="__application-page-list">
+    <div class="__application-page loaded active">1</div>
+    <div class="__application-page loaded">2</div>
+    <div class="__application-page">3</div>
+    <div class="__application-page">4</div>
+  </div>
+  
+  <div id="__application-main-container">
+    <div id="__application-bestandsverzeichnis">
+      <h4>Bestandsverzeichnis</h4>
+      
+      <div class="__application-table-header">
+        <p style="width: 30px;">Nr.</p>
+        <p style="width: 80px;">Nr. (alt)</p>
+        <p style="width: 160px;">Gemarkung</p>
+        <p style="width: 80px;">Flur</p>
+        <p style="width: 80px;">Flurstück</p>
+        <p style="width: 80px;">Wirtschaftsart</p>
+        <p style="width: 80px;">Lage</p>
+        <p style="width: 80px;">Größe</p>
+      </div>
+      
+      <div class="__application-bestandsverzeichnis-eintrag">
+        <input type="number" style="width: 30px;" value="2" />
+        <input type="number" style="width: 80px;" value=""/>
+        <input type="text" style="width: 160px;"  value="Baumgarten"/>
+        <input type="number" style="width: 80px;"  value="1" />
+        <input type="number" style="width: 80px;"  value="256" />
+        <input type="text"  style="width: 80px;"  value="Landwirtschaftsfläche"/>
+        <input type="text"  style="width: 80px;"  value="Flapländerbruch"/>
+        <input type="number" style="width: 80px;" value="21422"/>
+      </div>
+      
+      <div class="__application-bestandsverzeichnis-eintrag">
+        <input type="number" style="width: 30px;" value="2" />
+        <input type="number" style="width: 80px;" value=""/>
+        <input type="text" style="width: 160px;"  value="Baumgarten"/>
+        <input type="number" style="width: 80px;"  value="1" />
+        <input type="number" style="width: 80px;"  value="256" />
+        <input type="text"  style="width: 80px;"  value="Landwirtschaftsfläche"/>
+        <input type="text"  style="width: 80px;"  value="Flapländerbruch"/>
+        <input type="number" style="width: 80px;" value="21422"/>
+      </div>
+      
+      <div class="__application-bestandsverzeichnis-eintrag">
+        <input type="number" style="width: 30px;" value="2" />
+        <input type="number" style="width: 80px;" value=""/>
+        <input type="text" style="width: 160px;"  value="Baumgarten"/>
+        <input type="number" style="width: 80px;"  value="1" />
+        <input type="number" style="width: 80px;"  value="256" />
+        <input type="text"  style="width: 80px;"  value="Landwirtschaftsfläche"/>
+        <input type="text"  style="width: 80px;"  value="Flapländerbruch"/>
+        <input type="number" style="width: 80px;" value="21422"/>
+      </div>
+      
+    </div>
+  
+    <div id="__application-abteilung-1">
+      <h4>Abteilung 1</h4>
+      
+      <div class="__application-table-header">
+        <p style="width: 30px;">Nr.</p>
+        <p style="width: 260px;">Eigentümer</p>
+        <p style="width: 120px;">Nr. Grundstücke</p>
+        <p style="width: 380px;">Bemerkung</p>
+      </div>
+      
+      <div class="__application-bestandsverzeichnis-eintrag">
+        <input type="number" style="width: 30px;" value="2" />
+        <input type="text" style="width: 260px;"  value="Feldfrüchteproduktion GmbH"/>
+        <input type="number" style="width: 120px;"  value="1" />
+        <input type="text"  style="width: 380px;"  value="Aufgelassen am 19. Juli 1993"/>
+      </div>
+      
+    </div>
+    <div id="__application-abteilung-2">
+       <h4>Abteilung 2</h4>
+      
+      <div class="__application-table-header">
+        <p style="width: 30px;">Nr.</p>
+        <p style="width: 160px;">Recht</p>
+      </div>
+      
+      <div class="__application-bestandsverzeichnis-eintrag">
+        <input type="number" style="width: 30px;" value="2" />
+        <textarea rows="5" cols="100">Beschränkte persönliche Dienstbarkeit (Trinkwasserleitungsrecht nebst Einwirkungsbeschränkung)</textarea>
+      </div>
+      
+    </div>
+    <div id="__application-abteilung-3">
+      <h4>Abteilung 3</h4>
+      
+      <div class="__application-table-header">
+        <p style="width: 30px;">Nr.</p>
+        <p style="width: 90px;">Betrag</p>
+        <p style="width: 160px;">Recht</p>
+      </div>
+      
+      <div class="__application-bestandsverzeichnis-eintrag">
+        <input type="number" style="width: 30px;" value="2" />
+        <input type="number" min="0.00" max="10000.00" step="0.01" style="width: 90px;" value="690000" />
+
+        <textarea rows="5" cols="100">Grundschuld ohne Brief über sechshunderttausend Euro mit 15 % Zinsen</textarea>
+      </div>
+      
+    </div>
+  </div>
+  
+  <div id="__application-pdf-page-image">
+    <img src="https://picture.yatego.com/images/5bec4787bb8692.7/big_cbfa2f52478dd2db5c884a4d01e97bf6-kqh/tv-test-no-signal-kunstdruck-poster-ungerahmt-bild-din-a4-a3-k1010.jpg"/>
+  </div>
+  
+  </body>
+</html>
