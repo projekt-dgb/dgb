@@ -1774,7 +1774,7 @@ let rpc = {
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
-
+  
   check_for_pdf_loaded: function(arg, arg2) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2 }); },
   edit_text: function(arg, arg2) { rpc.invoke({ cmd : 'edit_text', path: arg, new_value: arg2 }); },
   eintrag_neu: function(arg) { rpc.invoke({ cmd : 'eintrag_neu', path: arg }); },
@@ -1783,8 +1783,17 @@ let rpc = {
   open_context_menu: function(x, y, seite) { rpc.invoke({ cmd : 'open_context_menu', x: x, y: y, seite: seite }); },
   close_pop_over:  function() { rpc.invoke({ cmd : 'close_pop_over' }); },
   close_file: function(arg) { rpc.invoke({ cmd : 'close_file', file_name: arg }); },
+
   edit_rechteart_script: function(neu) { rpc.invoke({ cmd: 'edit_rechteart_script', neu: neu }); },
-  kurztext_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_testen', text: arg }); },
+  rechteart_script_testen: function(arg) { rpc.invoke({ cmd: 'rechteart_script_testen', text: arg }); },
+  edit_schuldenart_script: function(neu) { rpc.invoke({ cmd: 'edit_schuldenart_script', neu: neu }); },
+  schuldenart_script_testen: function(arg) { rpc.invoke({ cmd: 'schuldenart_script_testen', text: arg }); },
+  teste_regex: function(regex_id, text) { rpc.invoke({ cmd: 'teste_regex', regex_id: regex_id, text: text }); },
+  edit_regex_key: function(old_key, new_key) { rpc.invoke({ cmd: 'edit_regex_key', old_key: old_key, new_key: new_key }); },
+  edit_regex_value: function(key, value) { rpc.invoke({ cmd: 'edit_regex_value', key: key, value: value }); },
+  insert_regex: function(arg) { rpc.invoke({ cmd : 'insert_regex', regex_key: arg });},
+  regex_loeschen: function(arg) { rpc.invoke({ cmd : 'regex_loeschen', regex_key: arg });},
+  
   klassifiziere_seite_neu: function(seite, klassifikation_neu) { rpc.invoke({ cmd: 'klassifiziere_seite_neu', seite: seite, klassifikation_neu: klassifikation_neu }); },
   
   set_active_ribbon_tab: function(arg) { rpc.invoke({ cmd : 'set_active_ribbon_tab', new_tab: arg }); },
@@ -1939,6 +1948,50 @@ function activateSelectedPage(event) {
     rpc.set_open_page(parseInt(event.target.getAttribute("data-pageNumber"), 10));
 }
 
+function regexLoeschen(event) {
+    
+    let key_id = event.target.getAttribute("data-key-id");
+    if (!key_id) { 
+        return; 
+    }
+    
+    let regex_key_dom = document.getElementById(key_id);
+    if (!regex_key_dom) { 
+        return; 
+    }
+    
+    let regex_key = regex_key_dom.innerText;
+    if (!regex_key) { 
+        return; 
+    }
+    
+    rpc.regex_loeschen(regex_key);
+}
+
+function neueRegexOnEnter(event) {
+    if(event.keyCode === 13){
+        
+        event.preventDefault();
+        
+        let key_id = event.target.getAttribute("data-key-id");
+        if (!key_id) { 
+            return; 
+        }
+        
+        let regex_key_dom = document.getElementById(key_id);
+        if (!regex_key_dom) { 
+            return; 
+        }
+        
+        let regex_key = regex_key_dom.innerText;
+        if (!regex_key) { 
+            return; 
+        }
+        
+        rpc.insert_regex(regex_key);
+    }
+}
+
 function insertTabAtCaret(event){
    if(event.keyCode === 9){
        event.preventDefault();
@@ -1965,6 +2018,8 @@ function insertTabAtCaret(event){
     }
 }
 
+// ---
+
 function editRechteArtScript(e) {
     // using innerText here because it preserves newlines
     var innerText = e.target.innerText;
@@ -1977,18 +2032,127 @@ function editRechteArtScript(e) {
     }
 }
 
-function kurztextTesten(e) {
-    if (e.target.value) {
-        rpc.kurztext_testen(e.target.value);        
+function testeRegex(event) {
+    let regex_id = document.getElementById("__application_konfiguration_regex_id");
+    if (!regex_id) {
+        return;
     }
+    
+    let regex_id_value = regex_id.value;
+    if (!regex_id_value) {
+        return;
+    }
+
+    let test_text = event.target.value;
+    if (!test_text) {
+        return;
+    }
+    
+    rpc.teste_regex(regex_id_value, test_text);
 }
 
-function replaceKurzTextTestString(s) {
-    let test_input = document.getElementById("__application_konfiguration_kurztext_test");
+function editRegexKey(event) {
+    let new_key = event.target.innerText;
+    if (!new_key) { 
+        return;
+    }
+    let old_key = event.target.getAttribute("data-regex-key");
+    if (!old_key) { 
+        return; 
+    }
+    event.target.setAttribute("data-regex-key", new_key);
+    rpc.edit_regex_key(old_key, new_key);
+}
+
+function editRegexValue(event) {
+    let regex_value = event.target.innerText;
+    if (!regex_value) { 
+        return; 
+    }
+    let key_id = event.target.getAttribute("data-key-id");
+    if (!key_id) { 
+        return; 
+    }
+    let regex_key_dom = document.getElementById(key_id);
+    if (!regex_key_dom) { 
+        return; 
+    }
+    let regex_key = regex_key_dom.innerText;
+    if (!regex_key) { 
+        return; 
+    }
+    rpc.edit_regex_value(regex_key, regex_value);
+    
+    let regex_id = document.getElementById("__application_konfiguration_regex_id");
+    if (!regex_id) {
+        return;
+    }
+    
+    let regex_id_value = regex_id.value;
+    if (!regex_id_value) {
+        return;
+    }
+    
+    let test_text_dom = document.getElementById("__application_konfiguration_regex_test_text");
+    if (!test_text_dom) {
+        return;
+    }
+    
+    let test_text = test_text_dom.value;
+    if (!test_text) {
+        return;
+    }
+    
+    rpc.teste_regex(regex_id_value, test_text);
+}
+
+function replaceRegexTestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_regex_test_output");
     if (test_input)
          test_input.value = s;
 }
 
+function rechteArtScriptTesten(e) {
+    if (e.target.value) {
+        rpc.rechteart_script_testen(e.target.value);        
+    }
+}
+
+function replaceRechteArtTestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_rechteart_test");
+    if (test_input)
+         test_input.value = s;
+}
+
+// ---
+
+function editSchuldenArtScript(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_schuldenart_script(innerText);        
+    }
+}
+
+function schuldenArtScriptTesten(e) {
+    if (e.target.value) {
+        rpc.schuldenart_script_testen(e.target.value);        
+    }
+}
+
+function replaceSchuldenArtTestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_schuldenart_test");
+    if (test_input)
+         test_input.value = s;
+}
+
+// ---
+
+// ---
 
 function klassifiziereSeiteNeu(event) {
             
@@ -2008,9 +2172,10 @@ function klassifiziereSeiteNeu(event) {
 // Init
 window.onload = function() { rpc.init(); };
 
+/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
-});
+});*/
 </script>
     </head>
  

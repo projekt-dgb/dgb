@@ -25,6 +25,7 @@ kuchiki = "0.8.1"
 tinyfiledialogs = "3.8.3"
 chrono = { version = "0.4.19", features = ["serde"] }
 toml = "0.5"
+dirs = "4.0"
 
 [dependencies.pyo3]
 version = "0.15.1"

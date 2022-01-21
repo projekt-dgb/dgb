@@ -23,6 +23,10 @@ pub fn render_entire_screen(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_popover(rpc_data: &RpcData) -> String {
+    use crate::Konfiguration;
+    
+    const ICON_CLOSE: &[u8] = include_bytes!("./img/icons8-close-48.png");
+    
     let should_render_popover = 
         rpc_data.configuration_active ||
         rpc_data.info_active ||
@@ -38,6 +42,8 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
         "transparent"
     };
     
+    let icon_close_base64 = base64::encode(ICON_CLOSE);
+
     let popover = format!("
         <div id='__application_popover' style='background:{application_popover_color};width: 100%;height: 100%;min-height: 100%;position: fixed;z-index:1000' onclick='closePopOver()'>
             {popover_content}
@@ -58,23 +64,107 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
             license_base64 = base64::encode(include_bytes!("../licenses.html")))
         } else if rpc_data.configuration_active {
             format!("
-                <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px;' onclick='event.stopPropagation();'>
-                    <h2 style='font-size:24px;font-family:sans-serif;'>Konfiguration</h2>
+                <div style='width:1200px;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px;' onclick='event.stopPropagation();'>
+                    <h2 style='font-size:20px;padding-bottom:10px;font-family:sans-serif;'>Konfiguration</h2>
+                    <p style='font-size:12px;padding-bottom:5px;'>Pfad: {konfig_pfad}</p>
                     
                     <div style='padding:5px 0px;'>
-                        <label style='font-family:sans-serif;font-size:16px;'>Skript zum Klassifizieren der Rechte</label><br/>
+
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Reguläre Ausdrücke</p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;overflow-y:scroll;'>
+                        {regex}
+                        </div>
+
                         <div style='display:flex;flex-direction:row;'>
-                            <input oninput='kurztextTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></input>
-                            <input id='__application_konfiguration_kurztext_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></input>
+                        <input id='__application_konfiguration_regex_id' style='border-radius:5px;padding:5px;border:1px solid #efefef;' style='flex-grow:1;margin-right:10px;' placeholder='Regex ID'></input>
+                            <textarea id='__application_konfiguration_regex_test_text' style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='testeRegex(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_regex_test_output' style='flex-grow:1;' placeholder='Regex Ausgabe'></textarea>
+                        </div>
+                    </div>
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Klassifizierung RechteArt (Abteilung 2)
+                            </p>                        
                         </div>
                         
                         <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;'>def klassifiziere_rechte(recht: String) -> RechteArt:</p>
+                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_rechte(recht: String, re: Mapping[String, Regex]) -> RechteArt:</p>
                             <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechteArtScript(event);'>{konfig_rechteart_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechteArtScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechteart_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Klassifizierung SchuldenArt (Abteilung 2)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_abt3(recht: String, re: Mapping[String, Regex]) -> SchuldenArt:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editSchuldenArtScript(event);'>{konfig_schuldenart_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='schuldenArtScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_schuldenart_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
                         </div>
                     </div>
                 </div>
-            ", konfig_rechteart_script = rpc_data.konfiguration.kurztext_script)
+            ", 
+                konfig_pfad = Konfiguration::konfiguration_pfad(),
+                
+                regex = {
+                    
+                    let r = if rpc_data.konfiguration.regex.is_empty() {
+                        use std::collections::BTreeMap;
+                        let mut a = BTreeMap::new();
+                        a.insert("REGEX_ID".to_string(), "(.*)".to_string());
+                        a
+                    } else {
+                        rpc_data.konfiguration.regex.clone()
+                    };
+                    
+                    r.iter().enumerate().map(|(idx, (k, v))| format!("
+                        <div style='display:flex;'>
+                            <div id='__application_konfiguration_regex_key_{idx}' style='display:inline;min-width:250px;caret-color: #4a4e6a;' contenteditable='true' data-regex-key='{k}' oninput='editRegexKey(event);' onkeydown='neueRegexOnEnter(event);' data-key-id='__application_konfiguration_regex_key_{idx}'>{k}</div>
+                            <p style='display:inline;color:#4a4e6a;user-select:none;'>&nbsp;= re.compile(\"</p>
+                            <div id='__application_konfiguration_regex_value_{idx}' data-key-id='__application_konfiguration_regex_key_{idx}' style='display:inline;caret-color: #4a4e6a;' onkeydown='neueRegexOnEnter(event);' contenteditable='true' oninput='editRegexValue(event);'>{v}</div>
+                            <p style='display:inline;color:#4a4e6a;user-select:none;'>\")</p>
+                            <div style='display:inline-flex;flex-grow:1;'></div>
+                            <img style='width:16px;height:16px;cursor:pointer;' data-key-id='__application_konfiguration_regex_key_{idx}' onclick='regexLoeschen(event);' src='data:image/png;base64,{icon_close_base64}'>
+                        </div>
+                    ", k = k, v = v, idx = idx, icon_close_base64 = icon_close_base64))
+                    .collect::<Vec<_>>()
+                    .join("\r\n")
+                },
+                
+                konfig_rechteart_script = 
+                rpc_data.konfiguration.klassifiziere_rechteart.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| format!("<div>{}</div>", l))
+                .collect::<Vec<String>>()
+                .join("\r\n"),
+                
+                konfig_schuldenart_script = 
+                rpc_data.konfiguration.klassifiziere_schuldenart.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| format!("<div>{}</div>", l))
+                .collect::<Vec<String>>()
+                .join("\r\n"),
+            )
         } else if let Some(cm) = rpc_data.context_menu_active.clone() {
             format!("
             <div style='padding:1px;position:absolute;left:{}px;top:{}px;background:white;border-radius:5px;box-shadow:0px 0px 5px #444;'>

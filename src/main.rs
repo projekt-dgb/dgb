@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::{fs, thread};
+use std::sync::Mutex;
 
 use urlencoding::encode;
 use web_view::*;
@@ -13,7 +14,8 @@ use crate::digitalisiere::{
     Grundbuch, BvZuschreibung, Anrede, PdfToTextLayout,
 };
 use crate::analysiere::GrundbuchAnalysiert;
-use crate::kurztext::RechteArt;
+use crate::kurztext::{SchuldenArtPyWrapper, RechteArtPyWrapper};
+use pyo3::{pyclass, pymethods, FromPyObject, IntoPy, ToPyObject};
 
 const APP_TITLE: &str = "Digitales Grundbuch";
 const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
@@ -99,7 +101,11 @@ impl Default for RpcData {
             back_forward: BTreeMap::new(),
             loaded_nb: Vec::new(),
             loaded_nb_paths: Vec::new(),
-            konfiguration: Konfiguration::default(),
+            konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
+                regex: BTreeMap::new(),
+                klassifiziere_rechteart: Vec::new(),
+                klassifiziere_schuldenart: Vec::new(),
+            }),
         }
     }
 }
@@ -165,35 +171,41 @@ impl PdfFile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Konfiguration {
-    pub kurztext_script: String,
+    pub regex: BTreeMap<String, String>,
+    pub klassifiziere_rechteart: Vec<String>,
+    pub klassifiziere_schuldenart: Vec<String>,
 }
 
 impl Konfiguration {
 
-    fn konfiguration_pfad() -> String {
-        std::env::current_exe().ok()
-        .and_then(|p| Some({
-            p.parent()?.to_path_buf().join("Konfiguration.toml").to_str()?.to_string()
-        }))
-        .unwrap_or(format!("./Konfiguration.toml"))
+    const DEFAULT: &'static str = include_str!("../Konfiguration.json");
+    const FILE_NAME: &'static str = "Konfiguration.json";
+    
+    pub fn konfiguration_pfad() -> String {
+        dirs::config_dir()
+        .and_then(|p| Some(p.join(Self::FILE_NAME).to_str()?.to_string()))
+        .or(
+            std::env::current_exe().ok()
+            .and_then(|p| Some(p.parent()?.to_path_buf().join(Self::FILE_NAME).to_str()?.to_string()))
+        )
+        .unwrap_or(format!("./{}", Self::FILE_NAME))
     }
     
     pub fn speichern(&self) {
-        let _ = toml::to_string(self).ok().and_then(|s| {
+        let _ = serde_json::to_string_pretty(self).ok().and_then(|s| {
             let s = s.replace("\n", "\r\n");
             std::fs::write(&Self::konfiguration_pfad(), &s.as_bytes()).ok()
         });
-
     }
 
     pub fn neu_laden() -> Result<Self, String> {
 
         if !Path::new(&Self::konfiguration_pfad()).exists() {
-            Konfiguration::default().speichern();
+            let _ = std::fs::write(&Self::konfiguration_pfad(), &Self::DEFAULT.as_bytes()).ok();
         }
 
         let konfig = match std::fs::read_to_string(&Self::konfiguration_pfad()) {
-            Ok(o) => match toml::from_str(&o) {
+            Ok(o) => match serde_json::from_str(&o) {
                 Ok(o) => o,
                 Err(e) => return Err(format!("Fehler in Konfiguration {}: {}", Self::konfiguration_pfad(), e)),
             },
@@ -201,14 +213,6 @@ impl Konfiguration {
         };
 
         Ok(konfig)
-    }
-}
-
-impl Default for Konfiguration {
-    fn default() -> Self {
-        Konfiguration {
-            kurztext_script: format!("return RechteArt.GasleitungGasreglerstationFerngasltg"),
-        }
     }
 }
 
@@ -238,12 +242,27 @@ pub enum Cmd {
     OpenInfo,
     #[serde(rename = "close_file")]
     CloseFile { file_name: String },
-    #[serde(rename = "edit_rechteart_script")]
-    EditRechteArtScript { neu: String },
-    #[serde(rename = "kurztext_testen")]
-    KurztextTesten { text: String },
     #[serde(rename = "klassifiziere_seite_neu")]
     KlassifiziereSeiteNeu { seite: usize, klassifikation_neu: String },
+    
+    #[serde(rename = "edit_rechteart_script")]
+    EditRechteArtScript { neu: String },
+    #[serde(rename = "rechteart_script_testen")]
+    RechteArtScriptTesten { text: String },
+    #[serde(rename = "edit_schuldenart_script")]
+    EditSchuldenArtScript { neu: String },
+    #[serde(rename = "schuldenart_script_testen")]
+    SchuldenArtScriptTesten { text: String },
+    #[serde(rename = "teste_regex")]
+    TesteRegex { regex_id: String, text: String },
+    #[serde(rename = "edit_regex_key")]
+    EditRegexKey { old_key: String, new_key: String },
+    #[serde(rename = "edit_regex_value")]
+    EditRegexValue { key: String, value: String },
+    #[serde(rename = "insert_regex")]
+    InsertRegex { regex_key: String },
+    #[serde(rename = "regex_loeschen")]
+    RegexLoeschen { regex_key: String },
 
     // Check whether a "{file_name}".json with analyzed texts exists
     #[serde(rename = "check_for_pdf_loaded")]
@@ -814,7 +833,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             println!("closeFile {}", file_name);
         },
         Cmd::EditRechteArtScript { neu } => {
-            data.konfiguration.kurztext_script = neu.trim().to_string();
+            data.konfiguration.klassifiziere_rechteart = neu.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
+            data.konfiguration.speichern();
+        },
+        Cmd::EditSchuldenArtScript { neu } => {
+            data.konfiguration.klassifiziere_schuldenart = neu.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
             data.konfiguration.speichern();
         },
         Cmd::DeleteNebenbeteiligte => {
@@ -1037,14 +1060,63 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let _ = std::fs::write(&f, json.as_bytes());
             
         },
-        Cmd::KurztextTesten { text } => {
-            let result = python_exec_kurztext(&*text, &data.konfiguration);
-            match result {
-                Ok(o) => { webview.eval(&format!("replaceKurzTextTestString(`{}`);", format!("{:?}", o).to_uppercase())); },
-                Err(e) => { webview.eval(&format!("replaceKurzTextTestString(`{}`);", format!("FEHLER: {}", e))); },
-            }
-            
-        }
+        Cmd::RechteArtScriptTesten { text } => {
+            let result = python_exec_kurztext::<RechteArtPyWrapper>(&*text, &data.konfiguration.klassifiziere_rechteart, &data.konfiguration.regex);
+            let result = match result {
+                Ok(o) => { format!("{:?}", o.inner).to_uppercase() },
+                Err(e) => { format!("{}", e) },
+            };
+            webview.eval(&format!("replaceRechteArtTestOutput(`{}`);", result));
+        },
+        Cmd::SchuldenArtScriptTesten { text } => {
+            let result = python_exec_kurztext::<SchuldenArtPyWrapper>(&*text, &data.konfiguration.klassifiziere_schuldenart, &data.konfiguration.regex);
+            let result = match result {
+                Ok(o) => { format!("{:?}", o.inner).to_uppercase() },
+                Err(e) => { format!("{}", e) },
+            };
+            webview.eval(&format!("replaceSchuldenArtTestOutput(`{}`);", result));
+        },
+        Cmd::EditRegexKey { old_key, new_key } => {
+            let cur_value = data.konfiguration.regex.get(old_key).cloned().unwrap_or_default();
+            data.konfiguration.regex.remove(old_key);
+            data.konfiguration.regex.insert(new_key.clone(), cur_value);
+            data.konfiguration.speichern();
+        },
+        Cmd::EditRegexValue { key, value } => {
+            data.konfiguration.regex.insert(key.clone(), value.clone());
+            data.konfiguration.speichern();
+        },
+        Cmd::InsertRegex { regex_key } => {
+            data.konfiguration.regex.insert(format!("{}_1", regex_key), "(.*)".to_string());
+            data.konfiguration.speichern();
+            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+        },
+        Cmd::RegexLoeschen { regex_key } => {
+            data.konfiguration.regex.remove(regex_key);
+            if data.konfiguration.regex.is_empty() {
+                data.konfiguration.regex.insert("REGEX_ID".to_string(), "(.*)".to_string());
+            }       
+            data.konfiguration.speichern();
+            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+        },
+        Cmd::TesteRegex { regex_id, text } => {
+            let result = teste_regex(&regex_id, text.trim(), &data.konfiguration);
+            let result = match result {
+                Ok(o) => {
+                    if o.is_empty() {
+                        format!("[]")
+                    } else {
+                        o.into_iter()
+                        .enumerate()
+                        .map(|(col, v)| format!("[{}]: \"{}\"", col, v))
+                        .collect::<Vec<_>>()
+                        .join("\r\n")
+                    }
+                },
+                Err(e) => { format!("{}", e) },
+            };
+            webview.eval(&format!("replaceRegexTestOutput(`{}`);", result));
+        },
         Cmd::SetActiveRibbonTab { new_tab } => {
             data.active_tab = *new_tab;
             webview.eval(&format!("replaceRibbon(`{}`);", ui::render_ribbon(&data)));
@@ -1383,34 +1455,144 @@ fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
     Some(gb)
 }
 
-fn python_exec_kurztext(text: &str, konfig: &Konfiguration) -> Result<RechteArt, String> {
+fn python_exec_kurztext<T: Clone + pyo3::PyClass>(
+    text: &str, 
+    py_code_lines: &[String], 
+    regex: &BTreeMap<String, String>
+) -> Result<T, String> {
     
     use pyo3::prelude::*;
-    use pyo3::types::PyTuple;
-    use crate::kurztext::{RechteArtPyWrapper, SchuldenArtPyWrapper};
+    use pyo3::types::{PyDict, PyTuple};
+    use pyo3::pycell::PyCell;
     
-    let script = konfig.kurztext_script
-        .lines()
+    let script = py_code_lines
+        .iter()
         .map(|l| format!("    {}", l))
         .collect::<Vec<_>>()
         .join("\r\n");
         
     let script = script.replace("\t", "    ");
     let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("def klassifiziere_rechte(*args, **kwargs):\r\n    recht = args\r\n{}", script);
+    let py_code = format!("def run_script(*args, **kwargs):\r\n    recht, re = args\r\n{}", script);
+    let regex_values = regex.values().cloned().collect::<Vec<_>>();
     
-    println!("py code:\r\n{}", py_code);
     Python::with_gil(|py| {
         let mut module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
         module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
         module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
+        module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
         
-        let fun: Py<PyAny> = module.getattr("klassifiziere_rechte").unwrap().into();
-        let tuple = PyTuple::new(py, &[text.trim().to_string()]);
+        let fun: Py<PyAny> = module.getattr("run_script").unwrap().into();
+        let regex_list = {
+            let dict = PyDict::new(py);
+            for (k, v) in regex.iter() {
+                if let Ok(v) = get_or_insert_regex(&regex_values, v) {
+                    let _ = dict.set_item(k.clone(), v);
+                }
+            }
+            dict
+        };
+        let tuple = PyTuple::new(py, &[text.trim().to_string().to_object(py), regex_list.to_object(py)]);
         let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
-        let extract = result.extract::<RechteArtPyWrapper>(py).map_err(|e| format!("{}", e))?;
-        Ok(extract.inner)
+        let extract = result.extract::<T>(py).map_err(|e| format!("{}", e))?;
+        Ok(extract)
     })  
+}
+
+lazy_static::lazy_static! {
+    static ref REGEX_CACHE: Mutex<BTreeMap<String, CompiledRegex>> = Mutex::new(BTreeMap::new());
+}
+
+fn get_or_insert_regex(
+    all_regex: &[String], 
+    regex: &str
+) -> Result<CompiledRegex, String> {
+    
+    let mut lock = match REGEX_CACHE.try_lock() {
+        Ok(o) => o,
+        Err(e) => return Err(format!("{}", e)),
+    };
+    
+    let compiled_regex = match lock.get(&regex.to_string()).cloned() {
+        Some(s) => s,
+        None => {
+            let cr = CompiledRegex::new(&regex).map_err(|e| format!("Fehler in Regex: {}", e))?;
+            lock.insert(regex.to_string(), cr.clone());
+            cr
+        }
+    };
+    
+    let regex_to_remove = lock
+        .keys()
+        .filter(|k| !all_regex.contains(k))
+        .cloned()
+        .collect::<Vec<_>>();
+    
+    for r in regex_to_remove {
+        let _ = lock.remove(&r);
+    }
+    
+    Ok(compiled_regex)
+}
+
+#[derive(Debug, Clone)]
+#[repr(C)]
+#[pyclass(name = "Regex")]
+pub struct CompiledRegex {
+    re: regex::Regex,
+}
+
+impl CompiledRegex {
+
+    pub fn new(s: &str) -> Result<Self, regex::Error> {
+        Ok(Self {
+            re: regex::RegexBuilder::new(s)
+                .multi_line(true)
+                .case_insensitive(true)
+                //.size_limit(1000)
+                .build()?
+        })
+    }
+    
+    pub fn get_captures(&self, text: &str) -> Vec<String> {
+        let cap = match self.re.captures_iter(text).next() {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+        
+        cap.iter().skip(1).filter_map(|group| {
+            Some(group?.as_str().to_string())
+        }).collect()
+    }
+}
+
+impl ToPyObject for CompiledRegex {
+    fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
+        self.clone().into_py(py)
+    }
+}
+
+#[allow(non_snake_case)]
+#[pymethods]
+impl CompiledRegex {
+    pub fn find(&self, text: &str, index: usize) -> Option<String> {
+        self.get_captures(text).get(index).cloned()
+    }
+}
+
+fn teste_regex(regex_id: &str, text: &str, konfig: &Konfiguration) -> Result<Vec<String>, String> {
+    
+    let regex = match konfig.regex.get(regex_id) {
+        Some(regex) => regex.clone(),
+        None => return Err(format!("Regex-ID \"{}\" nicht gefunden.", regex_id)),
+    };
+    
+    let compiled_regex = get_or_insert_regex(
+        &konfig.regex.values().cloned().collect::<Vec<_>>(), 
+        &regex,
+    )?;
+    
+    Ok(compiled_regex.get_captures(text))
 }
 
 fn main() {

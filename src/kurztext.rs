@@ -798,6 +798,16 @@ fn analysiere_betrag(betrag: &str, text_clean: &str, warnung: &mut Vec<String>) 
 pub enum SchuldenArt {
     Grundschuld,
     Hypothek,
+    Rentenschuld,
+    Aufbauhypothek,
+    Sicherungshypothek,
+    Widerspruch,
+    Arresthypothek,
+    SicherungshypothekGem128ZVG,
+    Hoechstbetragshypothek,
+    Sicherungsgrundschuld,
+    Zwangssicherungshypothek,
+    NichtDefiniert,
 }
 
 // klassifiziere_rechteart_abt3
@@ -985,6 +995,23 @@ impl RechteArtPyWrapper {
 #[repr(C)]
 pub struct SchuldenArtPyWrapper {
     pub inner: SchuldenArt,
+}
+
+#[allow(non_snake_case)]
+#[pymethods]
+impl SchuldenArtPyWrapper {
+    #[classattr] fn Grundschuld() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Grundschuld }}
+    #[classattr] fn Hypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Hypothek }}
+    #[classattr] fn Rentenschuld() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Rentenschuld }}
+    #[classattr] fn Aufbauhypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Aufbauhypothek }}
+    #[classattr] fn Sicherungshypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Sicherungshypothek }}
+    #[classattr] fn Widerspruch() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Widerspruch }}
+    #[classattr] fn Arresthypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Arresthypothek }}
+    #[classattr] fn SicherungshypothekGem128ZVG() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::SicherungshypothekGem128ZVG }}
+    #[classattr] fn Hoechstbetragshypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Hoechstbetragshypothek }}
+    #[classattr] fn Sicherungsgrundschuld() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Sicherungsgrundschuld }}
+    #[classattr] fn Zwangssicherungshypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Zwangssicherungshypothek }}
+    #[classattr] fn NichtDefiniert() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::NichtDefiniert }}
 }
 
 // TODO: teilw. Flurstücke möglicherweise Komma drin
