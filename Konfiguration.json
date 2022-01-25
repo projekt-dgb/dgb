@@ -1,9 +1,9 @@
 {
   "regex": {
     "ALS_GESAMTBERECHTIGTE_1": ",? als Gesamtberechtigte gemäß § (\\d*) BGB -?",
-    "AUFLOESEND_BEDINGT_1": "Das Recht ist auflösend bedingt",
+    "AUFLÖSEND_BEDINGT_1": "Das Recht ist auflösend bedingt",
     "AUSÜBUNG_1": "Die Ausübung (.*) darf Dritten überlassen werden",
-    "BELASTETEN_GRUNDSTUECKE_1": "jetzt unter(.*)Nr. (.*) gebucht",
+    "BELASTETEN_GRUNDSTÜCKE_1": "jetzt unter(.*)Nr. (.*) gebucht",
     "BINDESTRICH_1": "- ([[:lower:]])",
     "BINDESTRICH_2": "-\\nund",
     "EINGETRAGEN_AM_1": "ingetragen am (\\d\\d).(\\d\\d).(\\d\\d\\d\\d)",
@@ -66,15 +66,58 @@
     "]"
   ],
   "text_saubern_script": [
-    "return recht.replace(\"G r u n d s c h u l d\", \"Grundschuld\")"
+    "#",
+    "recht = recht.replace(\"G r u n d s c h u l d\", \"Grundschuld\")",
+    "recht = recht.replace(\"o h n e\", \"ohne\")",
+    "recht = recht.replace(\"B r i e f\", \"Brief\")",
+    "recht = recht.replace(\"ü b e r\", \"über\")",
+    "recht = recht.replace(\"f ü r\", \"für\")",
+    "#",
+    "zeilen = recht.splitlines()",
+    "for index, zeile in enumerate(zeilen):",
+    "    if re[\"BINDESTRICH_1\"].matches(zeile):",
+    "        zeilen[index] = re[\"BINDESTRICH_1\"].replace_all(zeile, \"- $1\")",
+    "        zeilen[index] = re[\"BINDESTRICH_2\"].replace_all(zeile, \"- und\")",
+    "zeilen = [z for zeile in zeilen for z in zeile.splitlines()]",
+    "#",
+    "text_sauber = \"\"",
+    "for i, zeile in enumerate(zeilen):",
+    "    zeile = zeile.strip()",
+    "    if zeile == \"\":",
+    "        continue",
+    "    #",
+    "    naechste_zeile = zeilen[i + 1] if i + 1 < len(zeilen) else None",
+    "    if naechste_zeile is not None:",
+    "        if zeile.endswith(\"-\") and naechste_zeile.startswith(\"und\"):",
+    "            zeile = zeile[:-1]",
+    "    #",
+    "    zeile = zeile.replace(\"Aus- übung\", \"Ausübung\")",
+    "    text_sauber += zeile",
+    "return text_sauber"
   ],
   "text_kuerzen_abt2_script": [
+    "#",
+    "satz_hat_rangvermerk = lambda satz: \"Gleichrang\" in satz or \"Rang\" in satz",
+    "satz_nicht_relevant = lambda satz: any(s in satz for s in [\"Gemäß\", \"Unter Bezugnahme auf\", \"Eingetragen\", \"eingetragen am\"])",
+    "teste_satz = lambda satz: satz_hat_rangvermerk(satz) or not(satz_nicht_relevant(satz))",
+    "saetze = [s for s in filter(teste_satz, saetze)]",
+    "#",
     "#",
     "# Irrelevante Sätze rausfiltern",
     "saetze = filter(lambda satz: not(re[\"AUSÜBUNG_1\"].matches(satz)), saetze)",
     "saetze = filter(lambda satz: not(re[\"VOLLSTRECKBAR_1\"].matches(satz)), saetze)",
     "saetze = filter(lambda satz: not(re[\"VOLLSTRECKBAR_2\"].matches(satz)), saetze)",
+    "saetze = filter(lambda satz: not(re[\"VERERBLICH_1\"].matches(satz)), saetze)",
     "saetze = filter(lambda satz: not(re[\"VON_AMTS_WEGEN_EINGETRAGEN_1\"].matches(satz)), saetze)",
+    "saetze = filter(lambda satz: not(re[\"BELASTETEN_GRUNDSTÜCKE_1\"].matches(satz)), saetze)",
+    "#",
+    "#",
+    "# Sätze mit weniger als 2 Wörtern löschen",
+    "saetze = list(filter(lambda satz: (\"\".join(satz.rstrip().lstrip())).count(\" \") > 1, saetze))",
+    "#",
+    "if \"Auflassungsvormerkung\" in \"\".join(saetze):",
+    "    list(filter(lambda satz: not(re[\"AUFLÖSEND_BEDINGT_1\"].matches(satz)), saetze))",
+    "#",
     "return \". \".join(saetze)"
   ],
   "text_kuerzen_abt3_script": [
@@ -84,7 +127,7 @@
     "return Betrag(10000, 0, Waehrung.GrammFeingold)"
   ],
   "rechtsinhaber_auslesen_abt3_script": [
-    "return saetze[1]"
+    "return saetze[0]"
   ],
   "rechtsinhaber_auslesen_abt2_script": [
     "return saetze[0]"
