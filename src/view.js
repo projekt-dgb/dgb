@@ -40,6 +40,8 @@ let rpc = {
   rechteart_script_testen: function(arg) { rpc.invoke({ cmd: 'rechteart_script_testen', text: arg }); },
   edit_rechtsinhaber_auslesen_abt2_script: function(neu) { rpc.invoke({ cmd: 'edit_rechtsinhaber_auslesen_abt2_script', neu: neu }); },
   rechtsinhaber_auslesen_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'rechtsinhaber_auslesen_abt2_script_testen', text: arg }); },
+  edit_rangvermerk_auslesen_abt2_script: function(neu) { rpc.invoke({ cmd: 'edit_rangvermerk_auslesen_abt2_script', neu: neu }); },
+  rangvermerk_auslesen_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'rangvermerk_auslesen_abt2_script_testen', text: arg }); },
   
   edit_text_kuerzen_abt3_script: function(arg) { rpc.invoke({ cmd : 'edit_text_kuerzen_abt3_script', script: arg });},
   kurztext_abt3_script_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_abt3_script_testen', text: arg }); },
@@ -333,6 +335,30 @@ function editRechteArtScript(e) {
     if (innerText) {
         rpc.edit_rechteart_script(innerText);        
     }
+}
+
+function editRangvermerkAuslesenAbt2Script(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_rangvermerk_auslesen_abt2_script(innerText);        
+    }
+}
+
+function rangvermerkAuslesenAbt2ScriptTesten(e) {
+    if (e.target.value) {
+        rpc.rangvermerk_auslesen_abt2_script_testen(e.target.value);        
+    }
+}
+
+function replaceRangvermerkAuslesenAbt2TestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_rangvermerk_auslesen_abt2_test");
+    if (test_input)
+         test_input.value = s;
 }
 
 function testeRegex(event) {

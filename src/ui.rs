@@ -1,5 +1,6 @@
 use crate::{
     RpcData, PdfFile, 
+    Konfiguration,
     digitalisiere::{
         Nebenbeteiligter,
         BvZuschreibung,
@@ -23,7 +24,6 @@ pub fn render_entire_screen(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_popover(rpc_data: &RpcData) -> String {
-    use crate::Konfiguration;
     
     const ICON_CLOSE: &[u8] = include_bytes!("./img/icons8-close-48.png");
     
@@ -167,7 +167,26 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                             <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
                         </div>
                     </div>
-                                        
+                               
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Rangvermerk auslesen (Abteilung 2)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def rangvermerk_auslesen_abt2(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRangvermerkAuslesenAbt2Script(event);'>{konfig_rangvermerk_abt2_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rangvermerkAuslesenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rangvermerk_auslesen_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                    
                     <div style='padding:5px 0px;'>
                     
                         <div>
@@ -272,6 +291,13 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                     .collect::<Vec<_>>()
                     .join("\r\n")
                 },
+                
+                konfig_rangvermerk_abt2_script = 
+                rpc_data.konfiguration.rangvermerk_auslesen_abt2_script.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| format!("<div>{}</div>", l))
+                .collect::<Vec<String>>()
+                .join("\r\n"),
                 
                 konfig_rechtsinhaber_abt3_script = 
                 rpc_data.konfiguration.rechtsinhaber_auslesen_abt3_script.iter()
@@ -702,12 +728,12 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             bestandsverzeichnis_abschreibungen = render_bestandsverzeichnis_abschreibungen(open_file),
             abt_2 = render_abt_2(open_file),
             abt_3 = render_abt_3(open_file),
-            analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb),
+            analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration),
         ))
     }
 }
 
-pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter]) -> String {
+pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> String {
     
     const PFEIL_PNG: &[u8] = include_bytes!("../src/img/icons8-arrow-48.png");
     const WARNUNG_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");
@@ -717,7 +743,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter]) ->
     let warnung_str = format!("data:image/png;base64,{}", base64::encode(&WARNUNG_PNG));
     let fehler_str = format!("data:image/png;base64,{}", base64::encode(&FEHLER_PNG));
 
-    let gb_analysiert = crate::analysiere::analysiere_grundbuch(&open_file.analysiert, nb);
+    let gb_analysiert = crate::analysiere::analysiere_grundbuch(&open_file.analysiert, nb, konfiguration);
     
     normalize_for_js(format!("
         <div style='margin:10px;'>
@@ -812,9 +838,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter]) ->
         }).collect::<Vec<String>>().join("\r\n"),
     
         a3_analyse = gb_analysiert.abt3.iter().map(|a3a| {
-        
-            use crate::analysiere::Waehrung;
-            
+                    
             let waehrung_str = a3a.betrag.waehrung.to_string();
             
             format!("
@@ -893,7 +917,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter]) ->
 }
 
 pub fn render_bestandsverzeichnis(open_file: &mut PdfFile) -> String {
-    use crate::digitalisiere::{BvEintrag, FlurstueckGroesse};
+    use crate::digitalisiere::BvEintrag;
 
     crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
 

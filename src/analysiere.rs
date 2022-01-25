@@ -1,10 +1,10 @@
-use crate::Grundbuch;
+use crate::{Grundbuch, Konfiguration};
 use crate::digitalisiere::{Nebenbeteiligter, NebenbeteiligterExtra, BvEintrag, Bestandsverzeichnis};
 use crate::kurztext::{self, SchuldenArt, RechteArt};
 use serde_derive::{Serialize, Deserialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter]) -> GrundbuchAnalysiert {
+pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> GrundbuchAnalysiert {
     
     let mut abt2_analysiert = Vec::new();
     
@@ -45,7 +45,7 @@ pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter]) -> G
             }
         }
         
-        let kt = kurztext::text_kuerzen_abt2(&eintrag.text, &mut warnungen);
+        let kt = kurztext::text_kuerzen_abt2(&eintrag.text, &mut warnungen, konfiguration);
         
         let belastete_flurstuecke = match get_belastete_flurstuecke(
             &eintrag.bv_nr, 
@@ -148,7 +148,7 @@ pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter]) -> G
             }
         }
 
-        let kt = kurztext::text_kuerzen_abt3(&eintrag.betrag, &eintrag.text, &mut warnungen, &mut fehler);
+        let kt = kurztext::text_kuerzen_abt3(&eintrag.betrag, &eintrag.text, &mut warnungen, &mut fehler, konfiguration);
 
         let belastete_flurstuecke = match get_belastete_flurstuecke(
             &eintrag.bv_nr, 
@@ -587,231 +587,6 @@ pub enum BvAenderung {
     },
 }
 
-lazy_static! {
-    static ref NEU_EINGETRAGEN_REGEX: Regex = Regex::new(r"Nr\. (\S*)(.*)als Nr\. (\S*) neu eingetragen").unwrap();
-    static ref NEU_EINGETRAGEN_REGEX_2: Regex = Regex::new(r"Nummer (\S*)(.*)als Nummer (\S*) eingetragen").unwrap();
-    static ref VERSELBSTSTÄNDIGT_REGEX: Regex = Regex::new(r"Aus(.*)Nr\. (\S*)(.*)verselbstständigt und als(.*)Nr\. (\S*) eingetragen").unwrap();
-    static ref UEBERTRAGEN_REGEX: Regex = Regex::new(r"Von Nr\. (\S*)\W(.*)übertragen nach").unwrap();
-    static ref ZERLEGT_REGEX: Regex = Regex::new(r"Flurstück (\d*) ist zerlegt in die Flurstücke (\d*) und (\d*)").unwrap();
-}
-
-fn analysiere_bestandsverzeichnis_zu_ab(bestandsverzeichnis: &Bestandsverzeichnis) -> BestandsverzeichnisZuAbAnalyse {
-    
-    let mut warnungen = Vec::new();
-    let mut fehler = Vec::new();
-    let mut aenderungen = BTreeMap::new();
-    let mut flurstuecke_zu_roeten = Vec::new();
-
-    for (a_num, a) in bestandsverzeichnis.abschreibungen.iter().enumerate() {
-
-        let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&a.text);
-
-        let bv_nummern = match parse_spalte_1(&a.bv_nr) {
-            Some(lastend_an) => lastend_an,
-            None => { 
-                fehler.push(format!("Konnte BV-Nummern für Abschreibung {:?} nicht lesen", a.bv_nr)); 
-                continue; 
-            },
-        };
-        
-        let mut a = Vec::new();
-        let uebertragen_captures = UEBERTRAGEN_REGEX.captures_iter(&text_sauber).collect::<Vec<_>>();
-        let uebertragen_empty = uebertragen_captures.is_empty();
-        
-        for u in uebertragen_captures {
-            let von_nr = u.get(1).unwrap().as_str().trim().to_string();
-            match parse_teilweise_lastend_an(&[von_nr.clone()], &mut warnungen) {
-                Ok(flur_flurstuecke) => {
-                    for (flur, flurstueck) in flur_flurstuecke.iter() {
-                        for b in bv_nummern.iter() {
-                            a.push(BvAenderung::FlurstückÜbertragen { 
-                                bv_nr: *b, 
-                                flur: *flur, 
-                                flurstueck: flurstueck.clone() 
-                            });
-                            
-                            for bve in bestandsverzeichnis.eintraege.iter().filter(|bve| {
-                                bve.lfd_nr == *b && 
-                                bve.flur == *flur && 
-                                bve.flurstueck == *flurstueck
-                            }) {
-                                flurstuecke_zu_roeten.push(bve.clone());
-                            }
-                        }
-                    }
-                },
-                Err(e) => {
-                    fehler.push(format!("Konnte BV-Nummern für Abschreibung {:?} nicht lesen: {}", von_nr, e)); 
-                    continue;
-                },
-            }
-        }
-        
-        if uebertragen_empty && text_sauber.to_lowercase().contains("übertragen nach") {
-            for b in bv_nummern.iter() {
-                a.push(BvAenderung::BvNrÜbertragen { bv_nr: *b });
-                for bve in bestandsverzeichnis.eintraege.iter().filter(|bve| bve.lfd_nr == *b) {
-                    flurstuecke_zu_roeten.push(bve.clone());
-                }
-            }
-        }
-        
-        if a.is_empty() {
-            fehler.push(format!("Konnte BV-Abschreibung nicht lesen:<br/>{}", text_sauber));
-        } else {
-            for b in bv_nummern {
-                aenderungen
-                .entry(b)
-                .or_insert_with(|| Vec::new())
-                .append(&mut a.clone());
-            }
-        }
-    }
-
-    for (z_num, z) in bestandsverzeichnis.zuschreibungen.iter().enumerate() {
-        
-        let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&z.text);
-                
-        let bv_nummern = match parse_spalte_1(&z.bv_nr) {
-            Some(lastend_an) => lastend_an,
-            None => { 
-                fehler.push(format!("Konnte BV-Nummern für Zuschreibung {:?} nicht lesen", z.bv_nr)); 
-                continue; 
-            },
-        };
-        
-        let mut a = Vec::new();
-
-        if text_sauber.to_lowercase().contains("hierher übertragen") {
-            a.push(BvAenderung::Irrelevant);
-        }
-        
-        let mut neu_eingetragen_captures = NEU_EINGETRAGEN_REGEX.captures_iter(&text_sauber).collect::<Vec<_>>();
-        neu_eingetragen_captures.extend(NEU_EINGETRAGEN_REGEX_2.captures_iter(&text_sauber));
-        
-        for neu in neu_eingetragen_captures {
-        
-            let vorher = neu.get(1).unwrap();
-            let bv_nummern_vorher = match parse_spalte_1(vorher.as_str()) {
-                Some(lastend_an) => lastend_an,
-                None => { 
-                    fehler.push(format!("BV-Nummern neu eingetragen, konnte Original-BV-Nrn. nicht lesen: {}", vorher.as_str())); 
-                    continue; 
-                },
-            };
-            
-            let nachher = neu.get(3).unwrap();
-            let bv_nummern_nachher = match parse_spalte_1(nachher.as_str()) {
-                Some(lastend_an) => lastend_an,
-                None => { 
-                    fehler.push(format!("BV-Nummern neu eingetragen, konnte neue BV-Nrn. nicht lesen: {}", nachher.as_str())); 
-                    continue; 
-                },
-            };
-            
-            if bv_nummern_vorher.len() != bv_nummern_nachher.len() {
-                fehler.push(format!("BV-Nummern {:?} neu eingetragen als {:?}: keine automatische Zuordnung möglich", bv_nummern_vorher, bv_nummern_nachher));
-                continue;
-            }
-            
-            for (vorher, nachher) in bv_nummern_vorher.into_iter().zip(bv_nummern_nachher.into_iter()) {
-                
-                a.push(BvAenderung::BvNrNeuEingetragen { 
-                    original_bv_nr: vorher, 
-                    neu_bv_nr: nachher, 
-                });
-                
-                let mut bv_eintraege_zu_roeten = bestandsverzeichnis.eintraege
-                    .iter()
-                    .filter(|bve| bve.lfd_nr == vorher)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                
-                if bv_eintraege_zu_roeten.is_empty() {
-                    fehler.push(format!("BV-Nummer {} neu eingetragen als {}: BV-Nr. {} nicht im Bestandsverzeichnis gefunden", vorher, nachher, vorher));
-                    continue;
-                } else {
-                    flurstuecke_zu_roeten.append(&mut bv_eintraege_zu_roeten);
-                }
-            }
-        }
-
-        let mut verselbstständigt_captures = VERSELBSTSTÄNDIGT_REGEX.captures_iter(&text_sauber).collect::<Vec<_>>();
-        for neu in verselbstständigt_captures {
-        
-            let vorher = neu.get(2).unwrap();
-            let bv_nummern_vorher = match parse_spalte_1(vorher.as_str()) {
-                Some(lastend_an) => lastend_an,
-                None => { 
-                    fehler.push(format!("BV-Nummern verselbstständigt, konnte Original-BV-Nrn. nicht lesen: {}", vorher.as_str())); 
-                    continue; 
-                },
-            };
-            
-            let nachher = neu.get(5).unwrap();
-            let bv_nummern_nachher = match parse_spalte_1(nachher.as_str()) {
-                Some(lastend_an) => lastend_an,
-                None => { 
-                    fehler.push(format!("BV-Nummern verselbstständigt, konnte neue BV-Nrn. nicht lesen: {}", nachher.as_str())); 
-                    continue; 
-                },
-            };
-            
-            if bv_nummern_vorher.len() != bv_nummern_nachher.len() {
-                fehler.push(format!("BV-Nummer(n) {:?} verselbstständigt als {:?}: keine automatische Zuordnung möglich", bv_nummern_vorher, bv_nummern_nachher));
-                continue;
-            }
-            
-            for (vorher, nachher) in bv_nummern_vorher.into_iter().zip(bv_nummern_nachher.into_iter()) {
-                a.push(BvAenderung::BvNrNeuEingetragen { 
-                    original_bv_nr: vorher, 
-                    neu_bv_nr: nachher 
-                });
-            }
-        }
-        
-        let mut zerlegt_captures = ZERLEGT_REGEX.captures_iter(&text_sauber).collect::<Vec<_>>();
-        for zerlegt in zerlegt_captures {
-            
-            let ausgangsflurstueck = zerlegt.get(1).unwrap().as_str().trim().to_string();
-            let teilung_1 = zerlegt.get(2).unwrap().as_str().trim().to_string();
-            let teilung_2 = zerlegt.get(3).unwrap().as_str().trim().to_string();            
-            
-            let mut bv_eintraege_zu_roeten = bestandsverzeichnis.eintraege
-                .iter()
-                .filter(|bve| bv_nummern.contains(&bve.lfd_nr) && bve.flurstueck == ausgangsflurstueck)
-                .cloned()
-                .collect::<Vec<_>>();
-                    
-            flurstuecke_zu_roeten.append(&mut bv_eintraege_zu_roeten);
-            
-            a.push(BvAenderung::Zerlegt { 
-                von_flst: ausgangsflurstueck, 
-                nach_1_flst: teilung_1,
-                nach_2_flst: teilung_2,
-            });
-        }
-        
-        if a.is_empty() {
-            fehler.push(format!("Konnte BV-Änderung nicht lesen:<br/>{}", text_sauber));
-        } else {
-            for b in bv_nummern {
-                aenderungen
-                .entry(b)
-                .or_insert_with(|| Vec::new())
-                .append(&mut a.clone());
-            }
-        }
-    }
-    
-    BestandsverzeichnisZuAbAnalyse {
-        warnungen,
-        fehler,
-        aenderungen,
-        flurstuecke_zu_roeten,
-    }
-}
-
 fn parse_spalte_1(spalte_1: &str) -> Option<Vec<usize>>  {
     
     let bv_nr = spalte_1
@@ -1082,7 +857,6 @@ pub enum Waehrung {
 
 impl Waehrung {
     pub fn to_string(&self) -> &'static str {
-        use self::Waehrung::*;
         match self {
             Waehrung::Euro => "€",
             Waehrung::DMark => "DM",

@@ -9,7 +9,6 @@
     "EINGETRAGEN_AM_1": "ingetragen am (\\d\\d).(\\d\\d).(\\d\\d\\d\\d)",
     "EINGETRAGEN_AM_2": "ingetragen (.*) am (\\d\\d).(\\d\\d).(\\d\\d\\d\\d)",
     "EINGETRAGEN_AM_3": "(.*) eingetragen am (dd).(dd).(dddd)",
-    "EINGETRAGEN_AM_3_1": "(.*)",
     "FLUR_FLURSTUECK_1": "Flur (\\d*) Flurstück (\\S*)",
     "FLUR_FLURSTUECK_2": "Flur (\\d*) Flst. (\\S*)",
     "FLUR_FLURSTUECK_3": "Flur (\\d*), Flst. (\\S*)",
@@ -52,7 +51,7 @@
     "ÜBERTRAGEN_1": "Von Nr\\. (\\S*)\\W(.*)übertragen nach\n"
   },
   "abkuerzungen_script": [
-    "[",
+    "return [",
     "    \" Dr\",",
     "    \" Prof\",",
     "    \" Co\",",
@@ -82,12 +81,15 @@
     "return \". \".join(saetze)"
   ],
   "betrag_auslesen_script": [
-    "return saetze[0]"
+    "return Betrag(10000, 0, Waehrung.GrammFeingold)"
   ],
   "rechtsinhaber_auslesen_abt3_script": [
     "return saetze[1]"
   ],
   "rechtsinhaber_auslesen_abt2_script": [
+    "return saetze[0]"
+  ],
+  "rangvermerk_auslesen_abt2_script": [
     "return saetze[0]"
   ],
   "klassifiziere_rechteart": [
