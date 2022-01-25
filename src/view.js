@@ -24,16 +24,31 @@ let rpc = {
   open_context_menu: function(x, y, seite) { rpc.invoke({ cmd : 'open_context_menu', x: x, y: y, seite: seite }); },
   close_pop_over:  function() { rpc.invoke({ cmd : 'close_pop_over' }); },
   close_file: function(arg) { rpc.invoke({ cmd : 'close_file', file_name: arg }); },
-
-  edit_rechteart_script: function(neu) { rpc.invoke({ cmd: 'edit_rechteart_script', neu: neu }); },
-  rechteart_script_testen: function(arg) { rpc.invoke({ cmd: 'rechteart_script_testen', text: arg }); },
-  edit_schuldenart_script: function(neu) { rpc.invoke({ cmd: 'edit_schuldenart_script', neu: neu }); },
-  schuldenart_script_testen: function(arg) { rpc.invoke({ cmd: 'schuldenart_script_testen', text: arg }); },
-  teste_regex: function(regex_id, text) { rpc.invoke({ cmd: 'teste_regex', regex_id: regex_id, text: text }); },
+ 
   edit_regex_key: function(old_key, new_key) { rpc.invoke({ cmd: 'edit_regex_key', old_key: old_key, new_key: new_key }); },
   edit_regex_value: function(key, value) { rpc.invoke({ cmd: 'edit_regex_value', key: key, value: value }); },
   insert_regex: function(arg) { rpc.invoke({ cmd : 'insert_regex', regex_key: arg });},
+  teste_regex: function(regex_id, text) { rpc.invoke({ cmd: 'teste_regex', regex_id: regex_id, text: text }); },
   regex_loeschen: function(arg) { rpc.invoke({ cmd : 'regex_loeschen', regex_key: arg });},
+
+  edit_abkuerzungen_script: function(arg) { rpc.invoke({ cmd : 'edit_abkuerzungen_script', script: arg });},
+  edit_text_saubern_script: function(arg) { rpc.invoke({ cmd : 'edit_text_saubern_script', script: arg });},
+
+  edit_text_kuerzen_abt2_script: function(arg) { rpc.invoke({ cmd : 'edit_text_kuerzen_abt2_script', script: arg });},
+  kurztext_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_abt2_script_testen', text: arg }); },  
+  edit_rechteart_script: function(neu) { rpc.invoke({ cmd: 'edit_rechteart_script', neu: neu }); },
+  rechteart_script_testen: function(arg) { rpc.invoke({ cmd: 'rechteart_script_testen', text: arg }); },
+  edit_rechtsinhaber_auslesen_abt2_script: function(neu) { rpc.invoke({ cmd: 'edit_rechtsinhaber_auslesen_abt2_script', neu: neu }); },
+  rechtsinhaber_auslesen_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'rechtsinhaber_auslesen_abt2_script_testen', text: arg }); },
+  
+  edit_text_kuerzen_abt3_script: function(arg) { rpc.invoke({ cmd : 'edit_text_kuerzen_abt3_script', script: arg });},
+  kurztext_abt3_script_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_abt3_script_testen', text: arg }); },
+  edit_betrag_auslesen_script: function(neu) { rpc.invoke({ cmd: 'edit_betrag_auslesen_script', neu: neu }); },
+  betrag_auslesen_script_testen: function(arg) { rpc.invoke({ cmd: 'betrag_auslesen_script_testen', text: arg }); },
+  edit_schuldenart_script: function(neu) { rpc.invoke({ cmd: 'edit_schuldenart_script', neu: neu }); },
+  schuldenart_script_testen: function(arg) { rpc.invoke({ cmd: 'schuldenart_script_testen', text: arg }); },
+  edit_rechtsinhaber_auslesen_abt3_script: function(neu) { rpc.invoke({ cmd: 'edit_rechtsinhaber_auslesen_abt3_script', neu: neu }); },
+  rechtsinhaber_auslesen_abt3_script_testen: function(arg) { rpc.invoke({ cmd: 'rechtsinhaber_auslesen_abt3_script_testen', text: arg }); },
   
   klassifiziere_seite_neu: function(seite, klassifikation_neu) { rpc.invoke({ cmd: 'klassifiziere_seite_neu', seite: seite, klassifikation_neu: klassifikation_neu }); },
   
@@ -259,7 +274,54 @@ function insertTabAtCaret(event){
     }
 }
 
-// ---
+function editAbkuerzungenScript(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_abkuerzungen_script(innerText);        
+    }
+}
+
+
+function editTextSaubernScript(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_text_saubern_script(innerText);        
+    }
+}
+
+function editTextKuerzenAbt2Script(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_text_kuerzen_abt2_script(innerText);        
+    }
+}
+
+function textKuerzenAbt2ScriptTesten(e) {
+    if (e.target.value) {
+        rpc.kurztext_abt2_script_testen(e.target.value);        
+    }
+}
+
+function replaceTextKuerzenAbt2TestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_text_kuerzen_abt2_test");
+    if (test_input)
+         test_input.value = s;
+}
 
 function editRechteArtScript(e) {
     // using innerText here because it preserves newlines
@@ -365,7 +427,81 @@ function replaceRechteArtTestOutput(s) {
          test_input.value = s;
 }
 
+function editRechtsinhaberAbt2Script(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_rechtsinhaber_auslesen_abt2_script(innerText);        
+    }
+}
+
+
+function rechtsinhaberAbt2ScriptTesten(e) {
+    if (e.target.value) {
+        rpc.rechtsinhaber_auslesen_abt2_script_testen(e.target.value);        
+    }
+}
+
+function replaceRechtsinhaberAbt2TestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_rechtsinhaber_abt2_test");
+    if (test_input)
+         test_input.value = s;
+}
+
 // ---
+
+
+function editTextKuerzenAbt3Script(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_text_kuerzen_abt3_script(innerText);        
+    }
+}
+
+function textKuerzenAbt3ScriptTesten(e) {
+    if (e.target.value) {
+        rpc.kurztext_abt3_script_testen(e.target.value);        
+    }
+}
+
+function replaceTextKuerzenAbt3TestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_text_kuerzen_abt3_test");
+    if (test_input)
+         test_input.value = s;
+}
+
+function editBetragAuslesenScript(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_betrag_auslesen_script(innerText);        
+    }
+}
+
+function betragAuslesenScriptTesten(e) {
+    if (e.target.value) {
+        rpc.betrag_auslesen_script_testen(e.target.value);        
+    }
+}
+
+function replaceBetragAuslesenTestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_betrag_auslesen_test");
+    if (test_input)
+         test_input.value = s;
+}
 
 function editSchuldenArtScript(e) {
     // using innerText here because it preserves newlines
@@ -391,7 +527,32 @@ function replaceSchuldenArtTestOutput(s) {
          test_input.value = s;
 }
 
-// ---
+
+function editRechtsinhaberAbt3Script(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_rechtsinhaber_auslesen_abt3_script(innerText);        
+    }
+}
+
+
+function rechtsinhaberAbt3ScriptTesten(e) {
+    if (e.target.value) {
+        rpc.rechtsinhaber_auslesen_abt3_script_testen(e.target.value);        
+    }
+}
+
+function replaceRechtsinhaberAbt3TestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_rechtsinhaber_abt3_test");
+    if (test_input)
+         test_input.value = s;
+}
+
 
 // ---
 
@@ -413,7 +574,7 @@ function klassifiziereSeiteNeu(event) {
 // Init
 window.onload = function() { rpc.init(); };
 
-/*
+
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
-});*/
+});

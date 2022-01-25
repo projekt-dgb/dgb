@@ -480,10 +480,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnung: &mut Vec<String>, f
     .trim()
     .to_string();
     
-    let waehrung = match betrag.waehrung {
-        Waehrung::Euro => "EUR",
-        Waehrung::DMark => "DM",
-    };
+    let waehrung = betrag.waehrung.to_string();
     
     if grundschuld_fuer.is_empty() {
         warnung.push(format!("Grundschuld in Text nicht erkannt - {}", gekuerzt));
@@ -1012,6 +1009,40 @@ impl SchuldenArtPyWrapper {
     #[classattr] fn Sicherungsgrundschuld() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Sicherungsgrundschuld }}
     #[classattr] fn Zwangssicherungshypothek() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::Zwangssicherungshypothek }}
     #[classattr] fn NichtDefiniert() -> SchuldenArtPyWrapper { SchuldenArtPyWrapper { inner: SchuldenArt::NichtDefiniert }}
+}
+
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
+#[pyclass(name = "Waehrung")]
+pub struct PyWaehrung {
+    inner: Waehrung,
+}
+
+#[allow(non_snake_case)]
+#[pymethods]
+impl PyWaehrung {
+    #[classattr] fn Euro() -> PyWaehrung { PyWaehrung { inner: Waehrung::Euro }}
+    #[classattr] fn DMark() -> PyWaehrung { PyWaehrung { inner: Waehrung::DMark }}
+    #[classattr] fn MarkDDR() -> PyWaehrung { PyWaehrung { inner: Waehrung::MarkDDR }}
+    #[classattr] fn Goldmark() -> PyWaehrung { PyWaehrung { inner: Waehrung::Goldmark }}
+    #[classattr] fn Rentenmark() -> PyWaehrung { PyWaehrung { inner: Waehrung::Rentenmark }}
+    #[classattr] fn Reichsmark() -> PyWaehrung { PyWaehrung { inner: Waehrung::Reichsmark }}
+    #[classattr] fn GrammFeingold() -> PyWaehrung { PyWaehrung { inner: Waehrung::GrammFeingold }}
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
+#[pyclass(name = "Betrag")]
+pub struct PyBetrag {
+    pub inner: Betrag,
+}
+
+#[allow(non_snake_case)]
+#[pymethods]
+impl PyBetrag {
+    #[new]
+    fn new(wert: usize, nachkomma: usize, waehrung: PyWaehrung) -> Self {
+        Self { inner: Betrag { wert, nachkomma, waehrung: waehrung.inner } }
+    }
 }
 
 // TODO: teilw. Flurstücke möglicherweise Komma drin

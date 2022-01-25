@@ -1073,6 +1073,26 @@ fn parse_teilweise_lastend_an(
 pub enum Waehrung { 
     Euro,
     DMark,
+    MarkDDR,
+    Goldmark,
+    Rentenmark,
+    Reichsmark,
+    GrammFeingold,
+}
+
+impl Waehrung {
+    pub fn to_string(&self) -> &'static str {
+        use self::Waehrung::*;
+        match self {
+            Waehrung::Euro => "€",
+            Waehrung::DMark => "DM",
+            Waehrung::MarkDDR => "DDR-Mark",
+            Waehrung::Goldmark => "Goldmark",
+            Waehrung::Reichsmark => "Reichsmark",
+            Waehrung::Rentenmark => "Rentenmark",
+            Waehrung::GrammFeingold => "Gr. Feingold",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]

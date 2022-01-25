@@ -8,6 +8,8 @@
     "BINDESTRICH_2": "-\\nund",
     "EINGETRAGEN_AM_1": "ingetragen am (\\d\\d).(\\d\\d).(\\d\\d\\d\\d)",
     "EINGETRAGEN_AM_2": "ingetragen (.*) am (\\d\\d).(\\d\\d).(\\d\\d\\d\\d)",
+    "EINGETRAGEN_AM_3": "(.*) eingetragen am (dd).(dd).(dddd)",
+    "EINGETRAGEN_AM_3_1": "(.*)",
     "FLUR_FLURSTUECK_1": "Flur (\\d*) Flurstück (\\S*)",
     "FLUR_FLURSTUECK_2": "Flur (\\d*) Flst. (\\S*)",
     "FLUR_FLURSTUECK_3": "Flur (\\d*), Flst. (\\S*)",
@@ -49,9 +51,48 @@
     "ZERLEGT_1": "Flurstück (\\d*) ist zerlegt in die Flurstücke (\\d*) und (\\d*)",
     "ÜBERTRAGEN_1": "Von Nr\\. (\\S*)\\W(.*)übertragen nach\n"
   },
+  "abkuerzungen_script": [
+    "[",
+    "    \" Dr\",",
+    "    \" Prof\",",
+    "    \" Co\",",
+    "    \" v\", ",
+    "    \" URNr\", ",
+    "    \" Abt\", ",
+    "    \" Co\", ",
+    "    \"bzlg\",",
+    "    \" geb\", ",
+    "    \" lfd\", ",
+    "    \" Nr\", ",
+    "]"
+  ],
+  "text_saubern_script": [
+    "return recht.replace(\"G r u n d s c h u l d\", \"Grundschuld\")"
+  ],
+  "text_kuerzen_abt2_script": [
+    "#",
+    "# Irrelevante Sätze rausfiltern",
+    "saetze = filter(lambda satz: not(re[\"AUSÜBUNG_1\"].matches(satz)), saetze)",
+    "saetze = filter(lambda satz: not(re[\"VOLLSTRECKBAR_1\"].matches(satz)), saetze)",
+    "saetze = filter(lambda satz: not(re[\"VOLLSTRECKBAR_2\"].matches(satz)), saetze)",
+    "saetze = filter(lambda satz: not(re[\"VON_AMTS_WEGEN_EINGETRAGEN_1\"].matches(satz)), saetze)",
+    "return \". \".join(saetze)"
+  ],
+  "text_kuerzen_abt3_script": [
+    "return \". \".join(saetze)"
+  ],
+  "betrag_auslesen_script": [
+    "return saetze[0]"
+  ],
+  "rechtsinhaber_auslesen_abt3_script": [
+    "return saetze[1]"
+  ],
+  "rechtsinhaber_auslesen_abt2_script": [
+    "return saetze[0]"
+  ],
   "klassifiziere_rechteart": [
-    "",
-    "leitungsrecht_map = [",
+    "recht = \". \".join(saetze)",
+    "leitungsrecht = [",
     "    \"Leitungsrecht\",",
     "    \"Leitungs-\",",
     "    \"Trinkwasserleitung\",",
@@ -59,28 +100,43 @@
     "    \"Ferngasleitungs\",",
     "    \"Kabelanlagenrecht\"",
     "]",
-    "",
-    "for l in leitungsrecht_map:",
-    "    if l in recht:",
-    "        if \"Gasleitungsrecht\" in recht:",
-    "            return RechteArt.GasleitungGasreglerstationFerngasltg",
-    "        elif \"Hochspannungsfreileitung\" in recht:",
-    "            return RechteArt.Hochspannungsleitungsrecht",
-    "        else:",
-    "            return RechteArt.LeitungsOderAnlagenrecht",
-    "",
+    "if any(l in recht for l in leitungsrecht):",
+    "    if \"Gasleitungsrecht\" in recht:",
+    "        return RechteArt.GasleitungGasreglerstationFerngasltg",
+    "    elif \"Hochspannungsfreileitung\" in recht:",
+    "        return RechteArt.Hochspannungsleitungsrecht",
+    "    else:",
+    "        return RechteArt.LeitungsOderAnlagenrecht",
     "if \"Kabelrecht\" in recht or \"Kabeltrassenrecht\" in recht:",
     "    return RechteArt.Kabelrecht",
-    "",
     "if \"Wegerecht\" in recht:",
     "    return RechteArt.GehWegeFahrOderLeitungsrecht",
-    "",
     "if \"Vormerkung zur Sicherung des Anspruchs auf Rückauflassung\" in recht:",
     "    return RechteArt.Rueckauflassungsvormerkung",
-    "",
+    "if \"Auflassungsvormerkung\" in recht:",
+    "    return RechteArt.Auflassungsvormerkung",
+    "if \"Vorkaufsrecht\" in recht or \"Eigentumsübertragungsvormerkung\" in recht:",
+    "    return RechteArt.Vorkaufsrecht",
+    "if \"Nießbrauch\" in recht:",
+    "    return RechteArt.Niessbrauchrecht",
+    "if \"Mitbenutzungsrecht\" in recht:",
+    "    return RechteArt.Mitbenutzungsrecht",
+    "if \"Widerspruch\" in recht:",
+    "    return RechteArt.Widerspruch",
+    "mit_dem_inhalt_des_rechts = re[\"MIT_DEM_INHALT_DES_RECHTS_1\"].find_in(recht, 0)",
+    "if mit_dem_inhalt_des_rechts is not None:",
+    "    return RechteArt.SpeziellVormerkung(int(float(mit_dem_inhalt_des_rechts)))",
+    "benutzungsrecht = [",
+    "    \"Benutzungsrecht\",",
+    "    \"Benutzungs-\",",
+    "    \"Benutzung-\",",
+    "]",
+    "if any(b in recht for b in benutzungsrecht):",
+    "    return RechteArt.Benutzungsrecht",
     "raise Exception(\"Konnte RechteArt nicht auslesen\")"
   ],
   "klassifiziere_schuldenart": [
+    "recht = \". \".join(saetze)",
     "stichwoerter = [",
     "    ('Grundschuld', SchuldenArt.Grundschuld),",
     "    ('Hypothek', SchuldenArt.Hypothek),",
@@ -102,7 +158,6 @@
     "    for k, v in stichwoerter:",
     "        if k in recht:",
     "            return v",
-    "",
     "raise Exception(\"Konnte SchuldenArt nicht auslesen\")"
   ]
 }

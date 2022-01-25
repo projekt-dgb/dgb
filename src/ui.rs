@@ -85,6 +85,51 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                         </div>
                     </div>
                     
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Abkürzungen</p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def abkuerzungen() -> [String]:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editAbkuerzungenScript(event);'>{konfig_abkuerzungen_script}</div>
+                        </div>
+                    </div>
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Text säubern</p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_säubern(recht: String) -> String:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextSaubernScript(event);'>{konfig_text_saubern_script}</div>
+                        </div>
+                    </div>
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Text kürzen (Abteilung 2)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt2(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt2Script(event);'>{konfig_text_kuerzen_abt2_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt2()'></textarea>
+                        </div>
+                    </div>
+                    
+                    
                     <div style='padding:5px 0px;'>
                     
                         <div>
@@ -94,7 +139,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                         </div>
                         
                         <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_rechte(recht: String, re: Mapping[String, Regex]) -> RechteArt:</p>
+                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_rechteart_abt2(saetze: [String], re: Mapping[String, Regex]) -> RechteArt:</p>
                             <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechteArtScript(event);'>{konfig_rechteart_script}</div>
                         </div>
                         
@@ -108,12 +153,69 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                     
                         <div>
                             <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Klassifizierung SchuldenArt (Abteilung 2)
+                                Rechtsinhaber auslesen (Abteilung 2)
                             </p>                        
                         </div>
                         
                         <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_abt3(recht: String, re: Mapping[String, Regex]) -> SchuldenArt:</p>
+                            <p style='color:#4a4e6a;user-select:none;'>def rechtsinhaber_auslesen_abt2(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechtsinhaberAbt2Script(event);'>{konfig_rechtsinhaber_abt2_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechtsinhaberAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                                        
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Text kürzen (Abteilung 3)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt3Script(event);'>{konfig_text_kuerzen_abt3_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt3_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt3()'></textarea>
+                        </div>
+                    </div>
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Betrag auslesen (Abteilung 3)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def betrag_auslesen(saetze: [String], re: Mapping[String, Regex]) -> Betrag:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editBetragAuslesenScript(event);'>{konfig_betrag_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='betragAuslesenScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_betrag_auslesen_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                                                                  
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Klassifizierung SchuldenArt (Abteilung 3)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_schuldenart_abt3(saetze: [String], re: Mapping[String, Regex]) -> SchuldenArt:</p>
                             <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editSchuldenArtScript(event);'>{konfig_schuldenart_script}</div>
                         </div>
                         
@@ -122,6 +224,26 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                             <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_schuldenart_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
                         </div>
                     </div>
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Rechtsinhaber auslesen (Abteilung 3)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def rechtsinhaber_auslesen_abt3(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <div style='caret-color: #4a4e6a;padding-left:34px;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechtsinhaberAbt3Script(event);'>{konfig_rechtsinhaber_abt3_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechtsinhaberAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt3_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                    
                 </div>
             ", 
                 konfig_pfad = Konfiguration::konfiguration_pfad(),
@@ -151,8 +273,22 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                     .join("\r\n")
                 },
                 
-                konfig_rechteart_script = 
-                rpc_data.konfiguration.klassifiziere_rechteart.iter()
+                konfig_rechtsinhaber_abt3_script = 
+                rpc_data.konfiguration.rechtsinhaber_auslesen_abt3_script.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| format!("<div>{}</div>", l))
+                .collect::<Vec<String>>()
+                .join("\r\n"),
+                
+                konfig_rechtsinhaber_abt2_script = 
+                rpc_data.konfiguration.rechtsinhaber_auslesen_abt2_script.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| format!("<div>{}</div>", l))
+                .collect::<Vec<String>>()
+                .join("\r\n"),
+                
+                konfig_betrag_script = 
+                rpc_data.konfiguration.betrag_auslesen_script.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
                 .map(|l| format!("<div>{}</div>", l))
                 .collect::<Vec<String>>()
@@ -164,6 +300,41 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 .map(|l| format!("<div>{}</div>", l))
                 .collect::<Vec<String>>()
                 .join("\r\n"),
+                
+                konfig_rechteart_script = 
+                rpc_data.konfiguration.klassifiziere_rechteart.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| format!("<div>{}</div>", l))
+                .collect::<Vec<String>>()
+                .join("\r\n"),
+                
+                konfig_abkuerzungen_script = 
+                    rpc_data.konfiguration.abkuerzungen_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| format!("<div>{}</div>", l))
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
+                
+                konfig_text_saubern_script = 
+                    rpc_data.konfiguration.text_saubern_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| format!("<div>{}</div>", l))
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
+                
+                konfig_text_kuerzen_abt2_script = 
+                    rpc_data.konfiguration.text_kuerzen_abt2_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| format!("<div>{}</div>", l))
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
+                
+                konfig_text_kuerzen_abt3_script = 
+                    rpc_data.konfiguration.text_kuerzen_abt3_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| format!("<div>{}</div>", l))
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
             )
         } else if let Some(cm) = rpc_data.context_menu_active.clone() {
             format!("
@@ -644,10 +815,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter]) ->
         
             use crate::analysiere::Waehrung;
             
-            let waehrung_str = match a3a.betrag.waehrung {
-                Waehrung::Euro => "€",
-                Waehrung::DMark => "DM",
-            };
+            let waehrung_str = a3a.betrag.waehrung.to_string();
             
             format!("
             <div class='__application-abt2-analysiert' style='margin:5px;padding:10px;border:1px solid #efefef;'>
