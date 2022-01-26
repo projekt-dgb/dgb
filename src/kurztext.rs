@@ -135,24 +135,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
             warnungen.push(e);
             (String::new(), Vec::new())
         }
-    };
-    
-    let gekuerzt = match Python::with_gil(|py| {
-        crate::python_exec_kurztext_string(
-            py,
-            &text_sauber, 
-            &saetze_clean, 
-            &konfiguration.text_kuerzen_abt3_script, 
-            konfiguration
-        )
-    }) {
-        Ok(o) => o,
-        Err(e) => {
-            warnungen.push(e);
-            String::new()
-        }
-    };
-    
+    };    
     
     let rechtsinhaber = match Python::with_gil(|py| {
         crate::python_exec_kurztext_string(
@@ -204,6 +187,24 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
         }
     };
 
+    let gekuerzt = match Python::with_gil(|py| {
+        crate::python_exec_kurztext_betrag(
+            py,
+            &text_sauber,
+            betrag.map(|b| format!("{} {}", formatiere_betrag(&b), b.waehrung.to_string())),
+            schuldenart.map(|s| format!("{}", s.to_string())),
+            &saetze_clean, 
+            &konfiguration.text_kuerzen_abt3_script, 
+            konfiguration
+        )
+    }) {
+        Ok(o) => o,
+        Err(e) => {
+            warnungen.push(e);
+            String::new()
+        }
+    };
+    
     let eingetragen_am = get_eingetragen_am(&saetze_clean);
 
     KurzTextAbt3 {
@@ -468,6 +469,26 @@ pub enum SchuldenArt {
     NichtDefiniert,
 }
 
+impl SchuldenArt {
+    pub fn to_string(&self) -> &'static str {
+        use self::SchuldenArt::*;
+        match self {
+            Grundschuld => "Grundschuld",
+            Hypothek => "Hypothek",
+            Rentenschuld => "Rentenschuld",
+            Aufbauhypothek => "Aufbauhypothek",
+            Sicherungshypothek => "Sicherungshypothek",
+            Widerspruch => "Widerspruch",
+            Arresthypothek => "Arresthypothek",
+            SicherungshypothekGem128ZVG => "Sicherungshypothek gemäß §128 ZVG",
+            Hoechstbetragshypothek => "Höchstbetragshypothek",
+            Sicherungsgrundschuld => "Sicherungsgrundschuld",
+            Zwangssicherungshypothek => "Zwangssicherungshypothek",
+            NichtDefiniert => "",
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[pyclass(name = "RechteArt")]
 #[repr(C)]
@@ -620,7 +641,7 @@ impl PyWaehrung {
     #[classattr] fn GrammFeingold() -> PyWaehrung { PyWaehrung { inner: Waehrung::GrammFeingold }}
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
 #[pyclass(name = "Betrag")]
 pub struct PyBetrag {
     pub inner: Betrag,

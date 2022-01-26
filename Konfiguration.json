@@ -145,7 +145,9 @@
     "return gekuerzt"
   ],
   "text_kuerzen_abt3_script": [
-    "return \". \".join(saetze)"
+    "if schuldenart == \"\" or betrag == \"\":",
+    "    return \"\"",
+    "return schuldenart + \" über \" + betrag"
   ],
   "betrag_auslesen_script": [
     " ",
@@ -354,6 +356,7 @@
     "recht = saetze[0]",
     " ",
     "stichwoerter = [",
+    "    ('Gesamtgrundschuld', SchuldenArt.Grundschuld),",
     "    ('Grundschuld', SchuldenArt.Grundschuld),",
     "    ('Hypothek', SchuldenArt.Hypothek),",
     "    ('Rentenschuld', SchuldenArt.Rentenschuld),",

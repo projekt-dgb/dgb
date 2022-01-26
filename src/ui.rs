@@ -196,7 +196,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                         </div>
                         
                         <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], betrag: String, schuldenart: String, re: Mapping[String, Regex]) -> String:</p>
                             <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt3Script(event);'>{konfig_text_kuerzen_abt3_script}</div>
                         </div>
                         

@@ -844,7 +844,7 @@ fn parse_teilweise_lastend_an(
     Ok(teilweise_lastend_an)
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Waehrung { 
     Euro,
     DMark,
@@ -869,7 +869,7 @@ impl Waehrung {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Betrag {
     pub wert: usize,
     pub nachkomma: usize,
