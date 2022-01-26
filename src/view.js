@@ -118,6 +118,7 @@ function logInfo(info) {
 // Function called from Rust on init to initialize the entire screen
 function replaceEntireScreen(html) {
     document.body.innerHTML = html;
+
 }
 
 function replaceRibbon(s) {
@@ -183,6 +184,7 @@ function replaceAnalyseGrundbuch(s) {
 
 function openConfiguration(e) {
     rpc.open_configuration();
+
 }
 
 function openInfo(e) {
@@ -286,6 +288,7 @@ function editAbkuerzungenScript(e) {
     if (innerText) {
         rpc.edit_abkuerzungen_script(innerText);        
     }
+
 }
 
 
@@ -299,6 +302,7 @@ function editTextSaubernScript(e) {
     if (innerText) {
         rpc.edit_text_saubern_script(innerText);        
     }
+
 }
 
 function editTextKuerzenAbt2Script(e) {
@@ -311,6 +315,7 @@ function editTextKuerzenAbt2Script(e) {
     if (innerText) {
         rpc.edit_text_kuerzen_abt2_script(innerText);        
     }
+
 }
 
 function textKuerzenAbt2ScriptTesten(e) {
@@ -335,6 +340,7 @@ function editRechteArtScript(e) {
     if (innerText) {
         rpc.edit_rechteart_script(innerText);        
     }
+
 }
 
 function editRangvermerkAuslesenAbt2Script(e) {
@@ -347,6 +353,7 @@ function editRangvermerkAuslesenAbt2Script(e) {
     if (innerText) {
         rpc.edit_rangvermerk_auslesen_abt2_script(innerText);        
     }
+
 }
 
 function rangvermerkAuslesenAbt2ScriptTesten(e) {
@@ -463,6 +470,7 @@ function editRechtsinhaberAbt2Script(e) {
     if (innerText) {
         rpc.edit_rechtsinhaber_auslesen_abt2_script(innerText);        
     }
+
 }
 
 
@@ -491,6 +499,7 @@ function editTextKuerzenAbt3Script(e) {
     if (innerText) {
         rpc.edit_text_kuerzen_abt3_script(innerText);        
     }
+
 }
 
 function textKuerzenAbt3ScriptTesten(e) {
@@ -515,6 +524,7 @@ function editBetragAuslesenScript(e) {
     if (innerText) {
         rpc.edit_betrag_auslesen_script(innerText);        
     }
+
 }
 
 function betragAuslesenScriptTesten(e) {
@@ -539,6 +549,7 @@ function editSchuldenArtScript(e) {
     if (innerText) {
         rpc.edit_schuldenart_script(innerText);        
     }
+
 }
 
 function schuldenArtScriptTesten(e) {
@@ -564,6 +575,7 @@ function editRechtsinhaberAbt3Script(e) {
     if (innerText) {
         rpc.edit_rechtsinhaber_auslesen_abt3_script(innerText);        
     }
+
 }
 
 
@@ -599,8 +611,8 @@ function klassifiziereSeiteNeu(event) {
 
 // Init
 window.onload = function() { rpc.init(); };
-
-
+/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
 });
+*/

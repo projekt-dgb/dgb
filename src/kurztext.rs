@@ -35,7 +35,7 @@ pub fn text_kuerzen_abt2(input: &str, warnungen: &mut Vec<String>, konfiguration
             konfiguration
         )
     }) {
-        Ok(o) => o,
+        Ok(o) => o.trim().to_string(),
         Err(e) => {
             warnungen.push(e);
             String::new()
@@ -84,7 +84,13 @@ pub fn text_kuerzen_abt2(input: &str, warnungen: &mut Vec<String>, konfiguration
             konfiguration
         )
     }) {
-        Ok(o) => Some(o.trim().to_string()),
+        Ok(o) => {
+            if o.trim().is_empty() {
+                None
+            } else {
+                Some(o.trim().to_string())
+            }
+        },
         Err(e) => {
             warnungen.push(e);
             None
@@ -184,8 +190,8 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
     let betrag = match Python::with_gil(|py| {
         let betrag: Result<PyBetrag, String> = crate::python_exec_kurztext(
             py,
-            &text_sauber, 
-            &saetze_clean, 
+            betrag, 
+            &[betrag.to_string()], 
             &konfiguration.betrag_auslesen_script, 
             konfiguration
         );
@@ -398,17 +404,29 @@ pub fn text_saubern(input: &str, konfiguration: &Konfiguration) -> Result<(Strin
         letzter_satz.clear();
     }
     
+    static MONATE: &[&'static str;12] = &[
+        "Januar", "Februar", "März", 
+        "April", "Juni", "Juli", 
+        "Mai", "August", "September", 
+        "Oktober", "November", "Dezember"
+    ];
+    
     // Manche Abkürzungen werden versehentlich als Satzendungen erkannt ("Dr.", "v.", etc.)
     let mut saetze_clean = Vec::new();
     let mut letzter_satz = String::new();
     for (s_idx, s) in saetze.iter().enumerate() {
 
+        let naechster_satz_faengt_mit_großbuchstaben_an = saetze.get(s_idx + 1).and_then(|s| s.trim().chars().nth(0)).map(|fc| fc.is_uppercase()).unwrap_or(false);
+        let naechster_satz_ist_monat = saetze.get(s_idx + 1).map(|s| {
+            MONATE.iter().any(|m| s.trim().starts_with(m))
+        }).unwrap_or(false);
+        
         let endet_mit_abkuerzung = 
             // Satz endet mit Abkürzung oder Zahl: vereinen
             abkuerzungen.iter().any(|a| s.ends_with(a)) || 
             s.chars().last().map(|c| c.is_numeric()).unwrap_or(false) && 
-            // nächster Satz fängt mit Großbuchstaben an: trennen
-            !saetze.get(s_idx + 1).and_then(|s| s.trim().chars().nth(0)).map(|fc| fc.is_uppercase()).unwrap_or(false);
+            // nächster Satz fängt mit Großbuchstaben an: trennen, außer: Satz = Monatsname
+            !(naechster_satz_faengt_mit_großbuchstaben_an && !naechster_satz_ist_monat);
 
         if endet_mit_abkuerzung {
             letzter_satz.push_str(s);
