@@ -13,22 +13,22 @@
   flex-direction: column;
 }
 
-#__application-main #__application-file-list p {
+#__application-main #__application-file-list > div {
   font-size: 12px;
   font-family: monospace;
   padding: 5px 10px;
   cursor: pointer;
 }
 
-#__application-main #__application-file-list p.active {
+#__application-main #__application-file-list > div.active {
   background: antiquewhite;
 }
 
-#__application-main #__application-file-list p:hover {
+#__application-main #__application-file-list > div:hover {
   background: #ccc;
 }
 
-#__application-main #__application-file-list p:active {
+#__application-main #__application-file-list > div:active {
   background: #aaa;
 }
 
@@ -169,4 +169,52 @@
 .kontextmenü-eintrag:active p {
     color:white;
     cursor:pointer;
+}
+
+.btn {
+    display:flex;
+    flex-grow: 0;
+    cursor:pointer;
+    margin: 2px;
+    height: 23px;
+    
+    font-weight: bold;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+    cursor: pointer;
+    background-image: none;
+    border: 1px solid transparent;
+    padding: 2px 6px;
+    font-size: 12px;
+    line-height: 1.42857143;
+    border-radius: 4px;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.btn_neu {
+    color: #fff;
+    background-color: #5cb85c;
+    border-color: #4cae4c;
+}
+
+.btn_roeten {
+    color: #fff;
+    background-color: #f0ad4e;
+    border-color: #eea236;
+}
+
+.btn_loeschen {
+    color: #fff;
+    background-color: #d9534f;
+    border-color: #d43f3a;
+}
+
+.disabled {
+    filter: grayscale(80%) brightness(150%);
 }

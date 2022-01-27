@@ -355,7 +355,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
     let arg = match serde_json::from_str::<Cmd>(arg) {
         Ok(arg) => arg,
         Err(e) => { 
-            webview.eval(&format!("displayError(`{}`);", format!("{:?}", e))); 
             return; 
         },
     };
@@ -392,33 +391,27 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
     
             let mut pdf_zu_laden = Vec::new();
             
-            for d in dateien {
+            for d in dateien.iter() {
                                 
                 let datei_bytes = match std::fs::read(d) {
                     Ok(o) => o,
                     Err(e) => {
-                        webview.eval(&format!("displayError(`{}`);", format!("Konnte \"{}\" nicht lesen: {}", d, e)));
                         continue;
                     }
                 };
-                
-                webview.eval(&format!("logInfo(`{}`);", format!("Digitalisiere \"{}\"", d)));  
-                
+                                
                 let mut seitenzahlen = match digitalisiere::lese_seitenzahlen(&datei_bytes) {
                     Ok(o) => o,
                     Err(e) => {
-                        webview.eval(&format!("displayError(`{}`);", format!("Fehler in Datei \"{}\": {}", d, e)));
                         continue;
                     },
                 };
                 
                 let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
-                webview.eval(&format!("logInfo(`{}`);", format!("{} Seiten erkannt.", max_sz)));  
 
                 let titelblatt = match digitalisiere::lese_titelblatt(&datei_bytes) {
                     Ok(o) => o,
                     Err(_) => {
-                        webview.eval(&format!("displayError(`{}`);", format!("Kann Titelblatt aus Datei \"{}\" nicht lesen - kein Grundbuchblatt?", d)));
                         continue;
                     },
                 };
@@ -428,13 +421,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let file_name = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
                 let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
                 let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-                webview.eval(&format!("logInfo(`{}`);", format!("Lese Grundbuch von {} Blatt {}, AG {}", titelblatt.grundbuch_von, titelblatt.blatt, titelblatt.amtsgericht)));  
                 
                 // Lösche Titelblattseite von Seiten, die gerendert werden müssen
                 seitenzahlen.remove(0);
                 
                 let mut pdf_parsed = PdfFile {
-		            datei: d.clone(),
+		            datei: d.to_string(),
 		            titelblatt,
 		            seitenzahlen: seitenzahlen.clone(),
                     klassifikation_neu: BTreeMap::new(),
@@ -468,9 +460,13 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let _ = std::fs::write(&cache_output_path, json.as_bytes());
                 data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
                 pdf_zu_laden.push(pdf_parsed);  
-                webview.eval(&format!("replaceMain(`{}`);", ui::render_main(data)));
+                if data.open_page.is_none() {
+                    data.open_page = Some((file_name.clone(), 2));
+                }
             }
             
+            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+                        
             for pdf_parsed in &pdf_zu_laden {
                 let default_parent = Path::new("/");
                 let output_parent = Path::new(&pdf_parsed.datei).parent().unwrap_or(&default_parent).to_path_buf();
@@ -503,9 +499,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let _ = std::fs::remove_file(&cache_output_path);
                 if data.open_page.is_none() {
                     data.open_page = Some((file_name.clone(), 2));
-                    webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-                    webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-                    webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
+                    webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
                 }
                 webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
             }
@@ -714,11 +708,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            let cell = match split.get(2) {
-                Some(s) => s,
-                None => return,
-            };
-            
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
                 Some(s) => s,
                 None => return,
@@ -783,11 +772,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let row = match split.get(1).and_then(|s| s.parse::<usize>().ok()) {
-                Some(s) => s,
-                None => return,
-            };
-            
-            let cell = match split.get(2) {
                 Some(s) => s,
                 None => return,
             };
@@ -885,7 +869,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::CloseFile { file_name } => {
-            println!("closeFile {}", file_name);
+            let _ = data.loaded_files.remove(file_name);
+            data.info_active = false;
+            data.configuration_active = false;
+            data.context_menu_active = None;
+            webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
+            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::EditTextKuerzenAbt2Script { script } => {
             data.konfiguration.text_kuerzen_abt2_script = script.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
@@ -1064,6 +1053,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::DeleteNebenbeteiligte => {
             use tinyfiledialogs::{YesNo, MessageBoxIcon};
             
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
             if tinyfiledialogs::message_box_yes_no(
                 "Wirklich löschen?",
                 &format!("Alle Ordnungsnummern werden aus den Dateien gelöscht. Fortfahren?"),
@@ -1139,7 +1132,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             println!("redo");
         },
         Cmd::ImportNebenbeteiligte => {
-                        
+            
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
             let file_dialog_result = tinyfiledialogs::open_file_dialog(
                 "Nebenbeteiligte Ordnungsnummern auswählen", 
                 "~/", 
@@ -1207,6 +1204,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::ExportNebenbeteiligte => {
         
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
             let tsv = get_nebenbeteiligte_tsv(&data);
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
@@ -1230,6 +1231,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::ExportLefis => {
 
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
             let analysiert = data.loaded_files.values().map(|file| {
                 LefisDateiExport {
                     rechte: crate::analysiere::analysiere_grundbuch(&file.analysiert, &data.loaded_nb, &data.konfiguration),
@@ -1332,17 +1337,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::SetOpenFile { new_file } => {
             data.open_page = Some((new_file.clone(), 2));
-
-            let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
-                Some(s) => s,
-                None => return,
-            };
             
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
-
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
+            match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
+                Some(open_file) => {
+                    crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
+                },
+                None => { },
+            };
+                        
+            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::SetOpenPage { active_page } => {
             
@@ -1350,13 +1353,13 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 p.1 = *active_page;
             }
             
-            let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
-                Some(s) => s,
-                None => return,
+            match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
+                Some(open_file) => {
+                    crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
+                },
+                None => { },
             };
-            
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
-            
+                        
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
         },
@@ -1489,9 +1492,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
 }
 
 fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
-    
-    println!("klassifiziere PDF seiten neu: {:?}", seiten_neu);
-    
+        
     let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
     
     let default_parent = Path::new("/");
@@ -1515,7 +1516,6 @@ fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
         let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, *sz as u32, max_sz, seitentyp, &pdf.pdftotext_layout) { 
             Ok(o) => o, 
             Err(e) => {
-                println!("Fehler: {}", e);
                 continue;
             }, 
         };
@@ -1524,7 +1524,6 @@ fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
         let textbloecke = match digitalisiere::textbloecke_aus_spalten(&pdf.titelblatt, *sz as u32, &spalten, &pdf.pdftotext_layout) { 
             Ok(o) => o, 
             Err(e) => {
-                println!("Fehler: {}", e);
                 continue;
             }, 
         };
@@ -1594,16 +1593,12 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
             
             for sz in seitenzahlen_zu_laden {
             
-                println!("{}: konvertiere seite {} zu png", file_name, sz);
                 if digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], &pdf.titelblatt).is_err() { continue; };
-                println!("{}: schreibe pdftotext {}", file_name, sz);
                 let pdftotext_layout = match digitalisiere::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { Ok(o) => o, Err(_) => continue, };
-                println!("{}: digitalisiere OCR {}", file_name, sz);
                 for (k, v) in pdftotext_layout.seiten.iter() {
                     pdf.pdftotext_layout.seiten.insert(k.clone(), v.clone());
                 }
                 if digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz).is_err() { continue; }
-                println!("{}: bestimme seitentyp {}", file_name, sz);
                 let seitentyp = match pdf.klassifikation_neu.get(&(sz as usize)) {
                     Some(s) => *s,
                     None => {
@@ -1613,11 +1608,8 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         }
                     }
                 };
-                println!("{}: schneide formularspalten {}", file_name, sz);
                 let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, sz, max_sz, seitentyp, &pdftotext_layout) { Ok(o) => o, Err(_) => continue, };
-                println!("{}: digitalisiere formularspalten {}", file_name, sz);
                 if digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
-                println!("{}: lese textbloecke {}", file_name, sz);
                 let textbloecke = match digitalisiere::textbloecke_aus_spalten(&pdf.titelblatt, sz, &spalten, &pdftotext_layout) { Ok(o) => o, Err(_) => continue, };
                 
                 pdf.geladen.insert(sz, SeiteParsed {
@@ -1724,7 +1716,7 @@ pub fn python_exec_kurztext_betrag<'py>(
 }
 
 pub fn python_exec_kurztext_string<'py>(
-    py: Python<'py>,
+     py: Python<'py>,
     text_sauber: &str, 
     saetze_clean: &[String],
     py_code_lines: &[String], 

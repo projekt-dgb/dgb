@@ -1599,22 +1599,22 @@ input[type="file"] {
   flex-direction: column;
 }
 
-#__application-main #__application-file-list p {
+#__application-main #__application-file-list > div {
   font-size: 12px;
   font-family: monospace;
   padding: 5px 10px;
   cursor: pointer;
 }
 
-#__application-main #__application-file-list p.active {
+#__application-main #__application-file-list > div.active {
   background: antiquewhite;
 }
 
-#__application-main #__application-file-list p:hover {
+#__application-main #__application-file-list > div:hover {
   background: #ccc;
 }
 
-#__application-main #__application-file-list p:active {
+#__application-main #__application-file-list > div:active {
   background: #aaa;
 }
 
@@ -1756,6 +1756,54 @@ input[type="file"] {
     color:white;
     cursor:pointer;
 }
+
+.btn {
+    display:flex;
+    flex-grow: 0;
+    cursor:pointer;
+    margin: 2px;
+    height: 23px;
+    
+    font-weight: bold;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+    cursor: pointer;
+    background-image: none;
+    border: 1px solid transparent;
+    padding: 2px 6px;
+    font-size: 12px;
+    line-height: 1.42857143;
+    border-radius: 4px;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.btn_neu {
+    color: #fff;
+    background-color: #5cb85c;
+    border-color: #4cae4c;
+}
+
+.btn_roeten {
+    color: #fff;
+    background-color: #f0ad4e;
+    border-color: #eea236;
+}
+
+.btn_loeschen {
+    color: #fff;
+    background-color: #d9534f;
+    border-color: #d43f3a;
+}
+
+.disabled {
+    filter: grayscale(80%) brightness(150%);
+}
 </style>
         <script type="text/javascript">
 "use strict";
@@ -1848,6 +1896,18 @@ function stopCheckingForPageLoaded(filename) {
     }
 }
 
+function eintragNeu(path) {
+    rpc.eintrag_neu(path);        
+}
+
+function eintragRoeten(path) {
+    rpc.eintrag_roeten(path);        
+}
+
+function eintragLoeschen(path) {
+    rpc.eintrag_loeschen(path);        
+}
+
 function inputOnKeyDown(path, e) {
     if ((event.keyCode == 10 || event.keyCode == 13) && event.ctrlKey) {
         // CTRL + Enter
@@ -1866,8 +1926,7 @@ function editText(path, e) {
 }
 
 function displayError(error) {
-    // console.error(info);
-    alert(error);    
+    console.error(error);
 }
 
 function logInfo(info) {
@@ -1951,7 +2010,11 @@ function openInfo(e) {
 }
 
 function openContextMenu(e) {
-    rpc.open_context_menu(e.clientX, e.clientY, parseInt(e.target.getAttribute("data-pageNumber")));
+    var pn = e.target.getAttribute("data-pageNumber");
+    if (!pn) {
+        return;
+    }
+    rpc.open_context_menu(e.clientX, e.clientY, parseInt(pn));
     return false;
 }
 
@@ -1960,11 +2023,20 @@ function closePopOver(s) {
 }
 
 function activateSelectedFile(event) {
-    rpc.set_open_file(event.target.getAttribute("data-fileName"));
+    var file = event.target.getAttribute("data-fileName");
+    if (!file) {
+        console.log(event.target);
+        return;
+    }
+    rpc.set_open_file(file);
 }
 
 function activateSelectedPage(event) {
-    rpc.set_open_page(parseInt(event.target.getAttribute("data-pageNumber"), 10));
+    var pn = event.target.getAttribute("data-pageNumber");
+    if (!pn) {
+        return;
+    }
+    rpc.set_open_page(parseInt(pn, 10));
 }
 
 function regexLoeschen(event) {
@@ -2368,8 +2440,18 @@ function klassifiziereSeiteNeu(event) {
     rpc.klassifiziere_seite_neu(seite, klassifikation);
 }
 
+function closeFile(event, path) {
+    var path = event.target.getAttribute("data-fileName");
+    if (!path) {
+        return;
+    }
+    
+    rpc.close_file(path);
+}
+
 // Init
 window.onload = function() { rpc.init(); };
+
 /*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())

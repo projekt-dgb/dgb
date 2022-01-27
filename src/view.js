@@ -89,6 +89,18 @@ function stopCheckingForPageLoaded(filename) {
     }
 }
 
+function eintragNeu(path) {
+    rpc.eintrag_neu(path);        
+}
+
+function eintragRoeten(path) {
+    rpc.eintrag_roeten(path);        
+}
+
+function eintragLoeschen(path) {
+    rpc.eintrag_loeschen(path);        
+}
+
 function inputOnKeyDown(path, e) {
     if ((event.keyCode == 10 || event.keyCode == 13) && event.ctrlKey) {
         // CTRL + Enter
@@ -107,8 +119,7 @@ function editText(path, e) {
 }
 
 function displayError(error) {
-    // console.error(info);
-    alert(error);    
+    console.error(error);
 }
 
 function logInfo(info) {
@@ -192,7 +203,11 @@ function openInfo(e) {
 }
 
 function openContextMenu(e) {
-    rpc.open_context_menu(e.clientX, e.clientY, parseInt(e.target.getAttribute("data-pageNumber")));
+    var pn = e.target.getAttribute("data-pageNumber");
+    if (!pn) {
+        return;
+    }
+    rpc.open_context_menu(e.clientX, e.clientY, parseInt(pn));
     return false;
 }
 
@@ -201,11 +216,20 @@ function closePopOver(s) {
 }
 
 function activateSelectedFile(event) {
-    rpc.set_open_file(event.target.getAttribute("data-fileName"));
+    var file = event.target.getAttribute("data-fileName");
+    if (!file) {
+        console.log(event.target);
+        return;
+    }
+    rpc.set_open_file(file);
 }
 
 function activateSelectedPage(event) {
-    rpc.set_open_page(parseInt(event.target.getAttribute("data-pageNumber"), 10));
+    var pn = event.target.getAttribute("data-pageNumber");
+    if (!pn) {
+        return;
+    }
+    rpc.set_open_page(parseInt(pn, 10));
 }
 
 function regexLoeschen(event) {
@@ -609,8 +633,18 @@ function klassifiziereSeiteNeu(event) {
     rpc.klassifiziere_seite_neu(seite, klassifikation);
 }
 
+function closeFile(event, path) {
+    var path = event.target.getAttribute("data-fileName");
+    if (!path) {
+        return;
+    }
+    
+    rpc.close_file(path);
+}
+
 // Init
 window.onload = function() { rpc.init(); };
+
 /*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())

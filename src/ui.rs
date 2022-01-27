@@ -53,7 +53,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
         popover_content = 
         if rpc_data.info_active {
             format!("
-                <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px;' onmousedown='event.stopPropagation();'>
+            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px;' onmousedown='event.stopPropagation();'>
                     <h2 style='font-size:24px;font-family:sans-serif;'>Digitales Grundbuch Version {version}</h2>
                     
                     <div style='padding:5px 0px;display:flex;flex-grow:1;'>
@@ -462,7 +462,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.undo(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_back_base64}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_back_base64}'>
                             </div>
                             <div>
                                 <p>Zurück</p>
@@ -473,7 +473,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.redo(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_forward_base64}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_forward_base64}'>
                             </div>
                             <div>
                                 <p>Vorwärts</p>
@@ -489,7 +489,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_nb(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_export_csv}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
                             </div>
                             <div>
                                 <p>Nebenbet.</p>
@@ -501,7 +501,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.import_nb(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_download_base64}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_download_base64}'>
                             </div>
                             <div>
                                 <p>Nebenbet.</p>
@@ -513,7 +513,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.delete_nb(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_delete_base64}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_delete_base64}'>
                             </div>
                             <div>
                                 <p>Nebenbet.</p>
@@ -529,7 +529,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_export_lefis}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_lefis}'>
                             </div>
                             <div>
                                 <p>Export</p>
@@ -574,6 +574,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
             </div>
         </div>
         ", 
+        disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" },
         icon_open_base64 = base64::encode(ICON_GRUNDBUCH_OEFFNEN),
         icon_back_base64 = base64::encode(ICON_ZURUECK),
         icon_forward_base64 = base64::encode(ICON_VORWAERTS),
@@ -611,10 +612,28 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_file_list(rpc_data: &RpcData) -> String {
+    const CLOSE_PNG: &[u8] = include_bytes!("../src/img/icons8-close-48.png");
+    let close_str = format!("data:image/png;base64,{}", base64::encode(&CLOSE_PNG));
+
     normalize_for_js(rpc_data.loaded_files.keys().map(|filename| {
-        format!("<p class='{file_active}' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>{filename}</p>", 
-            file_active = if rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename) { "active" } else { "" },
+        let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename);
+        
+        format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
+            <p style='flex-grow:0;user-select:none;' data-fileName='{filename}' >{filename}</p>
+            <div style='display:flex;flex-grow:1;' data-fileName='{filename}' ></div>
+            {close_btn}
+            </div>", 
+            file_active = if datei_ausgewaehlt { "active" } else { "" },
             filename = filename, 
+            close_btn = if datei_ausgewaehlt { 
+                format!(
+                    "<img style='width: 16px;height: 16px;padding: 2px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' onmouseup='closeFile(event);'src='{close_str}'></img>", 
+                    filename = filename, 
+                    close_str = close_str
+                ) 
+            } else { 
+                String::new() 
+            },
         )
     }).collect::<Vec<_>>().join("\r\n"))
 }
@@ -695,8 +714,8 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
     
     if !open_file.ist_geladen() {
         normalize_for_js(format!("
-                <div style='padding:10px;display:flex;flex-grow:1;align-children:center;justify-content:center;'>
-                    <h2>Grundbuch wird geladen, bitte warten...</h2>
+                <div style='height: 100%;padding:10px;display:flex;flex-grow:1;align-items:center;justify-content:center;'>
+                    <h2 style='font-size: 16px;font-weight:bold;'>Grundbuch wird geladen...</h2>
                 </div>
             ",
         ))
@@ -961,10 +980,11 @@ pub fn render_bestandsverzeichnis(open_file: &mut PdfFile) -> String {
                 onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flurstueck\", event)'
                 oninput='editText(\"bv:{zeile_nr}:flurstueck\", event)'
             />
-            <div style='flex-direction:row;'>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(167, 255, 185), rgb(75, 235, 108)); border-radius: 5px;'>+</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 246, 204), rgb(255, 237, 85)); border-radius: 5px;'>r</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 204, 204), rgb(255, 123, 85)); border-radius: 5px;'>x</button>
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"bv:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
             bv_geroetet = bv_geroetet,
@@ -1011,10 +1031,11 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
                 onkeyup='inputOnKeyDown(\"bv-zuschreibung:{zeile_nr}:text\", event)'
                 oninput='editText(\"bv-zuschreibung:{zeile_nr}:text\", event)'
             >{text}</textarea>
-            <div style='flex-direction:row;'>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(167, 255, 185), rgb(75, 235, 108)); border-radius: 5px;'>+</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 246, 204), rgb(255, 237, 85)); border-radius: 5px;'>r</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 204, 204), rgb(255, 123, 85)); border-radius: 5px;'>x</button>
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"bv-zuschreibung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"bv-zuschreibung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"bv-zuschreibung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
             zeile_nr = zeile_nr,
@@ -1055,10 +1076,11 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
                 onkeyup='inputOnKeyDown(\"bv-abschreibung:{zeile_nr}:text\", event)'
                 oninput='editText(\"bv-abschreibung:{zeile_nr}:text\", event)'
             >{text}</textarea>
-            <div style='flex-direction:row;'>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(167, 255, 185), rgb(75, 235, 108)); border-radius: 5px;'>+</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 246, 204), rgb(255, 237, 85)); border-radius: 5px;'>r</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 204, 204), rgb(255, 123, 85)); border-radius: 5px;'>x</button>
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"bv-abschreibung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"bv-abschreibung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"bv-abschreibung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
             zeile_nr = zeile_nr,
@@ -1113,10 +1135,11 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
                 onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt2:{zeile_nr}:text\", event)'
             >{recht}</textarea>
-            <div style='flex-direction:row;'>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(167, 255, 185), rgb(75, 235, 108)); border-radius: 5px;'>+</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 246, 204), rgb(255, 237, 85)); border-radius: 5px;'>r</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 204, 204), rgb(255, 123, 85)); border-radius: 5px;'>x</button>
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt2:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt2:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt2:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
             bv_geroetet = bv_geroetet,
@@ -1177,10 +1200,11 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
                 onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt3:{zeile_nr}:text\", event)'
             >{recht}</textarea>
-            <div style='flex-direction:row;'>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(167, 255, 185), rgb(75, 235, 108)); border-radius: 5px;'>+</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 246, 204), rgb(255, 237, 85)); border-radius: 5px;'>r</button>
-                <button style='cursor:pointer;width: 18px;height: 18px;margin: 0px 5px;background: linear-gradient(rgb(252, 204, 204), rgb(255, 123, 85)); border-radius: 5px;'>x</button>
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt3:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt3:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt3:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>",
             bv_geroetet = bv_geroetet,
