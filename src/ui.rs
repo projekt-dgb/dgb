@@ -108,27 +108,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                             <p style='color:#4a4e6a;user-select:none;'>def text_säubern(recht: String) -> String:</p>
                             <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextSaubernScript(event);'>{konfig_text_saubern_script}</div>
                         </div>
-                    </div>
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Text kürzen (Abteilung 2)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt2(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt2Script(event);'>{konfig_text_kuerzen_abt2_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt2()'></textarea>
-                        </div>
-                    </div>
-                    
+                    </div>                    
                     
                     <div style='padding:5px 0px;'>
                     
@@ -191,20 +171,22 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                     
                         <div>
                             <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Text kürzen (Abteilung 3)
+                                Text kürzen (Abteilung 2)
                             </p>                        
                         </div>
                         
                         <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], betrag: String, schuldenart: String, re: Mapping[String, Regex]) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt3Script(event);'>{konfig_text_kuerzen_abt3_script}</div>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt2(saetze: [String], rechtsinhaber: String, rangvermerk: String, re: Mapping[String, Regex]) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt2Script(event);'>{konfig_text_kuerzen_abt2_script}</div>
                         </div>
                         
                         <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt3_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt3()'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt2()'></textarea>
                         </div>
                     </div>
+                    
+                    <hr/>
                     
                     <div style='padding:5px 0px;'>
                     
@@ -263,6 +245,25 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                         </div>
                     </div>
                     
+                    
+                    <div style='padding:5px 0px;'>
+                    
+                        <div>
+                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                                Text kürzen (Abteilung 3)
+                            </p>                        
+                        </div>
+                        
+                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], betrag: String, schuldenart: String, rechtsinhaber: String, re: Mapping[String, Regex]) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt3Script(event);'>{konfig_text_kuerzen_abt3_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt3_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt3()'></textarea>
+                        </div>
+                    </div>
                 </div>
             ", 
                 konfig_pfad = Konfiguration::konfiguration_pfad(),
@@ -295,6 +296,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_rangvermerk_abt2_script = 
                 rpc_data.konfiguration.rangvermerk_auslesen_abt2_script.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                 .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -302,6 +304,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_rechtsinhaber_abt3_script = 
                 rpc_data.konfiguration.rechtsinhaber_auslesen_abt3_script.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                 .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -309,6 +312,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_rechtsinhaber_abt2_script = 
                 rpc_data.konfiguration.rechtsinhaber_auslesen_abt2_script.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                 .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -316,6 +320,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_betrag_script = 
                 rpc_data.konfiguration.betrag_auslesen_script.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                 .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -323,6 +328,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_schuldenart_script = 
                 rpc_data.konfiguration.klassifiziere_schuldenart.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                 .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -330,6 +336,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_rechteart_script = 
                 rpc_data.konfiguration.klassifiziere_rechteart.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                 .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -337,6 +344,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_abkuerzungen_script = 
                     rpc_data.konfiguration.abkuerzungen_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -344,6 +352,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_text_saubern_script = 
                     rpc_data.konfiguration.text_saubern_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -351,6 +360,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_text_kuerzen_abt2_script = 
                     rpc_data.konfiguration.text_kuerzen_abt2_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
                 .join("\r\n"),
@@ -358,6 +368,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
                 konfig_text_kuerzen_abt3_script = 
                     rpc_data.konfiguration.text_kuerzen_abt3_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
                 .join("\r\n"),

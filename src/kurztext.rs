@@ -16,32 +16,16 @@ pub struct KurzTextAbt2 {
     pub eingetragen_am: Option<String>,
 }
 
-pub fn text_kuerzen_abt2(input: &str, warnungen: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt2 {
+pub fn text_kuerzen_abt2(input: &str, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt2 {
     
     let (text_sauber, saetze_clean) = match text_saubern(input, konfiguration) {
         Ok(o) => o,
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             (String::new(), Vec::new())
         }
     };
     
-    let gekuerzt = match Python::with_gil(|py| {
-        crate::python_exec_kurztext_string(
-            py,
-            &text_sauber, 
-            &saetze_clean, 
-            &konfiguration.text_kuerzen_abt2_script, 
-            konfiguration
-        )
-    }) {
-        Ok(o) => o.trim().to_string(),
-        Err(e) => {
-            warnungen.push(e);
-            String::new()
-        }
-    };
-
     let rechtsinhaber = match Python::with_gil(|py| {
         crate::python_exec_kurztext_string(
             py,
@@ -51,10 +35,10 @@ pub fn text_kuerzen_abt2(input: &str, warnungen: &mut Vec<String>, konfiguration
             konfiguration
         ) 
     }) {
-        Ok(o) => o,
+        Ok(o) => Some(o),
         Err(e) => {
-            warnungen.push(e);
-            String::new()
+            fehler.push(e);
+            None
         }
     };
     
@@ -70,7 +54,7 @@ pub fn text_kuerzen_abt2(input: &str, warnungen: &mut Vec<String>, konfiguration
     }) {
         Ok(o) => Some(o),
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             None
         }
     };
@@ -92,13 +76,32 @@ pub fn text_kuerzen_abt2(input: &str, warnungen: &mut Vec<String>, konfiguration
             }
         },
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             None
         }
     };
     
+    let gekuerzt = match Python::with_gil(|py| {
+        crate::python_exec_kuerze_text_abt2(
+            py,
+            &text_sauber,
+            rechtsinhaber.clone(),
+            rangvermerk.clone(),
+            &saetze_clean, 
+            &konfiguration.text_kuerzen_abt2_script, 
+            konfiguration
+        )
+    }) {
+        Ok(o) => o.trim().to_string(),
+        Err(e) => {
+            fehler.push(e);
+            String::new()
+        }
+    };
+    
     let eingetragen_am = get_eingetragen_am(&saetze_clean);
-
+    let rechtsinhaber = rechtsinhaber.clone().unwrap_or_default();
+    
     KurzTextAbt2 {
         text_sauber,
         gekuerzt,
@@ -127,12 +130,12 @@ pub struct KurzTextAbt3 {
     pub eingetragen_am: Option<String>,
 }
 
-pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt3 {
+pub fn text_kuerzen_abt3(betrag: &str, input: &str, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt3 {
 
     let (text_sauber, saetze_clean) = match text_saubern(input, konfiguration) {
         Ok(o) => o,
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             (String::new(), Vec::new())
         }
     };    
@@ -146,10 +149,10 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
             konfiguration
         ) 
     }) {
-        Ok(o) => o,
+        Ok(o) => Some(o),
         Err(e) => {
-            warnungen.push(e);
-            String::new()
+            fehler.push(e);
+            None
         }
     };
 
@@ -165,7 +168,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
     }) {
         Ok(o) => Some(o),
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             None
         }
     };
@@ -182,17 +185,18 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
     }) {
         Ok(o) => Some(o),
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             None
         }
     };
 
     let gekuerzt = match Python::with_gil(|py| {
-        crate::python_exec_kurztext_betrag(
+        crate::python_exec_kuerze_text_abt3(
             py,
             &text_sauber,
             betrag.map(|b| format!("{} {}", formatiere_betrag(&b), b.waehrung.to_string())),
             schuldenart.map(|s| format!("{}", s.to_string())),
+            rechtsinhaber.clone(),
             &saetze_clean, 
             &konfiguration.text_kuerzen_abt3_script, 
             konfiguration
@@ -200,13 +204,14 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, warnungen: &mut Vec<String>,
     }) {
         Ok(o) => o,
         Err(e) => {
-            warnungen.push(e);
+            fehler.push(e);
             String::new()
         }
     };
-    
-    let eingetragen_am = get_eingetragen_am(&saetze_clean);
 
+    let eingetragen_am = get_eingetragen_am(&saetze_clean);
+    let rechtsinhaber = rechtsinhaber.unwrap_or_default();
+    
     KurzTextAbt3 {
         text_sauber,
         gekuerzt,
@@ -526,7 +531,7 @@ impl RechteArtPyWrapper {
     #[classattr] fn Erbbaurecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Erbbaurecht }}
     #[classattr] fn Erwerbsvormerkung() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Erwerbsvormerkung }}
     #[classattr] fn Fensterrecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fensterrecht }}
-    #[classattr] fn Fensterverbot() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fensterverbot }}
+//     #[classattr] fn Fensterverbot() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fensterverbot }}
     #[classattr] fn Fischereirecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fischereirecht }}
     #[classattr] fn Garagenrecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Garagenrecht }}
     #[classattr] fn Gartenbenutzungsrecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Gartenbenutzungsrecht }}
@@ -679,7 +684,7 @@ impl PyBetrag {
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub enum RechteArt {
-    SpeziellVormerkung { rechteverweis: usize },                          // Vormerkung zur Sicherung
+    SpeziellVormerkung { rechteverweis: usize },                          //     Vormerkung zur Sicherung
     Abwasserleitungsrecht,                                                //     Abwasserleitungsrecht
     Auflassungsvormerkung,                                                //     Auflassungsvormerkung
     Ausbeutungsrecht,                                                     //     Ausbeutungsrecht
@@ -699,7 +704,7 @@ pub enum RechteArt {
     Denkmalschutz,                                                        //     Denkmalschutz
     DinglichesNutzungsrecht,                                              //     dingliches Nutzungsrecht
     DuldungVonEinwirkungenDurchBaumwurf,                                  //     Duldung von Einwirkungen durch Baumwurf
-    DuldungVonFernmeldeanlagen,                                            //     Duldung von Femmeldeanlagen
+    DuldungVonFernmeldeanlagen,                                            //    Duldung von Femmeldeanlagen
     Durchleitungsrecht,                                                   //     Durchleitungsrecht
     EinsitzInsitzrecht,                                                   //     Einsitz-/ Insitzrecht
     Entwasserungsrecht,                                                   //     Entwasserungsrecht
@@ -777,4 +782,3 @@ pub enum RechteArt {
     Zwangsversteigerungsvermerk,                                          //     Zwangsversteigerungsvermerk
     Zwangsverwaltungsvermerk,                                             //     Zwangsverwaltungsvermerk
 }
-

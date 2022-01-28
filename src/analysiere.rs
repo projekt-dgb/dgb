@@ -45,7 +45,7 @@ pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter], konf
             }
         }
         
-        let kt = kurztext::text_kuerzen_abt2(&eintrag.text, &mut warnungen, konfiguration);
+        let kt = kurztext::text_kuerzen_abt2(&eintrag.text, &mut fehler, konfiguration);
         
         let belastete_flurstuecke = match get_belastete_flurstuecke(
             &eintrag.bv_nr, 
@@ -81,7 +81,7 @@ pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter], konf
         let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
             Some(s) => s.clone(),
             None => {
-                fehler.push(format!("Konnte keine Ordnungsnummer finden"));
+                warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
                 Nebenbeteiligter {
                     typ: None,
                     ordnungsnummer: None,
@@ -148,7 +148,7 @@ pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter], konf
             }
         }
 
-        let kt = kurztext::text_kuerzen_abt3(&eintrag.betrag, &eintrag.text, &mut warnungen, &mut fehler, konfiguration);
+        let kt = kurztext::text_kuerzen_abt3(&eintrag.betrag, &eintrag.text, &mut fehler, konfiguration);
 
         let belastete_flurstuecke = match get_belastete_flurstuecke(
             &eintrag.bv_nr, 
@@ -182,7 +182,7 @@ pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter], konf
         let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
             Some(s) => s.clone(),
             None => {
-                fehler.push(format!("Konnte keine Ordnungsnummer finden"));
+                warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
                 Nebenbeteiligter {
                     typ: None,
                     ordnungsnummer: None,

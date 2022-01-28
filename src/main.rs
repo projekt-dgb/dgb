@@ -972,6 +972,16 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<String, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
+
+                let rechteart: Result<RechteArtPyWrapper, String> = crate::python_exec_kurztext(
+                    py,
+                    &text_sauber, 
+                    &saetze_clean, 
+                    &data.konfiguration.klassifiziere_schuldenart, 
+                    &data.konfiguration
+                );
+                let rechteart = rechteart?.inner;
+                
                 python_exec_kurztext_string(py, &text_sauber, &saetze_clean, &data.konfiguration.text_kuerzen_abt2_script, &data.konfiguration)
             });
             let time = std::time::Instant::now() - start;
@@ -1005,11 +1015,21 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 );
                 let betrag = betrag?.inner;
                 
-                python_exec_kurztext_betrag(
+                let rechtsinhaber: Result<String, String> = crate::python_exec_kurztext_string(
+                    py,
+                    &text_sauber, 
+                    &saetze_clean, 
+                    &data.konfiguration.betrag_auslesen_script, 
+                    &data.konfiguration
+                );
+                let rechtsinhaber = rechtsinhaber?;
+
+                python_exec_kuerze_text_abt3(
                     py,
                     &text_sauber,
                     Some(format!("{} {}", crate::kurztext::formatiere_betrag(&betrag), betrag.waehrung.to_string())),
                     Some(format!("{}", schuldenart.to_string())),
+                    Some(rechtsinhaber),
                     &saetze_clean, 
                     &data.konfiguration.text_kuerzen_abt3_script, 
                     &data.konfiguration
@@ -1279,7 +1299,13 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             );
             
             let f = match file_dialog_result {
-                Some(f) => f,
+                Some(f) => {
+                    if f.ends_with(".lefis") {
+                        f
+                    } else {
+                        format!("{}.lefis", f)
+                    }
+                },
                 None => return,
             };
             
@@ -1657,11 +1683,12 @@ fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
 }
 
 
-pub fn python_exec_kurztext_betrag<'py>(
+pub fn python_exec_kuerze_text_abt3<'py>(
     py: Python<'py>,
     text_sauber: &str, 
     betrag: Option<String>,
     schuldenart: Option<String>,
+    rechteinhaber: Option<String>,
     saetze_clean: &[String],
     py_code_lines: &[String], 
     konfiguration: &Konfiguration,
@@ -1680,7 +1707,7 @@ pub fn python_exec_kurztext_betrag<'py>(
         
     let script = script.replace("\t", "    ");
     let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, betrag, schuldenart, re = args\r\n{}", script);
+    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, betrag, schuldenart, rechtsinhaber, re = args\r\n{}", script);
     let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
@@ -1707,6 +1734,66 @@ pub fn python_exec_kurztext_betrag<'py>(
         saetze.to_object(py), 
         betrag.unwrap_or_default().to_object(py), 
         schuldenart.unwrap_or_default().to_object(py), 
+        rechteinhaber.unwrap_or_default().to_object(py), 
+        regex_list.to_object(py)
+    ]);
+    let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
+    let extract = result.as_ref(py).extract::<String>().map_err(|e| format!("{}", e))?;
+    
+    Ok(extract)
+}
+
+
+pub fn python_exec_kuerze_text_abt2<'py>(
+    py: Python<'py>,
+    text_sauber: &str, 
+    rechteinhaber: Option<String>,
+    rangvermerk: Option<String>,
+    saetze_clean: &[String],
+    py_code_lines: &[String], 
+    konfiguration: &Konfiguration,
+) -> Result<String, String> {
+
+    use pyo3::prelude::*;
+    use pyo3::types::{PyDict, PyList, PyTuple};
+
+    use crate::kurztext::PyWaehrung;
+        
+    let script = py_code_lines
+        .iter()
+        .map(|l| format!("    {}", l))
+        .collect::<Vec<_>>()
+        .join("\r\n");
+        
+    let script = script.replace("\t", "    ");
+    let script = script.replace("\u{00a0}", " ");
+    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, rechtsinhaber, rangvermerk, re = args\r\n{}", script);
+    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
+    
+    let saetze = PyList::new(py, saetze_clean.into_iter());
+
+    let mut module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
+    module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
+    module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
+    module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
+    module.add_class::<PyBetrag>().map_err(|e| format!("{}", e))?;
+    module.add_class::<PyWaehrung>().map_err(|e| format!("{}", e))?;
+
+    let fun: Py<PyAny> = module.getattr("run_script").unwrap().into();
+    let regex_list = {
+        let dict = PyDict::new(py);
+        for (k, v) in konfiguration.regex.iter() {
+            if let Ok(v) = get_or_insert_regex(&regex_values, v) {
+                let _ = dict.set_item(k.clone(), v);
+            }
+        }
+        dict
+    };
+    
+    let tuple = PyTuple::new(py, &[
+        saetze.to_object(py), 
+        rechteinhaber.unwrap_or_default().to_object(py), 
+        rangvermerk.unwrap_or_default().to_object(py), 
         regex_list.to_object(py)
     ]);
     let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
@@ -1848,7 +1935,7 @@ impl CompiledRegex {
         Ok(Self {
             re: regex::RegexBuilder::new(s)
                 .multi_line(true)
-                .case_insensitive(true)
+                .case_insensitive(false)
                 //.size_limit(1000)
                 .build()?
         })
