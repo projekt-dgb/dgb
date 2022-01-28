@@ -11,7 +11,12 @@ use serde_derive::{Serialize, Deserialize};
 use crate::digitalisiere::{
     SeiteParsed, Nebenbeteiligter, NebenbeteiligterExtra,
     NebenbeteiligterTyp, Titelblatt, SeitenTyp,
-    Grundbuch, BvZuschreibung, Anrede, PdfToTextLayout,
+    Grundbuch, 
+    Anrede, PdfToTextLayout,
+    BvEintrag, BvZuschreibung, BvAbschreibung, 
+    Abt1Eintrag, Abt1Veraenderung, Abt1Loeschung,
+    Abt2Eintrag, Abt2Veraenderung, Abt2Loeschung,
+    Abt3Eintrag, Abt3Veraenderung, Abt3Loeschung,
 };
 use crate::analysiere::GrundbuchAnalysiert;
 use crate::kurztext::{PyBetrag, SchuldenArtPyWrapper, RechteArtPyWrapper};
@@ -506,6 +511,17 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::EditText { path, new_value } => {
             
+            fn get_mut_or_insert_last<'a, T>(vec: &'a mut Vec<T>, index: usize, default_value: T) -> &'a mut T {
+                let vec_len = vec.len();
+                if index + 1 > vec_len {
+                    vec.push(default_value);
+                    let vec_len = vec.len();
+                    &mut vec[vec_len - 1]
+                } else {
+                    &mut vec[index]
+                }
+            }
+            
             use crate::digitalisiere::FlurstueckGroesse;
             
             let split = path.split(":").collect::<Vec<_>>();
@@ -530,16 +546,19 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
+            println!("editText: {} - {}: {}", section, cell, new_value);
+            
             match (*section, *cell) {
                 ("bv", "lfd-nr") => {
                     let new_value = match new_value.parse::<usize>().ok() {
                         Some(s) => s,
                         None => return,
                     };
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::new(row + 1)
+                    );
                     bv_eintrag.lfd_nr = new_value.clone();
                 },
                 ("bv", "bisherige-lfd-nr") => {
@@ -547,18 +566,19 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         Some(s) => Some(s),
                         None => None,
                     };
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::new(row + 1)
+                    );
                     bv_eintrag.bisherige_lfd_nr = new_value.clone();
                 },
                 ("bv", "gemarkung") => {
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
-                    
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::new(row + 1)
+                    );
                     bv_eintrag.gemarkung = if new_value.trim().is_empty() { 
                         Some(new_value.clone()) 
                     } else { 
@@ -570,17 +590,19 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         Some(s) => s,
                         None => return,
                     };
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::new(row + 1)
+                    );
                     bv_eintrag.flur = new_value.clone();
                 },
                 ("bv", "flurstueck") => {
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::new(row + 1)
+                    );
                     bv_eintrag.flurstueck = new_value.clone();
                 },
                 ("bv", "groesse") => {
@@ -588,64 +610,175 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         Some(s) => Some(s),
                         None => None,
                     };
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::new(row + 1)
+                    );
                     bv_eintrag.groesse = FlurstueckGroesse::Metrisch { m2: new_value };
                 },
                 ("bv-zuschreibung", "bv-nr") => {
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.zuschreibungen.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.zuschreibungen, 
+                        row, 
+                        BvZuschreibung::default()
+                    );
+                    
                     bv_eintrag.bv_nr = new_value.clone();
                 },
                 ("bv-zuschreibung", "text") => {
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.zuschreibungen.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.zuschreibungen, 
+                        row, 
+                        BvZuschreibung::default()
+                    );
                     bv_eintrag.text = new_value.clone();
                 },
                 ("bv-abschreibung", "bv-nr") => {
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.abschreibungen.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.abschreibungen, 
+                        row, 
+                        BvAbschreibung::default()
+                    );
                     bv_eintrag.bv_nr = new_value.clone();
                 },
                 ("bv-abschreibung", "text") => {
-                    let mut bv_eintrag = match open_file.analysiert.bestandsverzeichnis.abschreibungen.get_mut(row) {
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.abschreibungen, 
+                        row, 
+                        BvAbschreibung::default()
+                    );
+                    bv_eintrag.text = new_value.clone();
+                },
+                
+                ("abt1", "lfd-nr") => {
+                    let new_value = match new_value.parse::<usize>().ok() {
                         Some(s) => s,
                         None => return,
                     };
-                    bv_eintrag.text = new_value.clone();
+                    let mut abt1_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.eintraege, 
+                        row, 
+                        Abt1Eintrag::new(row + 1)
+                    );
+                    abt1_eintrag.lfd_nr = new_value.clone();
                 },
+                ("abt1", "eigentuemer") => {
+                    let mut abt1_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.eintraege, 
+                        row, 
+                        Abt1Eintrag::new(row + 1)
+                    );
+                    abt1_eintrag.eigentuemer = new_value.clone();
+                },
+                ("abt1", "bv-nr") => {
+                    let mut abt1_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.eintraege, 
+                        row, 
+                        Abt1Eintrag::new(row + 1)
+                    );
+                    abt1_eintrag.bv_nr = new_value.clone();
+                },
+                ("abt1", "grundlage-der-eintragung") => {
+                    let mut abt1_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.eintraege, 
+                        row, 
+                        Abt1Eintrag::new(row + 1)
+                    );
+                    abt1_eintrag.grundlage_der_eintragung = new_value.clone();
+                },
+                ("abt1-veraenderung", "lfd-nr") => {
+                    let mut abt1_veraenderung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.veraenderungen, 
+                        row, 
+                        Abt1Veraenderung::default()
+                    );
+                    abt1_veraenderung.lfd_nr = new_value.clone();
+                },
+                ("abt1-veraenderung", "text") => {
+                    let mut abt1_veraenderung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.veraenderungen, 
+                        row, 
+                        Abt1Veraenderung::default()
+                    );
+                    abt1_veraenderung.text = new_value.clone();
+                },
+                ("abt1-loeschung", "lfd-nr") => {
+                    let mut abt1_loeschung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.loeschungen, 
+                        row, 
+                        Abt1Loeschung::default()
+                    );
+                    abt1_loeschung.lfd_nr = new_value.clone();
+                },
+                ("abt1-loeschung", "text") => {
+                    let mut abt1_loeschung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt1.loeschungen, 
+                        row, 
+                        Abt1Loeschung::default()
+                    );
+                    abt1_loeschung.text = new_value.clone();
+                },
+                
                 ("abt2", "lfd-nr") => {
                     let new_value = match new_value.parse::<usize>().ok() {
                         Some(s) => s,
                         None => return,
                     };
-                    let mut abt2_eintrag = match open_file.analysiert.abt2.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt2_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.eintraege, 
+                        row, 
+                        Abt2Eintrag::new(row + 1)
+                    );
                     abt2_eintrag.lfd_nr = new_value.clone();
                 },
                 ("abt2", "bv-nr") => {
-                    let mut abt2_eintrag = match open_file.analysiert.abt2.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt2_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.eintraege, 
+                        row, 
+                        Abt2Eintrag::new(row + 1)
+                    );
                     abt2_eintrag.bv_nr = new_value.clone();
                 },
                 ("abt2", "text") => {
-                    let mut abt2_eintrag = match open_file.analysiert.abt2.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt2_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.eintraege, 
+                        row, 
+                        Abt2Eintrag::new(row + 1)
+                    );
                     abt2_eintrag.text = new_value.clone();
+                },
+                ("abt2-veraenderung", "lfd-nr") => {
+                    let mut abt2_veraenderung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.veraenderungen, 
+                        row, 
+                        Abt2Veraenderung::default()
+                    );
+                    abt2_veraenderung.lfd_nr = new_value.clone();
+                },
+                ("abt2-veraenderung", "text") => {
+                    let mut abt2_veraenderung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.veraenderungen, 
+                        row, 
+                        Abt2Veraenderung::default()
+                    );
+                    abt2_veraenderung.text = new_value.clone();
+                },
+                ("abt2-loeschung", "lfd-nr") => {
+                    let mut abt2_loeschung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.loeschungen, 
+                        row, 
+                        Abt2Loeschung::default()
+                    );
+                    abt2_loeschung.lfd_nr = new_value.clone();
+                },
+                ("abt2-loeschung", "text") => {
+                    let mut abt2_loeschung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt2.loeschungen, 
+                        row, 
+                        Abt2Loeschung::default()
+                    );
+                    abt2_loeschung.text = new_value.clone();
                 },
                 
                 ("abt3", "lfd-nr") => {
@@ -653,35 +786,74 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         Some(s) => s,
                         None => return,
                     };
-                    let mut abt3_eintrag = match open_file.analysiert.abt3.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt3_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.eintraege, 
+                        row, 
+                        Abt3Eintrag::new(row + 1)
+                    );
                     abt3_eintrag.lfd_nr = new_value.clone();
                 },
                 ("abt3", "bv-nr") => {
-                    let mut abt3_eintrag = match open_file.analysiert.abt3.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt3_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.eintraege, 
+                        row, 
+                        Abt3Eintrag::new(row + 1)
+                    );
                     abt3_eintrag.bv_nr = new_value.clone();
                 },
                 ("abt3", "betrag") => {
-                    let mut abt3_eintrag = match open_file.analysiert.abt3.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt3_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.eintraege, 
+                        row, 
+                        Abt3Eintrag::new(row + 1)
+                    );
                     abt3_eintrag.betrag = new_value.clone();
                 },
                 ("abt3", "text") => {
-                    let mut abt3_eintrag = match open_file.analysiert.abt3.eintraege.get_mut(row) {
-                        Some(s) => s,
-                        None => return,
-                    };
+                    let mut abt3_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.eintraege, 
+                        row, 
+                        Abt3Eintrag::new(row + 1)
+                    );
                     abt3_eintrag.text = new_value.clone();
                 },
+                ("abt3-veraenderung", "lfd-nr") => {
+                    let mut abt3_veraenderung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.veraenderungen, 
+                        row, 
+                        Abt3Veraenderung::default()
+                    );
+                    abt3_veraenderung.lfd_nr = new_value.clone();
+                },
+                ("abt3-veraenderung", "text") => {
+                    let mut abt3_veraenderung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.veraenderungen, 
+                        row, 
+                        Abt3Veraenderung::default()
+                    );
+                    abt3_veraenderung.text = new_value.clone();
+                },
+                ("abt3-loeschung", "lfd-nr") => {
+                    let mut abt3_loeschung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.loeschungen, 
+                        row, 
+                        Abt3Loeschung::default()
+                    );
+                    abt3_loeschung.lfd_nr = new_value.clone();
+                },
+                ("abt3-loeschung", "text") => {
+                    let mut abt3_loeschung = get_mut_or_insert_last(
+                        &mut open_file.analysiert.abt3.loeschungen, 
+                        row, 
+                        Abt3Loeschung::default()
+                    );
+                    abt3_loeschung.text = new_value.clone();
+                },
+                
                 _ => { return; }
             }
+            
+            println!("ok!");
             
             crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
             
@@ -695,7 +867,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration)));
         },
         Cmd::EintragNeu { path } => {
-        
+            
+            use crate::digitalisiere::{BvEintrag, Abt2Eintrag, Abt3Eintrag};
+
             let split = path.split(":").collect::<Vec<_>>();
             
             let section = match split.get(0) {
@@ -713,22 +887,33 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            fn insert_after<T>(vec: &mut Vec<T>, index: usize, new: T) {
+            fn insert_after<T: Clone>(vec: &mut Vec<T>, index: usize, new: T) {
+                if vec.is_empty() {
+                    vec.push(new.clone());
+                }
                 if index + 1 >= vec.len() || vec.is_empty() { 
                     vec.push(new); 
                 } else {
                     vec.splice((index + 1)..(index + 1), [new]);
                 }
             }
-            
-            use crate::digitalisiere::{BvEintrag, Abt2Eintrag, Abt3Eintrag};
-            
+
             match *section {
                 "bv" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.eintraege, row, BvEintrag::new(row + 2)),
                 "bv-zuschreibung" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.zuschreibungen, row, BvZuschreibung::default()),
-                "bv-abschreibung" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.zuschreibungen, row, BvZuschreibung::default()),
+                "bv-abschreibung" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.abschreibungen, row, BvAbschreibung::default()),
+                
+                "abt1" => insert_after(&mut open_file.analysiert.abt1.eintraege, row, Abt1Eintrag::new(row + 2)),
+                "abt1-veraenderung" => insert_after(&mut open_file.analysiert.abt1.veraenderungen, row, Abt1Veraenderung::default()),
+                "abt1-loeschung" => insert_after(&mut open_file.analysiert.abt1.loeschungen, row, Abt1Loeschung::default()),
+                
                 "abt2" => insert_after(&mut open_file.analysiert.abt2.eintraege, row, Abt2Eintrag::new(row + 2)),
+                "abt2-veraenderung" => insert_after(&mut open_file.analysiert.abt2.veraenderungen, row, Abt2Veraenderung::default()),
+                "abt2-loeschung" => insert_after(&mut open_file.analysiert.abt2.loeschungen, row, Abt2Loeschung::default()),
+                
                 "abt3" => insert_after(&mut open_file.analysiert.abt3.eintraege, row, Abt3Eintrag::new(row + 2)),
+                "abt3-veraenderung" => insert_after(&mut open_file.analysiert.abt3.veraenderungen, row, Abt3Veraenderung::default()),
+                "abt3-loeschung" => insert_after(&mut open_file.analysiert.abt3.loeschungen, row, Abt3Loeschung::default()),
                 _ => return,
             }
             
@@ -738,8 +923,18 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "bv" => format!("bv_{}_lfd-nr", row + 1),
                 "bv-zuschreibung" => format!("bv-zuschreibung_{}_bv-nr", row + 1),
                 "bv-abschreibung" => format!("bv-abschreibung_{}_bv-nr", row + 1),
+                
+                "abt1" => format!("abt1_{}_lfd-nr", row + 1),
+                "abt1-veraenderung" => format!("abt1-veraenderung_{}_lfd-nr", row + 1),
+                "abt1-loeschung" => format!("abt1-loeschung_{}_lfd-nr", row + 1),
+                
                 "abt2" => format!("abt2_{}_lfd-nr", row + 1),
+                "abt2-veraenderung" => format!("abt2-veraenderung_{}_lfd-nr", row + 1),
+                "abt2-loeschung" => format!("abt2-loeschung_{}_lfd-nr", row + 1),
+                
                 "abt3" => format!("abt3_{}_lfd-nr", row + 1),
+                "abt3-veraenderung" => format!("abt3-veraenderung_{}_lfd-nr", row + 1),
+                "abt3-loeschung" => format!("abt3-loeschung_{}_lfd-nr", row + 1),
                 _ => return,
             };
             
@@ -782,7 +977,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             match (*section, eintrag_roeten) {
-                ("bv", false) => { open_file.analysiert.bestandsverzeichnis.eintraege.remove(row); },
+                ("bv", false) => { 
+                    if !open_file.analysiert.bestandsverzeichnis.eintraege.is_empty() {
+                        open_file.analysiert.bestandsverzeichnis.eintraege.remove(row);
+                    }
+                },
                 ("bv", true) => { 
                     open_file.analysiert.bestandsverzeichnis.eintraege
                     .get_mut(row)
@@ -792,10 +991,82 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     });
                 },
                 
-                ("bv-zuschreibung", false) => { open_file.analysiert.bestandsverzeichnis.zuschreibungen.remove(row); },
-                ("bv-abschreibung", false) => { open_file.analysiert.bestandsverzeichnis.abschreibungen.remove(row); },
+                ("bv-zuschreibung", false) => { 
+                    if !open_file.analysiert.bestandsverzeichnis.zuschreibungen.is_empty() {
+                        open_file.analysiert.bestandsverzeichnis.zuschreibungen.remove(row);
+                    }
+                },
+                ("bv-zuschreibung", true) => { 
+                    open_file.analysiert.bestandsverzeichnis.zuschreibungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+
+                ("bv-abschreibung", false) => { 
+                    if !open_file.analysiert.bestandsverzeichnis.abschreibungen.is_empty() {
+                        open_file.analysiert.bestandsverzeichnis.abschreibungen.remove(row);
+                    }
+                },
+                ("bv-abschreibung", true) => { 
+                    open_file.analysiert.bestandsverzeichnis.abschreibungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+
+                ("abt1", false) => { 
+                    if !open_file.analysiert.abt1.veraenderungen.is_empty() {
+                        open_file.analysiert.abt1.veraenderungen.remove(row);
+                    }
+                },
+                ("abt1", true) => { 
+                    open_file.analysiert.abt1.eintraege
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
                 
-                ("abt2", false) => { open_file.analysiert.abt2.eintraege.remove(row); },
+                
+                ("abt1-veraenderung", false) => { 
+                    if !open_file.analysiert.abt1.veraenderungen.is_empty() {
+                        open_file.analysiert.abt1.veraenderungen.remove(row);
+                    }
+                },
+                ("abt1-veraenderung", true) => { 
+                    open_file.analysiert.abt1.veraenderungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+                
+                ("abt1-loeschung", false) => { 
+                    if !open_file.analysiert.abt1.loeschungen.is_empty() {
+                        open_file.analysiert.abt1.loeschungen.remove(row);
+                    }
+                },
+                ("abt1-loeschung", true) => { 
+                    open_file.analysiert.abt1.loeschungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+                
+                ("abt2", false) => {
+                    if !open_file.analysiert.abt2.eintraege.is_empty() {
+                        open_file.analysiert.abt2.eintraege.remove(row); 
+                    }
+                },
                 ("abt2", true) => { 
                     open_file.analysiert.abt2.eintraege
                     .get_mut(row)
@@ -804,10 +1075,70 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
-
-                ("abt3", false) => { open_file.analysiert.abt3.eintraege.remove(row); },
+                
+                ("abt2-veraenderung", false) => { 
+                    if !open_file.analysiert.abt2.veraenderungen.is_empty() {
+                        open_file.analysiert.abt2.veraenderungen.remove(row); 
+                    }
+                },
+                ("abt2-veraenderung", true) => { 
+                    open_file.analysiert.abt2.veraenderungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+                
+                ("abt2-loeschung", false) => { 
+                    if !open_file.analysiert.abt2.loeschungen.is_empty() {
+                        open_file.analysiert.abt2.loeschungen.remove(row); 
+                    }
+                },
+                ("abt2-loeschung", true) => { 
+                    open_file.analysiert.abt2.loeschungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+                
+                ("abt3", false) => { 
+                    if !open_file.analysiert.abt3.eintraege.is_empty() {
+                        open_file.analysiert.abt3.eintraege.remove(row); 
+                    }
+                },
                 ("abt3", true) => { 
                     open_file.analysiert.abt3.eintraege
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+                
+                ("abt3-veraenderung", false) => { 
+                    if !open_file.analysiert.abt3.veraenderungen.is_empty() {
+                        open_file.analysiert.abt3.veraenderungen.remove(row); 
+                    }
+                },
+                ("abt3-veraenderung", true) => { 
+                    open_file.analysiert.abt3.veraenderungen
+                    .get_mut(row)
+                    .map(|e| {
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        e.manuell_geroetet = Some(!cur);
+                    });
+                },
+                
+                ("abt3-loeschung", false) => { 
+                    if !open_file.analysiert.abt3.loeschungen.is_empty() {
+                        open_file.analysiert.abt3.loeschungen.remove(row); 
+                    }
+                },
+                ("abt3-loeschung", true) => { 
+                    open_file.analysiert.abt3.loeschungen
                     .get_mut(row)
                     .map(|e| {
                         let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
@@ -822,8 +1153,19 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "bv" => format!("bv_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
                 "bv-zuschreibung" => format!("bv-zuschreibung_{}_bv-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
                 "bv-abschreibung" => format!("bv-abschreibung_{}_bv-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                
+                "abt1" => format!("abt1_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt1-veraenderung" => format!("abt1-veraenderung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt1-loeschung" => format!("abt1-loeschung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+
                 "abt2" => format!("abt2_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt2-veraenderung" => format!("abt2-veraenderung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt2-loeschung" => format!("abt2-loeschung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+
                 "abt3" => format!("abt3_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt3-veraenderung" => format!("abt3-veraenderung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt3-loeschung" => format!("abt3-loeschung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+
                 _ => return,
             };
             
@@ -1667,12 +2009,14 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
 fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
 
     let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.geladen).ok()?;
+    let abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &bestandsverzeichnis).ok()?;
     let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &bestandsverzeichnis).ok()?;
     let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &bestandsverzeichnis).ok()?;
     
     let mut gb = Grundbuch {
         titelblatt: pdf.titelblatt.clone(),
         bestandsverzeichnis,
+        abt1,
         abt2,
         abt3,
     };

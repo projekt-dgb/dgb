@@ -216,5 +216,5 @@
 }
 
 .disabled {
-    filter: grayscale(80%) brightness(150%);
+    filter: grayscale(100%) brightness(150%);
 }

@@ -1470,6 +1470,8 @@ fn column_contains_point(col: &Column, start_x: f32, start_y: f32) -> bool {
 pub struct Grundbuch {
     pub titelblatt: Titelblatt,
     pub bestandsverzeichnis: Bestandsverzeichnis,
+    #[serde(default)]
+    pub abt1: Abteilung1,
     pub abt2: Abteilung2,
     pub abt3: Abteilung3,
 }
@@ -1538,12 +1540,32 @@ pub enum FlurstueckGroesse {
 pub struct BvZuschreibung {
     pub bv_nr: String,
     pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+impl BvZuschreibung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BvAbschreibung {
     pub bv_nr: String,
     pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+impl BvAbschreibung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
 }
 
 pub fn analysiere_bv(seiten: &BTreeMap<u32, SeiteParsed>) -> Result<Bestandsverzeichnis, Fehler> {
@@ -1738,6 +1760,8 @@ pub fn analysiere_bv(seiten: &BTreeMap<u32, SeiteParsed>) -> Result<Bestandsverz
             Some(BvZuschreibung {
                 bv_nr: zur_lfd_nr,
                 text: bestand_und_zuschreibungen,
+                automatisch_geroetet: false,
+                manuell_geroetet: None,
             })
         }).collect::<Vec<_>>().into_iter()
     }).collect();
@@ -1762,6 +1786,8 @@ pub fn analysiere_bv(seiten: &BTreeMap<u32, SeiteParsed>) -> Result<Bestandsverz
             Some(BvAbschreibung {
                 bv_nr: zur_lfd_nr,
                 text: abschreibungen,
+                automatisch_geroetet: false,
+                manuell_geroetet: None,
             })
         }).collect::<Vec<_>>().into_iter()
     }).collect();
@@ -1771,6 +1797,55 @@ pub fn analysiere_bv(seiten: &BTreeMap<u32, SeiteParsed>) -> Result<Bestandsverz
         zuschreibungen: bv_bestand_und_zuschreibungen,
         abschreibungen: bv_abschreibungen,
     })
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Abteilung1 {
+    // Index = lfd. Nr. der Grundstücke
+    pub eintraege: Vec<Abt1Eintrag>,
+    pub veraenderungen: Vec<Abt1Veraenderung>,
+    pub loeschungen: Vec<Abt1Loeschung>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Abt1Eintrag {
+    // lfd. Nr. der Eintragung
+    pub lfd_nr: usize,
+    // Rechtstext
+    pub eigentuemer: String,
+    // lfd. Nr der betroffenen Grundstücke im Bestandsverzeichnis
+    pub bv_nr: String, // Vec<BvNr>,
+    pub grundlage_der_eintragung: String,
+    
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+impl Abt1Eintrag {
+    pub fn new(lfd_nr: usize) -> Self { 
+        Abt1Eintrag { 
+            lfd_nr, 
+            eigentuemer: String::new(),
+            bv_nr: String::new(), 
+            grundlage_der_eintragung: String::new(),
+            
+            automatisch_geroetet: false,
+            manuell_geroetet: None,
+        } 
+    }
+    
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+pub fn analysiere_abt1(
+    seiten: &BTreeMap<u32, SeiteParsed>, 
+    bestandsverzeichnis: &Bestandsverzeichnis,
+) -> Result<Abteilung1, Fehler> {
+    Ok(Abteilung1::default())
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -2065,16 +2140,69 @@ pub struct GemarkungFlurFlurstueck {
     pub flurstueck: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Abt1Veraenderung {
+    pub lfd_nr: String,
+    pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+impl Abt1Veraenderung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Abt1Loeschung {
+    pub lfd_nr: String,
+    pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+impl Abt1Loeschung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt2Veraenderung {
     pub lfd_nr: String,
     pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Abt2Veraenderung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt2Loeschung {
     pub lfd_nr: String,
     pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+impl Abt2Loeschung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
 }
 
 pub fn analysiere_abt2(
@@ -2163,6 +2291,8 @@ pub fn analysiere_abt2(
             Some(Abt2Veraenderung {
                 lfd_nr,
                 text: text.text.trim().to_string(),
+                automatisch_geroetet: false,
+                manuell_geroetet: None,
             })
         })
         .collect::<Vec<_>>()
@@ -2219,16 +2349,24 @@ impl Abt3Eintrag {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Veraenderung {
     pub lfd_nr: String,
     pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Loeschung {
     pub lfd_nr: String,
     pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
 }
 
 pub fn analysiere_abt3(

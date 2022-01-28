@@ -5,6 +5,12 @@ use crate::{
         Nebenbeteiligter,
         BvZuschreibung,
         BvAbschreibung,
+        Abt1Veraenderung,
+        Abt1Loeschung,
+        Abt2Veraenderung,
+        Abt2Loeschung,
+        Abt3Veraenderung,
+        Abt3Loeschung,
     },
 };
 
@@ -743,21 +749,40 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                 <div style='display:flex;flex-grow:1;flex-direction:row;padding:0px;'>
                     <div style='display:inline-block;width:50%;overflow:scroll;max-height:557px;'>
                         <div id='__application-bestandsverzeichnis' style='margin:10px;'>{bestandsverzeichnis}</div>
-                        <div id='__application-bestandsverzeichnis-aenderungen' style='margin:10px;'>{bestandsverzeichnis_zuschreibungen}</div>
+                        <div id='__application-bestandsverzeichnis-veraenderungen' style='margin:10px;'>{bestandsverzeichnis_zuschreibungen}</div>
                         <div id='__application-bestandsverzeichnis-loeschungen' style='margin:10px;'>{bestandsverzeichnis_abschreibungen}</div>
+                        <div id='__application-abteilung-1' style='margin:10px;'>{abt_1}</div>
+                        <div id='__application-abteilung-1-veraenderungen' style='margin:10px;'>{abt_1_zuschreibungen}</div>
+                        <div id='__application-abteilung-1-loeschungen' style='margin:10px;'>{abt_1_abschreibungen}</div>
                         <div id='__application-abteilung-2' style='margin:10px;'>{abt_2}</div>
+                        <div id='__application-abteilung-2-veraenderungen' style='margin:10px;'>{abt_2_zuschreibungen}</div>
+                        <div id='__application-abteilung-2-loeschungen' style='margin:10px;'>{abt_2_abschreibungen}</div>
                         <div id='__application-abteilung-3' style='margin:10px;'>{abt_3}</div>
+                        <div id='__application-abteilung-3-veraenderungen' style='margin:10px;'>{abt_3_zuschreibungen}</div>
+                        <div id='__application-abteilung-3-loeschungen' style='margin:10px;'>{abt_3_abschreibungen}</div>
                     </div>
                     <div id='__application-analyse-grundbuch' style='display:inline-block;width:50%;overflow:scroll;max-height:557px;'>
                         {analyse}
                     </div>
                 </div>
             ",
+            
             bestandsverzeichnis = render_bestandsverzeichnis(open_file),
             bestandsverzeichnis_zuschreibungen = render_bestandsverzeichnis_zuschreibungen(open_file),
             bestandsverzeichnis_abschreibungen = render_bestandsverzeichnis_abschreibungen(open_file),
+            
+            abt_1 = render_abt_1(open_file),
+            abt_1_zuschreibungen = render_abt_1_veraenderungen(open_file),
+            abt_1_abschreibungen = render_abt_1_loeschungen(open_file),
+            
             abt_2 = render_abt_2(open_file),
+            abt_2_zuschreibungen = render_abt_2_veraenderungen(open_file),
+            abt_2_abschreibungen = render_abt_2_loeschungen(open_file),
+            
             abt_3 = render_abt_3(open_file),
+            abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
+            abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
+            
             analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration),
         ))
     }
@@ -1113,6 +1138,173 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
 
 }
 
+pub fn render_abt_1(open_file: &PdfFile) -> String {
+    use crate::digitalisiere::Abt1Eintrag;
+    
+    let mut abt1_eintraege = open_file.analysiert.abt1.eintraege.clone();
+    if abt1_eintraege.is_empty() {
+        abt1_eintraege = vec![Abt1Eintrag::new(1)];
+    }
+    
+    let abt1 = abt1_eintraege.iter().enumerate().map(|(zeile_nr, abt1)| {
+    
+        let bv_geroetet = if abt1.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
+        format!("
+        <div class='__application-abt1-eintrag' style='display:flex;margin-top:5px;'>
+        
+            <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
+                id='abt1_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:lfd-nr\", event)'
+                oninput='editText(\"abt1:{zeile_nr}:lfd-nr\", event)'
+            />
+            
+            <textarea rows='3' cols='16' style='margin-bottom:2px;{bv_geroetet}'
+                id='abt1_{zeile_nr}_eigentuemer'
+                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:eigentuemer\", event)'
+                oninput='editText(\"abt1:{zeile_nr}:eigentuemer\", event)'
+            >{eigentuemer}</textarea>
+            
+            <input type='text' style='margin-left:10px;width: 60px;{bv_geroetet}' value='{bv_nr}' 
+                id='abt1_{zeile_nr}_bv-nr'
+                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:bv-nr\", event)'
+                oninput='editText(\"abt1:{zeile_nr}:bv-nr\", event)'
+            />
+            
+            <textarea rows='3' cols='25' style='margin-bottom:2px;{bv_geroetet}'
+                id='abt1_{zeile_nr}_grundlage-der-eintragung'
+                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:grundlage-der-eintragung\", event)'
+                oninput='editText(\"abt1:{zeile_nr}:grundlage-der-eintragung\", event)'
+            >{grundlage_der_eintragung}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt1:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+            
+        </div>", 
+            bv_geroetet = bv_geroetet,
+            zeile_nr = zeile_nr,
+            lfd_nr = abt1.lfd_nr,
+            eigentuemer = abt1.eigentuemer,
+            bv_nr = abt1.bv_nr,
+            grundlage_der_eintragung = abt1.grundlage_der_eintragung,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+           <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1</h4>
+          
+          <div class='__application-table-header'>
+            <p style='width: 30px;'>Nr.</p>
+            <p style='width: 160px;'>Eigentümer</p>
+            <p style='width: 60px;'>BV-Nr.</p>
+            <p style='width: 160px;'>Grundlage d. Eintragung</p>
+          </div>
+          
+          {abt1}", abt1 = abt1))
+}
+
+pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
+
+    let mut abt1_veraenderungen = open_file.analysiert.abt1.veraenderungen.clone();
+    if abt1_veraenderungen.is_empty() {
+        abt1_veraenderungen = vec![Abt1Veraenderung::default()];
+    }
+    
+    let abt1_veraenderungen = abt1_veraenderungen.iter().enumerate().map(|(zeile_nr, abt1_a)| {
+        format!("
+        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+            
+            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+                id='abt1-veraenderung_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt1-veraenderung:{zeile_nr}:lfd-nr\", event)' 
+                oninput='editText(\"abt1-veraenderung:{zeile_nr}:lfd-nr\", event)'
+            />
+            
+            <textarea rows='5' cols='45' 
+                id='abt1-veraenderung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt1-veraenderung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt1-veraenderung:{zeile_nr}:text\", event)'
+            >{text}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt1-veraenderung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1-veraenderung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1-veraenderung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+        </div>", 
+            zeile_nr = zeile_nr,
+            lfd_nr = abt1_a.lfd_nr,
+            text = abt1_a.text,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+        <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Veränderungen</h4>
+        
+        <div class='__application-table-header'>
+            <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 160px;'>Text</p>
+        </div>
+        
+        {abt1_veraenderungen}
+    ", abt1_veraenderungen = abt1_veraenderungen))
+}
+
+pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
+
+    let mut abt1_loeschungen = open_file.analysiert.abt1.loeschungen.clone();
+    if abt1_loeschungen.is_empty() {
+        abt1_loeschungen = vec![Abt1Loeschung::default()];
+    }
+
+    let abt1_loeschungen = abt1_loeschungen.iter().enumerate().map(|(zeile_nr, abt1_l)| {
+        format!("
+        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+                id='abt1-loeschung_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt1-loeschung:{zeile_nr}:lfd-nr\", event)' 
+                oninput='editText(\"abt1-loeschung:{zeile_nr}:lfd-nr\", event)'
+            />
+            <textarea rows='5' cols='45' 
+                id='abt1-loeschung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt1-loeschung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt1-loeschung:{zeile_nr}:text\", event)'
+            >{text}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt1-loeschung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1-loeschung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1-loeschung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+        </div>", 
+            zeile_nr = zeile_nr,
+            lfd_nr = abt1_l.lfd_nr,
+            text = abt1_l.text,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+        <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Löschungen</h4>
+        
+        <div class='__application-table-header'>
+            <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 160px;'>Text</p>
+        </div>
+        
+        {abt1_loeschungen}
+    ", abt1_loeschungen = abt1_loeschungen))
+}
+
 pub fn render_abt_2(open_file: &PdfFile) -> String {
     use crate::digitalisiere::Abt2Eintrag;
     
@@ -1171,6 +1363,100 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
           </div>
           
           {abt2}", abt2 = abt2))
+}
+
+pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
+
+    let mut abt2_veraenderungen = open_file.analysiert.abt2.veraenderungen.clone();
+    if abt2_veraenderungen.is_empty() {
+        abt2_veraenderungen = vec![Abt2Veraenderung::default()];
+    }
+    
+    let abt2_veraenderungen = abt2_veraenderungen.iter().enumerate().map(|(zeile_nr, abt2_a)| {
+        format!("
+        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+            
+            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+                id='abt2-veraenderung_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt2-veraenderung:{zeile_nr}:lfd-nr\", event)' 
+                oninput='editText(\"abt2-veraenderung:{zeile_nr}:lfd-nr\", event)'
+            />
+            
+            <textarea rows='5' cols='45' 
+                id='abt2-veraenderung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt2-veraenderung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt2-veraenderung:{zeile_nr}:text\", event)'
+            >{text}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt2-veraenderung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt2-veraenderung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt2-veraenderung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+        </div>", 
+            zeile_nr = zeile_nr,
+            lfd_nr = abt2_a.lfd_nr,
+            text = abt2_a.text,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+        <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2 - Veränderungen</h4>
+        
+        <div class='__application-table-header'>
+            <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 160px;'>Text</p>
+        </div>
+        
+        {abt2_veraenderungen}
+    ", abt2_veraenderungen = abt2_veraenderungen))
+}
+
+pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
+
+    let mut abt2_loeschungen = open_file.analysiert.abt2.loeschungen.clone();
+    if abt2_loeschungen.is_empty() {
+        abt2_loeschungen = vec![Abt2Loeschung::default()];
+    }
+
+    let abt2_loeschungen = abt2_loeschungen.iter().enumerate().map(|(zeile_nr, abt2_l)| {
+        format!("
+        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+                id='abt2-loeschung_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt2-loeschung:{zeile_nr}:lfd-nr\", event)' 
+                oninput='editText(\"abt2-loeschung:{zeile_nr}:lfd-nr\", event)'
+            />
+            <textarea rows='5' cols='45' 
+                id='abt2-loeschung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt2-loeschung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt2-loeschung:{zeile_nr}:text\", event)'
+            >{text}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt2-loeschung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt2-loeschung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt2-loeschung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+        </div>", 
+            zeile_nr = zeile_nr,
+            lfd_nr = abt2_l.lfd_nr,
+            text = abt2_l.text,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+        <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2 - Löschungen</h4>
+        
+        <div class='__application-table-header'>
+            <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 160px;'>Text</p>
+        </div>
+        
+        {abt2_loeschungen}
+    ", abt2_loeschungen = abt2_loeschungen))
 }
 
 pub fn render_abt_3(open_file: &PdfFile) -> String {
@@ -1238,6 +1524,100 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
           </div>
           
           {abt3}", abt3 = abt3))
+}
+
+pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
+
+    let mut abt3_veraenderungen = open_file.analysiert.abt3.veraenderungen.clone();
+    if abt3_veraenderungen.is_empty() {
+        abt3_veraenderungen = vec![Abt3Veraenderung::default()];
+    }
+    
+    let abt3_veraenderungen = abt3_veraenderungen.iter().enumerate().map(|(zeile_nr, abt3_a)| {
+        format!("
+        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+            
+            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+                id='abt3-veraenderung_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:lfd-nr\", event)' 
+                oninput='editText(\"abt3-veraenderung:{zeile_nr}:lfd-nr\", event)'
+            />
+            
+            <textarea rows='5' cols='45' 
+                id='abt3-veraenderung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt3-veraenderung:{zeile_nr}:text\", event)'
+            >{text}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt3-veraenderung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt3-veraenderung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt3-veraenderung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+        </div>", 
+            zeile_nr = zeile_nr,
+            lfd_nr = abt3_a.lfd_nr,
+            text = abt3_a.text,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+        <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 3 - Veränderungen</h4>
+        
+        <div class='__application-table-header'>
+            <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 160px;'>Text</p>
+        </div>
+        
+        {abt3_veraenderungen}
+    ", abt3_veraenderungen = abt3_veraenderungen))
+}
+
+pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
+
+    let mut abt3_loeschungen = open_file.analysiert.abt3.loeschungen.clone();
+    if abt3_loeschungen.is_empty() {
+        abt3_loeschungen = vec![Abt3Loeschung::default()];
+    }
+
+    let abt3_loeschungen = abt3_loeschungen.iter().enumerate().map(|(zeile_nr, abt3_l)| {
+        format!("
+        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+                id='abt3-loeschung_{zeile_nr}_lfd-nr'
+                onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:lfd-nr\", event)' 
+                oninput='editText(\"abt3-loeschung:{zeile_nr}:lfd-nr\", event)'
+            />
+            <textarea rows='5' cols='45' 
+                id='abt3-loeschung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt3-loeschung:{zeile_nr}:text\", event)'
+            >{text}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt3-loeschung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt3-loeschung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt3-loeschung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+            </div>
+        </div>", 
+            zeile_nr = zeile_nr,
+            lfd_nr = abt3_l.lfd_nr,
+            text = abt3_l.text,
+        )
+    }).collect::<Vec<String>>().join("\r\n");
+    
+    normalize_for_js(format!("
+        <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 3 - Löschungen</h4>
+        
+        <div class='__application-table-header'>
+            <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 160px;'>Text</p>
+        </div>
+        
+        {abt3_loeschungen}
+    ", abt3_loeschungen = abt3_loeschungen))
 }
 
 pub fn render_pdf_image(rpc_data: &RpcData) -> String {
