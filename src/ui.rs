@@ -631,27 +631,67 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 pub fn render_file_list(rpc_data: &RpcData) -> String {
     const CLOSE_PNG: &[u8] = include_bytes!("../src/img/icons8-close-48.png");
     let close_str = format!("data:image/png;base64,{}", base64::encode(&CLOSE_PNG));
+    
+    const WARNING_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");
+    let warning_check_str = format!("data:image/png;base64,{}", base64::encode(&WARNING_CHECK_PNG));
+    
+    const HALF_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-in-progress-48.png");
+    let half_check_str = format!("data:image/png;base64,{}", base64::encode(&HALF_CHECK_PNG));
+    
+    const FULL_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-ok-48.png");
+    let full_check_str = format!("data:image/png;base64,{}", base64::encode(&FULL_CHECK_PNG));
 
-    normalize_for_js(rpc_data.loaded_files.keys().map(|filename| {
+    normalize_for_js(rpc_data.loaded_files.keys().filter_map(|filename| {
+        
         let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename);
         
-        format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
+        let datei = rpc_data.loaded_files.get(filename)?;
+        
+        let datei_hat_keine_fehler = datei.hat_keine_fehler(&rpc_data.loaded_nb, &rpc_data.konfiguration);
+        let datei_hat_alle_onr_zugewiesen = datei.alle_ordnungsnummern_zugewiesen(&rpc_data.loaded_nb, &rpc_data.konfiguration);
+        
+        Some(format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
+            {check}
             <p style='flex-grow:0;user-select:none;' data-fileName='{filename}' >{filename}</p>
             <div style='display:flex;flex-grow:1;' data-fileName='{filename}' ></div>
             {close_btn}
             </div>", 
+            check = if datei_hat_keine_fehler && datei_hat_alle_onr_zugewiesen {
+                format!(
+                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    filename = filename, 
+                    check = full_check_str
+                )
+            } else if datei_hat_keine_fehler {
+                format!(
+                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    filename = filename, 
+                    check = half_check_str
+                ) 
+            } else if datei.ist_geladen() { 
+                format!(
+                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    filename = filename, 
+                    check = warning_check_str
+                ) 
+            } else {
+                format!(
+                    "<div style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'></div>", 
+                    filename = filename, 
+                )
+            },
             file_active = if datei_ausgewaehlt { "active" } else { "" },
             filename = filename, 
             close_btn = if datei_ausgewaehlt { 
                 format!(
-                    "<img style='width: 16px;height: 16px;padding: 2px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' onmouseup='closeFile(event);'src='{close_str}'></img>", 
+                    "<img style='width: 16px;height: 16px;padding: 2px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' onmouseup='closeFile(event);' src='{close_str}'></img>", 
                     filename = filename, 
                     close_str = close_str
                 ) 
             } else { 
                 String::new() 
             },
-        )
+        ))
     }).collect::<Vec<_>>().join("\r\n"))
 }
 
@@ -1655,8 +1695,36 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         Ok(o) => o,
         Err(_) => return String::new(),
     };
-    
-    normalize_for_js(format!("<div style='padding:20px;'><img src='data:image/png;base64,{}'/></div>", base64::encode(pdf_to_ppm_bytes)))
+
+    normalize_for_js(format!("
+        <div style='padding:20px;'>
+        
+            <div data-fileName='{}', data-pageNumber='{}' style='position:relative;'>
+        
+                <img src='data:image/png;base64,{}' 
+                onmousedown='onOcrSelectionDragStart(event);'
+                onmousemove='onOcrSelectionDrag(event);' 
+                onmouseup='onOcrSelectionDragStop(event);' 
+                onmouseout='onOcrSelectionDragStop(event);' />
+                
+                <div id='__application_ocr_selection' style='
+                    position:absolute;
+                    width:1px;
+                    height:1px;
+                    opacity: 0.5;
+                    background:transparent;
+                    top: 0px;
+                    transform-origin: top left;
+                    left: 0px;
+                    transform: translate(0px, 0px) scale(1.0, 1.0);
+                '></div>
+            
+            </div>
+        </div>", 
+            open_file.0,
+            open_file.1,
+            base64::encode(pdf_to_ppm_bytes),
+        ))
 }
 
 pub fn normalize_for_js(s: String) -> String {

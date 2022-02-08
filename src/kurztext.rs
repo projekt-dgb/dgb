@@ -776,7 +776,7 @@ pub enum RechteArt {
     WohnungsOderMitbenutzungsrecht,                                       //     Wohnungs- oder Mitbenutzungsrecht
     Wohnungsbelegungsrecht,                                               //     Wohnungsbelegungsrecht
     WohnungsrechtNach1093Bgb,                                             //     Wohnungsrecht nach 81093 BGB
-    Zaunerrichtungsverbot,                                                //     Zaunemichtungsverbot
+    Zaunerrichtungsverbot,                                                //     Zaunerrichtungsverbot
     Zaunrecht,                                                            //     Zaunrecht
     Zustimmungsvorbehalt,                                                 //     Zustimmungsvorbehalt
     Zwangsversteigerungsvermerk,                                          //     Zwangsversteigerungsvermerk

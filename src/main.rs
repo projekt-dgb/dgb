@@ -107,6 +107,7 @@ impl Default for RpcData {
             loaded_nb: Vec::new(),
             loaded_nb_paths: Vec::new(),
             konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
+                kein_autojoin_ocr_zeilen: false,
                 regex: BTreeMap::new(),
                 abkuerzungen_script: Vec::new(),
                 text_saubern_script: Vec::new(),
@@ -132,9 +133,25 @@ pub struct PdfFile {
     analysiert: Grundbuch,
     pdftotext_layout: PdfToTextLayout,
     #[serde(default)]
+    anpassungen_seite: BTreeMap<usize, AnpassungSeite>,
+    #[serde(default)]
     klassifikation_neu: BTreeMap<usize, SeitenTyp>,
     #[serde(default)]
     nebenbeteiligte_dateipfade: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AnpassungSeite {
+    pub spalten: BTreeMap<String, Rect>,    
+    pub zeilen: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Rect {
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
 }
 
 impl PdfFile {
@@ -148,9 +165,31 @@ impl PdfFile {
     }
     
     pub fn ist_geladen(&self) -> bool {
-        self.seitenzahlen.iter().all(|sz| self.geladen.contains_key(sz))
+        self.seitenzahlen
+        .iter()
+        .all(|sz| self.geladen.contains_key(sz))
     }
     
+    pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
+        let analysiert = crate::analysiere::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
+        
+        self.ist_geladen()
+        && analysiert.abt2.iter().all(|e| e.fehler.is_empty())
+        && analysiert.abt3.iter().all(|e| e.fehler.is_empty())
+    }
+    
+    pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
+        let analysiert = crate::analysiere::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
+
+        let any_abt2 = analysiert.abt2.iter()
+            .any(|e| e.warnungen.iter().any(|w| w == "Konnte keine Ordnungsnummer finden"));
+        
+        let any_abt3 = analysiert.abt3.iter()
+            .any(|e| e.warnungen.iter().any(|w| w == "Konnte keine Ordnungsnummer finden"));
+
+        self.ist_geladen() && !any_abt2 && !any_abt3
+    }
+
     pub fn get_nebenbeteiligte(&self, konfiguration: &Konfiguration) -> Vec<Nebenbeteiligter> {
         let mut v = Vec::new();
         
@@ -184,6 +223,8 @@ impl PdfFile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Konfiguration {
+    #[serde(default)]
+    pub kein_autojoin_ocr_zeilen: bool,
     pub regex: BTreeMap<String, String>,
     #[serde(default)]
     pub abkuerzungen_script: Vec<String>,
@@ -327,6 +368,10 @@ pub enum Cmd {
     // Check whether a "{file_name}".json with analyzed texts exists
     #[serde(rename = "check_for_pdf_loaded")]
     CheckForPdfLoaded { file_path: String, file_name: String },
+    // Check whether a "{file_name}".json with analyzed texts exists
+    #[serde(rename = "check_for_image_loaded")]
+    CheckForImageLoaded { file_path: String, file_name: String },
+
     #[serde(rename = "edit_text")]
     EditText { path: String, new_value: String },
     #[serde(rename = "eintrag_neu")]
@@ -340,6 +385,20 @@ pub enum Cmd {
     #[serde(rename = "close_pop_over")]
     ClosePopOver,
 
+    #[serde(rename = "reset_ocr_selection")]
+    ResetOcrSelection,
+    #[serde(rename = "select_ocr")]
+    SelectOcr {
+        file_name: String,
+        page: usize,
+        min_x: f32,
+        min_y: f32,
+        max_x: f32,
+        max_y: f32,
+        page_width: f32,
+        page_height: f32,
+    },
+  
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
     SetActiveRibbonTab { new_tab: usize },
@@ -439,6 +498,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 		            geladen: BTreeMap::new(),
 		            analysiert: Grundbuch::default(),
 		            nebenbeteiligte_dateipfade: Vec::new(),
+		            anpassungen_seite: BTreeMap::new(),
 		        };
 		                        
                 if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
@@ -481,6 +541,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             digitalisiere_dateien(pdf_zu_laden);
+        },
+        Cmd::CheckForImageLoaded { file_path, file_name } => {
+            // TODO
+            webview.eval(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
         },
         Cmd::CheckForPdfLoaded { file_path, file_name } => {
                     
@@ -580,9 +644,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         BvEintrag::new(row + 1)
                     );
                     bv_eintrag.gemarkung = if new_value.trim().is_empty() { 
-                        Some(new_value.clone()) 
-                    } else { 
                         None 
+                    } else { 
+                        Some(new_value.clone()) 
                     };
                 },
                 ("bv", "flur") => {
@@ -852,9 +916,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 _ => { return; }
             }
-            
-            println!("ok!");
-            
+                        
             crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
             
             let default_parent = Path::new("/");
@@ -1493,6 +1555,132 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::Redo => {
             println!("redo");
         },
+        Cmd::ResetOcrSelection => {
+            webview.eval(&format!("resetOcrSelection()"));
+        },
+        Cmd::SelectOcr {
+            file_name,
+            page,
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+            page_width,
+            page_height,
+        } => {
+            
+            use std::env::temp_dir;
+            use crate::digitalisiere::Fehler;
+            use std::fs::File;
+            use crate::digitalisiere::formatiere_seitenzahl;
+            use std::process::Command;
+            use image::ImageOutputFormat;
+            use crate::digitalisiere::zeilen_aus_tesseract_hocr;
+            
+            let file = match data.loaded_files.get_mut(file_name.as_str()) {
+                Some(s) => s,
+                None => {
+                    webview.eval(&format!("resetOcrSelection()"));
+                    return;
+                }
+            };
+            
+            let temp_ordner = std::env::temp_dir()
+            .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
+            
+            let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
+
+            let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(*page as u32, max_seitenzahl)));
+            
+            if !Path::new(&pdftoppm_output_path).exists() {
+                if let Ok(o) = std::fs::read(&file.datei) {
+                    let _ = crate::digitalisiere::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], &file.titelblatt);
+                }
+            }
+            
+            let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
+                Ok(o) => o,
+                Err(_) => {
+                    webview.eval(&format!("resetOcrSelection()"));
+                    return;
+                },
+            };
+    
+            let (im_width, im_height) = match image::image_dimensions(&pdftoppm_output_path)
+            .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e)){
+                Ok(o) => o,
+                Err(_) => {
+                    webview.eval(&format!("resetOcrSelection()"));
+                    return;
+                }
+            };
+
+            let im_width = im_width as f32;
+            let im_height = im_height as f32;
+        
+            let x = min_x.min(*max_x) / page_width * im_width as f32;
+            let y = min_y.min(*max_y) / page_height * im_height as f32;
+            let width = (max_x - min_x).abs() / page_width * im_width as f32;
+            let height = (max_y - min_y).abs() / page_width * im_width as f32;
+            
+            let x = x.round().max(0.0) as u32;
+            let y = y.round().max(0.0) as u32;
+            let width = width.round().max(0.0) as u32;
+            let height = height.round().max(0.0) as u32;
+            
+            let mut im = match image::open(&pdftoppm_output_path.clone())
+            .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e)) {
+                Ok(o) => o,
+                Err(_) => {
+                    webview.eval(&format!("resetOcrSelection()"));
+                    return;
+                },
+            };
+
+            let cropped = im.crop_imm(x, y, width, height);
+            
+            let cropped_output_path = temp_ordner.clone().join(format!("crop-{}-{}-{}.png", formatiere_seitenzahl(*page as u32, max_seitenzahl), width, height));
+            if let Ok(mut output_file) = File::create(cropped_output_path.clone()) {
+                let _ = cropped.write_to(&mut output_file, ImageOutputFormat::Png);
+            }
+                        
+            let tesseract_output_path = temp_ordner.clone().join(format!("ocr-selection-{:02}-{:02}-{:02}-{:02}-{:02}.txt.hocr", page, x, y, width, height));
+        
+            let _ = Command::new("tesseract")
+            .arg(&format!("{}", cropped_output_path.display()))
+            .arg(&format!("{}", temp_ordner.clone().join(format!("ocr-selection-{:02}-{:02}-{:02}-{:02}-{:02}.txt", page, x, y, width, height)).display()))     
+            .arg("--dpi")
+            .arg("600")
+            .arg("--psm")
+            .arg("6")
+            .arg("-l")
+            .arg("deu")
+            .arg("-c")
+            .arg("tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZüÜäÄöÖß,.-/%§()€0123456789 ")
+            .arg("-c")
+            .arg("tessedit_create_hocr=1")
+            .arg("-c")
+            .arg("debug_file=/dev/null") // TODO: funktioniert nur auf Linux!
+            .status();
+            
+            let zeilen = zeilen_aus_tesseract_hocr(tesseract_output_path.display().to_string()).unwrap_or_default();
+            let text = zeilen.join("\r\n");
+            let text = if data.konfiguration.kein_autojoin_ocr_zeilen {
+                text
+            } else {
+                let result: Result<String, String> = Python::with_gil(|py| {
+                    let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&text, &data.konfiguration)?;
+                    Ok(text_sauber)
+                });
+                match result {
+                    Ok(o) => o,
+                    Err(e) => e,
+                }
+            };
+    
+            webview.eval(&format!("copyTextToClipboard(`{}`)", text));
+            webview.eval(&format!("resetOcrSelection()"));
+        },
         Cmd::ImportNebenbeteiligte => {
             
             if data.loaded_files.is_empty() {
@@ -1881,7 +2069,7 @@ fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
             }
         };
                 
-        let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, *sz as u32, max_sz, seitentyp, &pdf.pdftotext_layout) { 
+        let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, *sz as u32, max_sz, seitentyp, &pdf.pdftotext_layout, pdf.anpassungen_seite.get(sz)) { 
             Ok(o) => o, 
             Err(e) => {
                 continue;
@@ -1924,7 +2112,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
     
     for pdf in pdfs {
     
-        thread::spawn(move || {
+        rayon::spawn(move || {
         
             let mut pdf = pdf;
             
@@ -1976,7 +2164,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         }
                     }
                 };
-                let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, sz, max_sz, seitentyp, &pdftotext_layout) { Ok(o) => o, Err(_) => continue, };
+                let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, sz, max_sz, seitentyp, &pdftotext_layout, pdf.anpassungen_seite.get(&(sz as usize))) { Ok(o) => o, Err(_) => continue, };
                 if digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
                 let textbloecke = match digitalisiere::textbloecke_aus_spalten(&pdf.titelblatt, sz, &spalten, &pdftotext_layout) { Ok(o) => o, Err(_) => continue, };
                 
@@ -2339,6 +2527,22 @@ fn main() {
 
     use std::env;
     
+    let num = num_cpus::get();
+    let max_threads = (num as f32 / 2.0).ceil().max(2.0) as usize;
+    let max_threads = if num > 1 {
+         max_threads.min(num.saturating_sub(1)).saturating_sub(1)
+    } else {
+        1
+    };
+    
+    let _ = env::set_var("RAYON_NUM_THREADS", format!("{}", max_threads));
+
+    println!("setting RAYON_NUM_THREADS = {}", max_threads);
+    
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(max_threads)
+        .build_global();
+
     let original_value = env::var(GTK_OVERLAY_SCROLLING);
     env::set_var(GTK_OVERLAY_SCROLLING, "0"); // disable overlaid scrollbars
     

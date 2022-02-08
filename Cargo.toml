@@ -14,7 +14,8 @@ urlencoding = "1.0.0"
 serde = "1" 
 serde_derive = "1" 
 itertools = "0.7.7"
-lopdf = "0.26.0"
+lopdf = { version = "0.26.0", features = ["nom_parser"] }
+flate2 = "*"
 serde_json = "1"
 base64 = "0.13"
 regex = "1"
@@ -26,6 +27,7 @@ tinyfiledialogs = "3.8.3"
 chrono = { version = "0.4.19", features = ["serde"] }
 toml = "0.5"
 dirs = "4.0"
+num_cpus = "1.0"
 
 [dependencies.pyo3]
 version = "0.15.1"
@@ -33,7 +35,7 @@ features = ["auto-initialize"]
 
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
-depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2)"
+depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6)"
 section = "utility"
 priority = "optional"
 assets = [

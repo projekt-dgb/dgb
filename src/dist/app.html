@@ -1457,6 +1457,7 @@ body, html {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  height: 100%;
 }
 
 body, body > * {
@@ -1587,16 +1588,19 @@ input[type="file"] {
 #__application-main {
 	display: flex;
 	flex-grow: 1;
+	height:100%;
 }
 
 #__application-main #__application-file-list {
   max-width: 200px;
   min-width: 200px;
-  display: flex;
+  width: 200px;
+  display: block;
   background: #efefef;
+  overflow-y: auto;
   box-shadow: 0px 0px 3px black;
-  flex-grow: 1;
-  flex-direction: column;
+  height: 100%;
+  max-height:1000px;
 }
 
 #__application-main #__application-file-list > div {
@@ -1822,7 +1826,20 @@ let rpc = {
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
-  
+  reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
+  select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
+      cmd : 'select_ocr', 
+      file_name: file_name, 
+      page: page, 
+      min_x: min_x, 
+      min_y: min_y, 
+      max_x: max_x, 
+      max_y: max_y,
+      page_width: page_width,
+      page_height: page_height
+    });
+  },
+
   check_for_pdf_loaded: function(arg, arg2) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2 }); },
   edit_text: function(arg, arg2) { rpc.invoke({ cmd : 'edit_text', path: arg, new_value: arg2 }); },
   eintrag_neu: function(arg) { rpc.invoke({ cmd : 'eintrag_neu', path: arg }); },
@@ -1896,6 +1913,142 @@ function stopCheckingForPageLoaded(filename) {
     }
 }
 
+let images_to_load = {};
+
+setInterval(function(){
+    for (const [key, value] of Object.entries(images_to_load)) {
+        rpc.check_for_image_loaded(key, value);
+    }
+}, 1000);
+
+function startCheckingForImageLoaded(filepath, filename) {
+    images_to_load[filepath] = filename;
+}
+
+function stopCheckingForImageLoaded(filename) {
+    if (images_to_load.hasOwnProperty(filename)) {
+        delete images_to_load[filename];
+    }
+}
+
+let ocr_selection_rect = null;
+
+function onOcrSelectionDragStart(event) {
+        
+    let selection_rect = document.getElementById("__application_ocr_selection");
+    if (!selection_rect)
+        return;
+        
+    let parent = selection_rect.parentElement;
+    if (!parent)
+        return;
+    
+    let parent_width = parent.clientWidth;
+    let parent_height = parent.clientHeight;
+
+    let bounds = parent.getBoundingClientRect();
+    let x = event.clientX - bounds.left;
+    let y = event.clientY - bounds.top;
+    
+    var file = parent.getAttribute("data-fileName");
+    if (!file) {
+        return;
+    }
+    
+    var page = parseInt(parent.getAttribute("data-pageNumber"));
+    if (!page) {
+        return;
+    }
+        
+    if (!ocr_selection_rect) {
+        ocr_selection_rect = { 
+            page_width: parent_width, 
+            page_height: parent_height,
+            min_x: x,
+            min_y: y,
+            max_x: x,
+            max_y: y,
+            file: file,
+            page: page,        
+        };
+    }
+}
+
+function onOcrSelectionDrag(event) {
+        
+    let selection_rect = document.getElementById("__application_ocr_selection");
+    if (!selection_rect)
+        return;
+        
+    let parent = selection_rect.parentElement;
+    if (!parent)
+        return;
+    
+    if (!ocr_selection_rect) {
+        return;
+    }
+
+    let parent_width = parent.clientWidth;
+    let parent_height = parent.clientHeight;
+
+    let bounds = parent.getBoundingClientRect();
+    let x = event.clientX - bounds.left;
+    let y = event.clientY - bounds.top;
+    
+    var file = parent.getAttribute("data-fileName");
+    if (!file) {
+        return;
+    }
+    
+    var page = parseInt(parent.getAttribute("data-pageNumber"));
+    if (!page) {
+        return;
+    }
+    
+    if (ocr_selection_rect.file != file || ocr_selection_rect.page != page) {
+        return;
+    }
+    
+    ocr_selection_rect.max_x = x;
+    ocr_selection_rect.max_y = y;
+        
+    let selection_width = ocr_selection_rect.max_x - ocr_selection_rect.min_x;
+    let selection_height = ocr_selection_rect.max_y - ocr_selection_rect.min_y;
+
+    selection_rect.style.background = "#BFEA93";
+    selection_rect.style.transform = "translate(" + ocr_selection_rect.min_x +  "px, " + ocr_selection_rect.min_y + "px)";
+    selection_rect.style.transform += "scale(" + selection_width + ", " + selection_height + ")";    
+}
+
+function onOcrSelectionDragStop(event) {
+            
+    if (!ocr_selection_rect)
+        return;
+    
+    rpc.select_ocr(
+        ocr_selection_rect.file,
+        ocr_selection_rect.page,
+        ocr_selection_rect.min_x,
+        ocr_selection_rect.min_y,
+        ocr_selection_rect.max_x,
+        ocr_selection_rect.max_y,
+        ocr_selection_rect.page_width,
+        ocr_selection_rect.page_height
+    );
+}
+
+function resetOcrSelection() {
+        
+    let selection_rect = document.getElementById("__application_ocr_selection");
+    if (!selection_rect)
+        return;
+    
+    selection_rect.style.background = "transparent";
+    selection_rect.style.transform = "translate(0px, 0px)";
+    selection_rect.style.transform += "scale(1.0, 1.0)";
+    ocr_selection_rect = null;
+}
+
 function eintragNeu(path) {
     rpc.eintrag_neu(path);        
 }
@@ -1926,7 +2079,7 @@ function editText(path, e) {
 }
 
 function displayError(error) {
-    console.error(error);
+    // console.error(error);
 }
 
 function logInfo(info) {
@@ -2449,14 +2602,44 @@ function closeFile(event, path) {
     rpc.close_file(path);
 }
 
+function fallbackCopyTextToClipboard(text) {
+  var textArea = document.createElement("textarea");
+  textArea.value = text;
+  
+  // Avoid scrolling to bottom
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.position = "fixed";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    var successful = document.execCommand('copy');
+    var msg = successful ? 'successful' : 'unsuccessful';
+  } catch (err) {
+  }
+
+  document.body.removeChild(textArea);
+}
+
+function copyTextToClipboard(text) {
+  if (!navigator.clipboard) {
+    fallbackCopyTextToClipboard(text);
+    return;
+  }
+  navigator.clipboard.writeText(text).then(function() {
+  }, function(err) {
+  });
+}
+
 // Init
 window.onload = function() { rpc.init(); };
 
-/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
 });
-*/
 </script>
     </head>
  

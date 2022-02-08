@@ -7,6 +7,7 @@ use lopdf::Error as LoPdfError;
 use image::ImageError;
 use serde_derive::{Serialize, Deserialize};
 use rayon::prelude::*;
+use crate::AnpassungSeite;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,6 +268,13 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
     fs::write(temp_pdf_pfad.clone(), pdf_bytes)
         .map_err(|e| Fehler::Io(format!("{}", temp_pdf_pfad.display()), e))?;
 
+    let pdf_clean = clean_pdf(pdf_bytes, titelblatt)?;
+    let temp_clean_pdf_pfad = temp_ordner.clone().join("temp-clean.pdf");
+        
+    let _ = fs::remove_file(temp_clean_pdf_pfad.clone());
+    fs::write(temp_clean_pdf_pfad.clone(), pdf_clean)
+        .map_err(|e| Fehler::Io(format!("{}", temp_clean_pdf_pfad.display()), e))?;
+
     seitenzahlen
     .par_iter()
     .for_each(|sz| {
@@ -289,6 +297,25 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
             .arg(&format!("{}", temp_ordner.clone().join(format!("page")).display()))     
             .status();
         }
+        
+        let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(*sz, max_sz)));
+
+        if !pdftoppm_output_path.exists() {
+            // pdftoppm -q -r 150 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
+            // writes result to /tmp/test-01.png
+            let _ = Command::new("pdftoppm")
+            .arg("-q")
+            .arg("-r")
+            .arg("600") // 600 DPI
+            .arg("-png")
+            .arg("-f")
+            .arg(&format!("{}", sz))
+            .arg("-l")
+            .arg(&format!("{}", sz))
+            .arg(&format!("{}", temp_clean_pdf_pfad.display()))     
+            .arg(&format!("{}", temp_ordner.clone().join(format!("page-clean")).display()))     
+            .status();
+        }
     });
     
     Ok(())
@@ -299,7 +326,7 @@ pub fn ocr_seite(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32) 
     let temp_ordner = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
     
-    let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl)));
+    let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl)));
     let tesseract_output_path = temp_ordner.clone().join(format!("tesseract-{:02}.txt", seitenzahl));
 
     if !tesseract_output_path.exists() {
@@ -374,7 +401,7 @@ pub fn klassifiziere_seitentyp(titelblatt: &Titelblatt, seitenzahl: u32, max_sz:
     let temp_ordner = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
     
-    let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", formatiere_seitenzahl(seitenzahl, max_sz)));
+    let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(seitenzahl, max_sz)));
     
     let (w, h) = image::image_dimensions(pdftoppm_output_path.clone())
         .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
@@ -473,12 +500,709 @@ pub fn klassifiziere_seitentyp(titelblatt: &Titelblatt, seitenzahl: u32, max_sz:
 
 #[derive(Debug, Copy, Clone)]
 pub struct Column {
+    pub id: &'static str,
     pub min_x: f32,
     pub max_x: f32,
     pub min_y: f32,
     pub max_y: f32,
     pub is_number_column: bool,
     pub line_break_after_px: f32,
+}
+
+impl SeitenTyp {
+    pub fn get_columns(&self, anpassungen_seite: Option<&AnpassungSeite>) -> Vec<Column> {
+        match self {
+            
+            SeitenTyp::BestandsverzeichnisHorz => vec![
+            
+                // "lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_horz-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lfd_nr")).map(|m| m.min_x).unwrap_or(60.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lfd_nr")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lfd_nr")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Bisherige lfd. Nr."
+                Column {
+                    id: "bv_horz-bisherige_lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr")).map(|m| m.min_x).unwrap_or(100.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr")).map(|m| m.max_x).unwrap_or(140.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Gemarkung
+                Column {
+                    id: "bv_horz-gemarkung",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-gemarkung")).map(|m| m.min_x).unwrap_or(150.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-gemarkung")).map(|m| m.max_x).unwrap_or(255.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-gemarkung")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-gemarkung")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Flur
+                Column {
+                    id: "bv_horz-flur",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flur")).map(|m| m.min_x).unwrap_or(265.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flur")).map(|m| m.max_x).unwrap_or(300.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flur")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flur")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Flurstück
+                Column {
+                    id: "bv_horz-flurstueck",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flurstueck")).map(|m| m.min_x).unwrap_or(305.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flurstueck")).map(|m| m.max_x).unwrap_or(370.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flurstueck")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-flurstueck")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+
+                // Wirtschaftsart und Lage
+                Column {
+                    id: "bv_horz-lage",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lage")).map(|m| m.min_x).unwrap_or(375.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lage")).map(|m| m.max_x).unwrap_or(670.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lage")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-lage")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 40.0, // 10.0,
+                },
+                
+                // Größe (ha)
+                Column {
+                    id: "bv_horz-groesse_ha",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_ha")).map(|m| m.min_x).unwrap_or(675.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_ha")).map(|m| m.max_x).unwrap_or(710.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_ha")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_ha")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Größe (a)
+                Column {
+                    id: "bv_horz-groesse_a",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_a")).map(|m| m.min_x).unwrap_or(715.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_a")).map(|m| m.max_x).unwrap_or(735.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_a")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_a")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Größe (m2)
+                Column {
+                    id: "bv_horz-groesse_m2",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_m2")).map(|m| m.min_x).unwrap_or(740.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_m2")).map(|m| m.max_x).unwrap_or(763.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_m2")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz-groesse_m2")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::BestandsverzeichnisVert => vec![
+                
+                // "lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_vert-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lfd_nr")).map(|m| m.min_x).unwrap_or(32.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lfd_nr")).map(|m| m.max_x).unwrap_or(68.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Bisherige lfd. Nr."
+                Column {
+                    id: "bv_vert-bisherige_lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr")).map(|m| m.min_x).unwrap_or(72.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr")).map(|m| m.max_x).unwrap_or(108.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Flur
+                Column {
+                    id: "bv_vert-flur",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flur")).map(|m| m.min_x).unwrap_or(115.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flur")).map(|m| m.max_x).unwrap_or(153.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flur")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flur")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Flurstück
+                Column {
+                    id: "bv_vert-flurstueck",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flurstueck")).map(|m| m.min_x).unwrap_or(157.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flurstueck")).map(|m| m.max_x).unwrap_or(219.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flurstueck")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-flurstueck")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+
+                // Wirtschaftsart und Lage
+                Column {
+                    id: "bv_vert-lage",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lage")).map(|m| m.min_x).unwrap_or(221.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lage")).map(|m| m.max_x).unwrap_or(500.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lage")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-lage")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Größe
+                Column {
+                    id: "bv_vert-groesse_m2",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.min_x).unwrap_or(508.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.max_x).unwrap_or(567.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen => vec![
+            
+                // "Zur lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_horz_zu_abschreibung-lfd_nr_zuschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.min_x).unwrap_or(57.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.min_y).unwrap_or(125.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.max_y).unwrap_or(560.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Bestand und Zuschreibungen"
+                Column {
+                    id: "bv_horz_zu_abschreibung-zuschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen")).map(|m| m.min_x).unwrap_or(105.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen")).map(|m| m.max_x).unwrap_or(420.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen")).map(|m| m.min_y).unwrap_or(125.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen")).map(|m| m.max_y).unwrap_or(560.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Zur lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_horz_zu_abschreibung-lfd_nr_abschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.min_x).unwrap_or(425.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.max_x).unwrap_or(470.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.min_y).unwrap_or(125.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.max_y).unwrap_or(560.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Abschreibungen"
+                Column {
+                    id: "bv_horz_zu_abschreibung-abschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen")).map(|m| m.min_x).unwrap_or(480.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen")).map(|m| m.max_x).unwrap_or(763.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen")).map(|m| m.min_y).unwrap_or(125.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen")).map(|m| m.max_y).unwrap_or(560.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => vec![
+            
+                // "Zur lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_vert_zu_abschreibung-lfd_nr_zuschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.min_x).unwrap_or(35.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.max_x).unwrap_or(72.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Bestand und Zuschreibungen"
+                Column {
+                    id: "bv_vert_zu_abschreibung-zuschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen")).map(|m| m.min_x).unwrap_or(78.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen")).map(|m| m.max_x).unwrap_or(330.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Zur lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_vert_zu_abschreibung-lfd_nr_abschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.min_x).unwrap_or(337.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.max_x).unwrap_or(375.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Abschreibungen"
+                Column {
+                    id: "bv_vert_zu_abschreibung-abschreibungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen")).map(|m| m.min_x).unwrap_or(382.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen")).map(|m| m.max_x).unwrap_or(520.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+
+            
+            SeitenTyp::Abt1Horz => vec![
+            
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt1_horz-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr")).map(|m| m.min_x).unwrap_or(55.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Eigentümer"
+                Column {
+                    id: "abt1_horz-eigentuemer",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-eigentuemer")).map(|m| m.min_x).unwrap_or(100.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-eigentuemer")).map(|m| m.max_x).unwrap_or(405.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-eigentuemer")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-eigentuemer")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr. der Grundstücke im BV"
+                Column {
+                    id: "abt1_horz-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(413.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(520.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Grundlage der Eintragung"
+                Column {
+                    id: "abt1_horz-grundlage_der_eintragung",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung")).map(|m| m.min_x).unwrap_or(525.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung")).map(|m| m.max_x).unwrap_or(762.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt1Vert => vec![
+                
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt1_vert-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr")).map(|m| m.min_x).unwrap_or(32.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr")).map(|m| m.max_x).unwrap_or(60.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Eigentümer"
+                Column {
+                    id: "abt1_vert-eigentuemer",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-eigentuemer")).map(|m| m.min_x).unwrap_or(65.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-eigentuemer")).map(|m| m.max_x).unwrap_or(290.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-eigentuemer")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-eigentuemer")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr. der Grundstücke im BV"
+                Column {
+                    id: "abt1_vert-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(298.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(337.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Grundlage der Eintragung"
+                Column {
+                    id: "abt1_vert-grundlage_der_eintragung",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung")).map(|m| m.min_x).unwrap_or(343.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung")).map(|m| m.max_x).unwrap_or(567.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            
+            SeitenTyp::Abt2Horz => vec![
+            
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt2_horz-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr")).map(|m| m.min_x).unwrap_or(55.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr. der Grundstücke im BV"
+                Column {
+                    id: "abt2_horz-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(103.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(192.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Lasten und Beschränkungen"
+                Column {
+                    id: "abt2_horz-lasten_und_beschraenkungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen")).map(|m| m.min_x).unwrap_or(200.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen")).map(|m| m.max_x).unwrap_or(765.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 25.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt2HorzVeraenderungen => vec![
+            
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt2_horz_veraenderungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr")).map(|m| m.min_x).unwrap_or(55.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Veränderungen"
+                Column {
+                    id: "abt2_horz_veraenderungen-veraenderungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen")).map(|m| m.min_x).unwrap_or(103.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen")).map(|m| m.max_x).unwrap_or(505.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr. der Spalte 2"
+                Column {
+                    id: "abt2_horz_veraenderungen-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(515.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(552.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Löschungen"
+                Column {
+                    id: "abt2_horz_veraenderungen-loeschungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen")).map(|m| m.min_x).unwrap_or(560.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen")).map(|m| m.max_x).unwrap_or(770.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt2Vert => vec![
+            
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt2_vert-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr")).map(|m| m.min_x).unwrap_or(32.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr")).map(|m| m.max_x).unwrap_or(60.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr der betroffenen Grundstücke"
+                Column {
+                    id: "abt2_vert-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(65.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(105.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Lasten und Beschränkungen"
+                Column {
+                    id: "abt2_vert-lasten_und_beschraenkungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen")).map(|m| m.min_x).unwrap_or(112.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen")).map(|m| m.max_x).unwrap_or(567.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt2VertVeraenderungen => vec![
+            
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt2_vert_veraenderungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr")).map(|m| m.min_x).unwrap_or(32.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr")).map(|m| m.max_x).unwrap_or(65.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Veränderungen"
+                Column {
+                    id: "abt2_vert_veraenderungen-veraenderungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen")).map(|m| m.min_x).unwrap_or(72.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen")).map(|m| m.max_x).unwrap_or(362.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt2_vert_veraenderungen-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(370.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(400.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Löschungen"
+                Column {
+                    id: "abt2_vert_veraenderungen-loeschungen",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen")).map(|m| m.min_x).unwrap_or(406.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen")).map(|m| m.max_x).unwrap_or(565.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            
+            SeitenTyp::Abt3Horz => vec![
+            
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt3_horz-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr")).map(|m| m.min_x).unwrap_or(55.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr. der Grundstücke im BV"
+                Column {
+                    id: "abt3_horz-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(103.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(170.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_horz-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-betrag")).map(|m| m.min_x).unwrap_or(180.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-betrag")).map(|m| m.max_x).unwrap_or(275.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-betrag")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-betrag")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Hypotheken, Grundschulden, Rentenschulden"
+                Column {
+                    id: "abt3_horz-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-text")).map(|m| m.min_x).unwrap_or(285.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-text")).map(|m| m.max_x).unwrap_or(760.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-text")).map(|m| m.min_y).unwrap_or(130.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz-text")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 25.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt3Vert => vec![
+            
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt3_vert-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr")).map(|m| m.min_x).unwrap_or(32.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr")).map(|m| m.max_x).unwrap_or(60.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "lfd. Nr der belastete Grundstücke im BV"
+                Column {
+                    id: "abt3_vert-lfd_nr_bv",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv")).map(|m| m.min_x).unwrap_or(65.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv")).map(|m| m.max_x).unwrap_or(100.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_vert-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-betrag")).map(|m| m.min_x).unwrap_or(105.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-betrag")).map(|m| m.max_x).unwrap_or(193.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-betrag")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-betrag")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Hypotheken, Grundschulden, Rentenschulden"
+                Column {
+                    id: "abt3_vert-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-text")).map(|m| m.min_x).unwrap_or(195.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-text")).map(|m| m.max_x).unwrap_or(567.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-text")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert-text")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: false,
+                    line_break_after_px: 25.0, // 10.0,
+                },
+            ],  
+            SeitenTyp::Abt3HorzVeraenderungen => vec![
+                // TODO
+            ],
+            SeitenTyp::Abt3HorzLoeschungen => vec![
+                // TODO
+            ],
+
+            SeitenTyp::Abt3VertVeraenderungen => vec![
+            
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt3_vert_veraenderungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr")).map(|m| m.min_x).unwrap_or(32.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr")).map(|m| m.max_x).unwrap_or(60.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_vert_veraenderungen-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag")).map(|m| m.min_x).unwrap_or(70.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag")).map(|m| m.max_x).unwrap_or(160.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Veränderungen"
+                Column {
+                    id: "abt3_vert_veraenderungen-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text")).map(|m| m.min_x).unwrap_or(165.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text")).map(|m| m.max_x).unwrap_or(565.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt3VertLoeschungen => vec![
+            
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt3_vert_loeschungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr")).map(|m| m.min_x).unwrap_or(175.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr")).map(|m| m.max_x).unwrap_or(205.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_vert_loeschungen-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag")).map(|m| m.min_x).unwrap_or(215.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag")).map(|m| m.max_x).unwrap_or(305.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Löschungen"
+                Column {
+                    id: "abt3_vert_loeschungen-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-text")).map(|m| m.min_x).unwrap_or(310.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-text")).map(|m| m.max_x).unwrap_or(570.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-text")).map(|m| m.min_y).unwrap_or(150.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_loeschungen-text")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                }
+            ],
+        }
+    }
 }
 
 // Wenn der Seitentyp bekannt ist, schneide die Seiten nach ihrem Seitentyp in Spalten
@@ -489,645 +1213,14 @@ pub fn formularspalten_ausschneiden(
     seitenzahl: u32, 
     max_seitenzahl: u32, 
     seitentyp: SeitenTyp, 
-    pdftotext_layout: &PdfToTextLayout
+    pdftotext_layout: &PdfToTextLayout,
+    anpassungen_seite: Option<&AnpassungSeite>,
 ) -> Result<Vec<Column>, Fehler> {
 
     use image::ImageOutputFormat;
     use std::fs::File;
     
-    let columns = match seitentyp {
-        
-        SeitenTyp::BestandsverzeichnisHorz => vec![
-        
-            // "lfd. Nr. der Grundstücke"
-            Column {
-                min_x: 60.0,
-                max_x: 95.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Bisherige lfd. Nr."
-            Column {
-                min_x: 100.0,
-                max_x: 140.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Gemarkung
-            Column {
-                min_x: 150.0,
-                max_x: 255.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Flur
-            Column {
-                min_x: 265.0,
-                max_x: 300.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Flurstück
-            Column {
-                min_x: 305.0,
-                max_x: 370.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-
-            // Wirtschaftsart und Lage
-            Column {
-                min_x: 375.0,
-                max_x: 670.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 40.0, // 10.0,
-            },
-            
-            // Größe (ha)
-            Column {
-                min_x: 675.0,
-                max_x: 710.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Größe (a)
-            Column {
-                min_x: 715.0,
-                max_x: 735.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Größe (m2)
-            Column {
-                min_x: 740.0,
-                max_x: 763.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::BestandsverzeichnisVert => vec![
-            
-            // "lfd. Nr. der Grundstücke"
-            Column {
-                min_x: 32.0,
-                max_x: 68.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Bisherige lfd. Nr."
-            Column {
-                min_x: 72.0,
-                max_x: 108.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Flur
-            Column {
-                min_x: 115.0,
-                max_x: 153.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Flurstück
-            Column {
-                min_x: 157.0,
-                max_x: 219.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-
-            // Wirtschaftsart und Lage
-            Column {
-                min_x: 221.0,
-                max_x: 500.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // Größe
-            Column {
-                min_x: 508.0,
-                max_x: 567.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen => vec![
-        
-            // "Zur lfd. Nr. der Grundstücke"
-            Column {
-                min_x: 57.0,
-                max_x: 95.0,
-                min_y: 125.0,
-                max_y: 560.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Bestand und Zuschreibungen"
-            Column {
-                min_x: 105.0,
-                max_x: 420.0,
-                min_y: 125.0,
-                max_y: 560.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Zur lfd. Nr. der Grundstücke"
-            Column {
-                min_x: 425.0,
-                max_x: 470.0,
-                min_y: 125.0,
-                max_y: 560.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Abschreibungen"
-            Column {
-                min_x: 480.0,
-                max_x: 763.0,
-                min_y: 125.0,
-                max_y: 560.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => vec![
-        
-            // "Zur lfd. Nr. der Grundstücke"
-            Column {
-                min_x: 35.0,
-                max_x: 72.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Bestand und Zuschreibungen"
-            Column {
-                min_x: 78.0,
-                max_x: 330.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Zur lfd. Nr. der Grundstücke"
-            Column {
-                min_x: 337.0,
-                max_x: 375.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Abschreibungen"
-            Column {
-                min_x: 382.0,
-                max_x: 520.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-
-        
-        SeitenTyp::Abt1Horz => vec![
-        
-            // "lfd. Nr. der Eintragungen"
-            Column {
-                min_x: 55.0,
-                max_x: 95.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Eigentümer"
-            Column {
-                min_x: 100.0,
-                max_x: 405.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr. der Grundstücke im BV"
-            Column {
-                min_x: 413.0,
-                max_x: 520.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Grundlage der Eintragung"
-            Column {
-                min_x: 525.0,
-                max_x: 762.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::Abt1Vert => vec![
-            
-            // "lfd. Nr. der Eintragungen"
-            Column {
-                min_x: 32.0,
-                max_x: 60.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Eigentümer"
-            Column {
-                min_x: 65.0,
-                max_x: 290.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr. der Grundstücke im BV"
-            Column {
-                min_x: 298.0,
-                max_x: 337.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Grundlage der Eintragung"
-            Column {
-                min_x: 343.0,
-                max_x: 567.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-
-        
-        SeitenTyp::Abt2Horz => vec![
-        
-            // "lfd. Nr. der Eintragungen"
-            Column {
-                min_x: 55.0,
-                max_x: 95.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr. der Grundstücke im BV"
-            Column {
-                min_x: 103.0,
-                max_x: 192.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Lasten und Beschränkungen"
-            Column {
-                min_x: 200.0,
-                max_x: 765.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 25.0, // 10.0,
-            },
-        ],
-        SeitenTyp::Abt2HorzVeraenderungen => vec![
-        
-            // "lfd. Nr. der Spalte 1"
-            Column {
-                min_x: 55.0,
-                max_x: 95.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Veränderungen"
-            Column {
-                min_x: 103.0,
-                max_x: 505.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr. der Spalte 2"
-            Column {
-                min_x: 515.0,
-                max_x: 552.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Löschungen"
-            Column {
-                min_x: 560.0,
-                max_x: 770.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::Abt2Vert => vec![
-        
-            // "lfd. Nr. der Eintragungen"
-            Column {
-                min_x: 32.0,
-                max_x: 60.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr der betroffenen Grundstücke"
-            Column {
-                min_x: 65.0,
-                max_x: 105.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Lasten und Beschränkungen"
-            Column {
-                min_x: 112.0,
-                max_x: 567.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::Abt2VertVeraenderungen => vec![
-        
-            // "lfd. Nr. der Spalte 1"
-            Column {
-                min_x: 32.0,
-                max_x: 65.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Veränderungen"
-            Column {
-                min_x: 72.0,
-                max_x: 362.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr. der Spalte 1"
-            Column {
-                min_x: 370.0,
-                max_x: 400.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Löschungen"
-            Column {
-                min_x: 406.0,
-                max_x: 565.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        
-        SeitenTyp::Abt3Horz => vec![
-        
-            // "lfd. Nr. der Eintragungen"
-            Column {
-                min_x: 55.0,
-                max_x: 95.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr. der Grundstücke im BV"
-            Column {
-                min_x: 103.0,
-                max_x: 170.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Betrag"
-            Column {
-                min_x: 180.0,
-                max_x: 275.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Hypotheken, Grundschulden, Rentenschulden"
-            Column {
-                min_x: 285.0,
-                max_x: 760.0,
-                min_y: 130.0,
-                max_y: 565.0,
-                is_number_column: false,
-                line_break_after_px: 25.0, // 10.0,
-            },
-        ],
-        SeitenTyp::Abt3Vert => vec![
-        
-            // "lfd. Nr. der Eintragungen"
-            Column {
-                min_x: 32.0,
-                max_x: 60.0,
-                min_y: 150.0,
-                max_y: 785.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "lfd. Nr der belastete Grundstücke im BV"
-            Column {
-                min_x: 65.0,
-                max_x: 100.0,
-                min_y: 150.0,
-                max_y: 785.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Betrag"
-            Column {
-                min_x: 105.0,
-                max_x: 193.0,
-                min_y: 150.0,
-                max_y: 785.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Hypotheken, Grundschulden, Rentenschulden"
-            Column {
-                min_x: 195.0,
-                max_x: 567.0,
-                min_y: 150.0,
-                max_y: 785.0,
-                is_number_column: false,
-                line_break_after_px: 25.0, // 10.0,
-            },
-        ],  
-        SeitenTyp::Abt3HorzVeraenderungen => vec![
-            // TODO
-        ],
-        SeitenTyp::Abt3HorzLoeschungen => vec![
-            // TODO
-        ],
-
-        SeitenTyp::Abt3VertVeraenderungen => vec![
-        
-            // "lfd. Nr. der Spalte 1"
-            Column {
-                min_x: 32.0,
-                max_x: 60.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Betrag"
-            Column {
-                min_x: 70.0,
-                max_x: 160.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Veränderungen"
-            Column {
-                min_x: 165.0,
-                max_x: 565.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-        SeitenTyp::Abt3VertLoeschungen => vec![
-        
-            // "lfd. Nr. der Spalte 1"
-            Column {
-                min_x: 175.0,
-                max_x: 205.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: true,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Betrag"
-            Column {
-                min_x: 215.0,
-                max_x: 305.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-            
-            // "Löschungen"
-            Column {
-                min_x: 310.0,
-                max_x: 570.0,
-                min_y: 150.0,
-                max_y: 810.0,
-                is_number_column: false,
-                line_break_after_px: 10.0, // 10.0,
-            },
-        ],
-    };
+    let columns = seitentyp.get_columns(anpassungen_seite);
     
     let seite = pdftotext_layout.seiten
         .get(&seitenzahl)
@@ -1137,7 +1230,7 @@ pub fn formularspalten_ausschneiden(
     let _ = fs::create_dir_all(temp_dir.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_dir.clone().display()), e))?;
     
-    let pdftoppm_output_path = temp_dir.clone().join(format!("page-{}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl)));
+    let pdftoppm_output_path = temp_dir.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl)));
     let (im_width, im_height) = image::image_dimensions(&pdftoppm_output_path)
         .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
 
@@ -1164,42 +1257,6 @@ pub fn formularspalten_ausschneiden(
             for x in t_start_x_px..t_end_x_px {
                 rgb_bytes.put_pixel(x, y, image::Rgb([255, 255, 255]));
             }
-        }
-    }
-    
-    /*
-    // delete red marked text in image
-    // if one pixel in the line is red, delete the entire line
-    let mut lines_to_delete = BTreeMap::new();
-    
-    for (x, y, rgb) in rgb_bytes.enumerate_pixels() {
-        if rgb[0] > 200 && rgb[1] < 10 && rgb[2] < 10 {
-            let (cur_start, cur_end) = lines_to_delete.entry(y).or_insert_with(|| (x, x));
-            *cur_start = (*cur_start).min(x);
-            *cur_end = (*cur_end).max(x);
-        }
-    }
-    
-    // Delete 1 line of text on underlined text!
-    // TODO: correct X range!
-    for (y, xrange) in lines_to_delete.clone() {
-        let ten_px_less = y.saturating_sub(50);
-        for y_mod in ten_px_less..y {
-            lines_to_delete.insert(y_mod, xrange);
-        }
-    }
-    
-    for (y, xrange) in lines_to_delete {
-        for x in xrange.0..xrange.1 {
-            rgb_bytes.put_pixel(x, y, image::Rgb([255, 255, 255]));
-        }
-    }
-    */
-    
-    // letzter filter: alle roten pixel löschen!
-    for (_, _, rgb) in rgb_bytes.enumerate_pixels_mut() {
-        if rgb[0] > 10 && rgb[1] < 200 {
-            *rgb = image::Rgb([255, 255, 255]);
         }
     }
     
@@ -1302,6 +1359,45 @@ pub struct Textblock {
     pub end_y: f32,
     pub start_x: f32,
     pub end_x: f32,
+}
+
+pub fn zeilen_aus_tesseract_hocr(tesseract_hocr_path: String) -> Result<Vec<String>, Fehler> {
+    
+    use kuchiki::traits::TendrilSink;
+
+    let hocr_tesseract = fs::read_to_string(tesseract_hocr_path.clone())
+        .map_err(|e| Fehler::Io(tesseract_hocr_path.clone(), e))?;
+    
+    let document = kuchiki::parse_html()
+        .one(hocr_tesseract.as_str());
+    
+    let css_selector = ".ocr_line";
+    let mut result = Vec::new();
+    
+    if let Ok(m) = document.select(css_selector) {
+
+        for css_match in m {
+        
+            let as_node = css_match.as_node();
+            let as_element = match as_node.as_element() {
+                Some(s) => s,
+                None => continue,
+            };
+            
+            let line_text = as_node
+                .text_contents()
+                .lines()
+                .map(|l| l.trim().to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+                .trim()
+                .to_string();
+            
+            result.push(line_text.clone());
+        }
+    }
+    
+    Ok(result)
 }
 
 // Liest die Textblöcke aus den Spalten (mit Koordinaten in Pixeln) aus
@@ -1457,6 +1553,119 @@ pub fn textbloecke_aus_spalten(titelblatt: &Titelblatt, seitenzahl: u32, spalten
         
         Ok(text_blocks)
     }).collect::<Result<Vec<Vec<Textblock>>, Fehler>>()?)
+}
+
+pub const OP_PATH_CONST_MOVE_TO: &str                        = "m";
+/// Straight line to the two following points
+pub const OP_PATH_CONST_LINE_TO: &str                        = "l";
+/// Cubic bezier over four following points
+pub const OP_PATH_CONST_4BEZIER: &str                        = "c";
+/// Cubic bezier with two points in v1
+pub const OP_PATH_CONST_3BEZIER_V1: &str                     = "v";
+/// Cubic bezier with two points in v2
+pub const OP_PATH_CONST_3BEZIER_V2: &str                     = "y";
+/// Add rectangle to the path (width / height): x y width height re
+pub const OP_PATH_CONST_RECT: &str                           = "re";
+/// Close current sub-path (for appending custom patterns along line)
+pub const OP_PATH_CONST_CLOSE_SUBPATH: &str                  = "h";
+/// Current path is a clip path, non-zero winding order (usually in like `h W S`)
+pub const OP_PATH_CONST_CLIP_NZ: &str = "W";
+/// Current path is a clip path, non-zero winding order
+pub const OP_PATH_CONST_CLIP_EO: &str = "W*";
+
+const OPERATIONS_TO_CLEAN: &[&str;9] = &[
+    OP_PATH_CONST_MOVE_TO,
+    OP_PATH_CONST_LINE_TO,
+    OP_PATH_CONST_4BEZIER,
+    OP_PATH_CONST_3BEZIER_V1,
+    OP_PATH_CONST_3BEZIER_V2,
+    OP_PATH_CONST_RECT,
+    OP_PATH_CONST_CLOSE_SUBPATH,
+    OP_PATH_CONST_CLIP_NZ,
+    OP_PATH_CONST_CLIP_EO,
+];
+
+use std::io::prelude::*;
+use std::io;
+use flate2::read::ZlibDecoder;
+
+// Uncompresses a Deflate Encoded vector of bytes and returns a string or error
+// Here &[u8] implements Read
+fn decode_reader(bytes: &[u8]) -> io::Result<String> {
+   let mut deflater = ZlibDecoder::new(&bytes[..]);
+   let mut s = String::new();
+   deflater.read_to_string(&mut s)?;
+   Ok(s)
+}
+
+// Löscht alle gemalten Linien aus dem PDF heraus
+pub fn clean_pdf(pdf_bytes: &[u8], titelblatt: &Titelblatt) -> Result<Vec<u8>, Fehler> {
+    
+    use lopdf::Object;
+    use std::collections::BTreeSet;
+    
+    // Dekomprimierung mit LZW funktioniert nicht, erst 
+    // mit podofouncompress alle PDF-Streams dekomprimieren!
+    let tmp = std::env::temp_dir()
+    .join(&format!("{gemarkung}/{blatt}/decompress.pdf", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt))
+    .display().to_string();
+    
+    let _ = std::fs::write(tmp.clone(), pdf_bytes);
+    let _ = Command::new("podofouncompress")
+        .arg(tmp.clone())
+        .arg(tmp.clone())
+        .status();
+    
+    let pdf_bytes = std::fs::read(tmp.clone())
+    .map_err(|e| Fehler::Io(tmp.clone(), e))?;
+    
+    let _ = std::fs::remove_file(tmp.clone());
+    
+    let bad_operators = OPERATIONS_TO_CLEAN.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+    
+    let mut pdf = lopdf::Document::load_mem(&pdf_bytes)?;
+    
+    let mut stream_ids = Vec::new();
+    
+    for (page_num, page_id) in pdf.get_pages().into_iter() {
+        if let Some(Object::Dictionary(page_dict)) = pdf.objects.get(&page_id) {
+            if let Some(Object::Dictionary(resources_dict)) = page_dict.get(b"Resources").ok() {
+                if let Some(Object::Dictionary(xobjects)) = resources_dict.get(b"XObject").ok() {
+                    for (_, xo) in xobjects.iter() {
+                        if let Object::Reference(xobject_id) = xo {
+                            stream_ids.push(xobject_id.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+        
+    for sid in stream_ids.into_iter() {
+    
+            if let Some(Object::Stream(s)) = pdf.objects.get_mut(&sid) {
+                                
+                let mut stream_decoded = match s.decode_content().ok()  {
+                    Some(s) => s,
+                    None => {
+                        continue;
+                    },
+                };
+                                
+                stream_decoded.operations.retain(|op| {
+                    !bad_operators.contains(&op.operator)
+                });
+                
+                s.set_plain_content(stream_decoded.encode()?);
+                s.start_position = None;
+            }  
+    }
+    
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes)
+    .map_err(|e| Fehler::Io(String::new(), e))?;
+    
+    Ok(bytes)
 }
 
 fn column_contains_point(col: &Column, start_x: f32, start_y: f32) -> bool {
@@ -1845,7 +2054,80 @@ pub fn analysiere_abt1(
     seiten: &BTreeMap<u32, SeiteParsed>, 
     bestandsverzeichnis: &Bestandsverzeichnis,
 ) -> Result<Abteilung1, Fehler> {
-    Ok(Abteilung1::default())
+      
+    let default_texte = Vec::new();
+    let abt1_eintraege = seiten
+    .values()
+    .filter(|s| {
+        s.typ == SeitenTyp::Abt1Vert || 
+        s.typ == SeitenTyp::Abt1Horz
+    }).flat_map(|s| {
+    
+        let mut texte = s.texte.clone();
+        texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+        
+        texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+            
+            let text_start_y = text.start_y;
+            let text_end_y = text.end_y;
+
+            // TODO: bv-nr korrigieren!
+
+            // TODO: auch texte "1-3"
+            let lfd_nr = get_erster_text_bei_ca(
+                &texte.get(0).unwrap_or(&default_texte), 
+                text_num,
+                text_start_y,
+                text_end_y,
+            ).and_then(|s| s.text.trim().parse::<usize>().ok()).unwrap_or(0);
+            
+            let eigentuemer = get_erster_text_bei_ca(
+                &texte.get(1).unwrap_or(&default_texte), 
+                text_num,
+                text_start_y,
+                text_end_y,
+            )
+            .map(|s| s.text.trim().to_string())
+            .unwrap_or_default();
+            
+            // versehentlich Fußzeile erwischt
+            if eigentuemer.contains("JVA Branden") {
+                return None;
+            }
+            
+            let bv_nr = get_erster_text_bei_ca(
+                &texte.get(2).unwrap_or(&default_texte), 
+                text_num,
+                text_start_y,
+                text_end_y,
+            ).map(|t| t.text.trim().to_string())?;
+            
+            let grundlage_der_eintragung = get_erster_text_bei_ca(
+                &texte.get(3).unwrap_or(&default_texte), 
+                text_num,
+                text_start_y,
+                text_end_y,
+            ).map(|t| t.text.trim().to_string())?;
+            
+            Some(Abt1Eintrag {
+                lfd_nr,
+                eigentuemer,
+                bv_nr: bv_nr.to_string(),
+                grundlage_der_eintragung,
+                automatisch_geroetet: false,
+                manuell_geroetet: None,
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        
+    }).collect();
+    
+    Ok(Abteilung1 {
+        eintraege: abt1_eintraege,
+        veraenderungen: Vec::new(),
+        loeschungen: Vec::new(),
+    })
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
