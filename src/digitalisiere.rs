@@ -1562,7 +1562,7 @@ pub fn textbloecke_aus_spalten(
                     if current_line_start_y > block_end_y + col.line_break_after_px && 
                     !current_text_block.is_empty() {
                         text_blocks.push(Textblock {
-                            text: current_text_block.join("\r\n"),
+                            text: current_text_block.join("\r\n "),
                             start_y: block_start_y,
                             end_y: block_end_y,
                             start_x: block_start_x,
@@ -1584,7 +1584,7 @@ pub fn textbloecke_aus_spalten(
             
             if !current_text_block.is_empty() {
                 text_blocks.push(Textblock {
-                    text: current_text_block.join("\r\n"),
+                    text: current_text_block.join("\r\n "),
                     start_y: block_start_y,
                     end_y: block_end_y,
                     start_x: block_start_x,

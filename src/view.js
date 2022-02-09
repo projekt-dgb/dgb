@@ -69,6 +69,8 @@ let rpc = {
   resize_column: function(direction, columnId, number) { rpc.invoke({ cmd: 'resize_column', direction: direction, column_id: columnId, number: number }); },
   toggle_checkbox: function(checkbox_id) { rpc.invoke({ cmd: 'toggle_checkbox', checkbox_id: checkbox_id }); },
   reload_grundbuch: function() { rpc.invoke({ cmd: 'reload_grundbuch' }); },
+  zeile_neu: function(file, page, y) { rpc.invoke({ cmd: 'zeile_neu', file: file, page: page, y: y }); },
+  zeile_loeschen: function(file, page, zeilen_id) { rpc.invoke({ cmd: 'zeile_loeschen', file: file, page: page, zeilen_id: zeilen_id }); },
   
   set_active_ribbon_tab: function(arg) { rpc.invoke({ cmd : 'set_active_ribbon_tab', new_tab: arg }); },
   set_open_file: function(arg) { rpc.invoke({ cmd : 'set_open_file', new_file: arg }); },
@@ -147,7 +149,7 @@ function onOcrSelectionDragStart(event) {
         return;
     }
     
-    var page = parseInt(parent.getAttribute("data-pageNumber"));
+    var page = Number(parent.getAttribute("data-pageNumber"));
     if (!page) {
         return;
     }
@@ -192,7 +194,7 @@ function onOcrSelectionDrag(event) {
         return;
     }
     
-    var page = parseInt(parent.getAttribute("data-pageNumber"));
+    var page = Number(parent.getAttribute("data-pageNumber"));
     if (!page) {
         return;
     }
@@ -359,7 +361,7 @@ function openContextMenu(e) {
     if (!pn) {
         return;
     }
-    rpc.open_context_menu(e.clientX, e.clientY, parseInt(pn));
+    rpc.open_context_menu(e.clientX, e.clientY, Number(pn));
     return false;
 }
 
@@ -387,7 +389,7 @@ function activateSelectedPage(event) {
     if (!pn) {
         return;
     }
-    rpc.set_open_page(parseInt(pn, 10));
+    rpc.set_open_page(Number(pn, 10));
 }
 
 function regexLoeschen(event) {
@@ -783,7 +785,7 @@ function klassifiziereSeiteNeu(event) {
         return;
     }
     
-    var seite = parseInt(event.target.getAttribute("data-seite"));
+    var seite = Number(event.target.getAttribute("data-seite"));
     if (!seite) {
         return;
     }
@@ -928,9 +930,114 @@ function reloadGrundbuch(event) {
     rpc.reload_grundbuch();
 }
 
+function zeileNeu(event) {
+        
+    if (!event.which) {
+        return;
+    }
+    
+    if (event.which !== 1) {
+        return;
+    }
+    
+    let zeilen_container = document.getElementById("__application_page_lines");
+    if (!zeilen_container)
+        return;
+    
+    let bounds = zeilen_container.getBoundingClientRect();
+    let y = event.clientY - bounds.top;
+    
+    var file = zeilen_container.getAttribute("data-fileName");
+    if (!file) {
+        return;
+    }
+    
+    var page = Number(zeilen_container.getAttribute("data-pageNumber"));
+    if (!page) {
+        return;
+    }
+    
+    rpc.zeile_neu(file, page, y);
+}
+
+function zeileLoeschen(event) {
+    
+    if (!event.which) {
+        return;
+    }
+    
+    event.stopPropagation();
+    
+    if (event.which !== 3) {
+        return;
+    }
+    
+    let zeilen_container = document.getElementById("__application_page_lines");
+    if (!zeilen_container)
+        return;
+    
+    var file = zeilen_container.getAttribute("data-fileName");
+    if (!file) {
+        return;
+    }
+    
+    var page = Number(zeilen_container.getAttribute("data-pageNumber"));
+    if (!page) {
+        return;
+    }
+        
+    var zeileIdString = event.target.getAttribute("data-zeileId");
+    if (!zeileIdString) {
+        return;
+    }
+    var zeileId = 0;
+    if (zeileIdString !== "0") {
+        zeileId = Number(zeileIdString);
+    }
+    
+    rpc.zeile_loeschen(file, page, zeileId);
+}
+
+function zeilePreviewShow(event) {
+    let zeile = document.getElementById("__application_zeile_preview");
+    if (!zeile)
+        return;
+    zeile.style.opacity = "0.5";
+}
+
+function zeilePreviewHide(event) {
+    let zeile = document.getElementById("__application_zeile_preview");
+    if (!zeile)
+        return;
+    zeile.style.opacity = "0";
+}
+
+function zeilePreviewMove(event) {
+    
+    let zeilen_container = document.getElementById("__application_page_lines");
+    if (!zeilen_container)
+        return;
+    
+    let bounds = zeilen_container.getBoundingClientRect();
+    let y = event.clientY - bounds.top;
+    
+    let zeile = document.getElementById("__application_zeile_preview");
+    if (!zeile)
+        return;
+    zeile.style.opacity = "0.5";
+    zeile.style.transform = "translateY(" + (y - 10.0) + "px)";
+}
+
+function replacePdfImageZeilen(s) {
+    let zeilen = document.getElementById("__application_zeilen");
+    if (!zeilen)
+        return;
+
+    zeilen.innerHTML = s;
+}
+
 // Init
 window.onload = function() { rpc.init(); };
-
 
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())

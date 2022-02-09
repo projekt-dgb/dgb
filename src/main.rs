@@ -107,8 +107,9 @@ impl Default for RpcData {
             loaded_nb: Vec::new(),
             loaded_nb_paths: Vec::new(),
             konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
-                kein_autojoin_ocr_zeilen: false,
-                spalten_anzeigen: false,
+                zeilenumbrueche_in_ocr_text: false,
+                spalten_ausblenden: false,
+                vorschau_ohne_geroetet: false,
                 regex: BTreeMap::new(),
                 abkuerzungen_script: Vec::new(),
                 text_saubern_script: Vec::new(),
@@ -225,9 +226,12 @@ impl PdfFile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Konfiguration {
     #[serde(default)]
-    pub spalten_anzeigen: bool,
+    pub spalten_ausblenden: bool,
     #[serde(default)]
-    pub kein_autojoin_ocr_zeilen: bool,
+    pub zeilenumbrueche_in_ocr_text: bool,
+    #[serde(default)]
+    pub vorschau_ohne_geroetet: bool,
+    #[serde(default)]
     pub regex: BTreeMap<String, String>,
     #[serde(default)]
     pub abkuerzungen_script: Vec<String>,
@@ -411,6 +415,10 @@ pub enum Cmd {
     ToggleCheckBox { checkbox_id: String },
     #[serde(rename = "reload_grundbuch")]
     ReloadGrundbuch,
+    #[serde(rename = "zeile_neu")]
+    ZeileNeu { file: String, page: usize, y: f32 },
+    #[serde(rename = "zeile_loeschen")]
+    ZeileLoeschen { file: String, page: usize, zeilen_id: usize },
     
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
@@ -1677,7 +1685,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let zeilen = zeilen_aus_tesseract_hocr(tesseract_output_path.display().to_string()).unwrap_or_default();
             let text = zeilen.join("\r\n");
-            let text = if data.konfiguration.kein_autojoin_ocr_zeilen {
+            let text = if data.konfiguration.zeilenumbrueche_in_ocr_text {
                 text
             } else {
                 let result: Result<String, String> = Python::with_gil(|py| {
@@ -1739,7 +1747,86 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let _ = reload_grundbuch(open_file.clone());
             
             webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
-        }
+        },
+        Cmd::ZeileNeu { file, page, y } => {
+            
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let open_file = match data.loaded_files.get_mut(&file.clone()) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let mut ap = open_file.anpassungen_seite
+                .entry(*page)
+                .or_insert_with(|| AnpassungSeite::default());
+            
+            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
+                Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
+                None => return,
+            };
+    
+            let img_ui_width = 1200.0; // px
+            let aspect_ratio = im_height / im_width;
+            let img_ui_height = img_ui_width * aspect_ratio;
+            
+            if *y > img_ui_height || *y < 0.0 {
+                return;
+            }
+            
+            ap.zeilen.push(y / img_ui_height * page_height);
+            ap.zeilen.sort_by(|a, b| ((a * 1000.0) as usize).cmp(&((b * 1000.0) as usize)));
+            ap.zeilen.dedup();
+
+            webview.eval(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
+            
+            // speichern
+            let default_parent = Path::new("/");
+            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
+            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
+                let _ = std::fs::write(&target_output_path, json.as_bytes());
+            }
+        },
+        Cmd::ZeileLoeschen { file, page, zeilen_id } => {
+        
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let open_file = match data.loaded_files.get_mut(&file.clone()) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
+                Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
+                None => return,
+            };
+    
+            let img_ui_width = 1200.0; // px
+            let aspect_ratio = im_height / im_width;
+            let img_ui_height = img_ui_width * aspect_ratio;
+            
+            if let Some(ap) = open_file.anpassungen_seite.get_mut(page) {
+                if *zeilen_id < ap.zeilen.len() {
+                    let _ = ap.zeilen.remove(*zeilen_id);                    
+                    webview.eval(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
+                }
+            }
+            
+            // speichern
+            let default_parent = Path::new("/");
+            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
+            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
+                let _ = std::fs::write(&target_output_path, json.as_bytes());
+            }
+        },
         Cmd::ResizeColumn {
             direction,
             column_id,
@@ -1824,12 +1911,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::ToggleCheckBox { checkbox_id } => {
             match checkbox_id.as_str() {
-                "konfiguration-clean-ocr" => {
-                    data.konfiguration.kein_autojoin_ocr_zeilen = !data.konfiguration.kein_autojoin_ocr_zeilen;
+                "konfiguration-zeilenumbrueche-in-ocr-text" => {
+                    data.konfiguration.zeilenumbrueche_in_ocr_text = !data.konfiguration.zeilenumbrueche_in_ocr_text;
                 },
-                "konfiguration-spalten-anzeigen" => {
-                    data.konfiguration.spalten_anzeigen = !data.konfiguration.spalten_anzeigen;
-                }
+                "konfiguration-spalten-ausblenden" => {
+                    data.konfiguration.spalten_ausblenden = !data.konfiguration.spalten_ausblenden;
+                },
+                "konfiguration-keine-roten-linien" => {
+                    data.konfiguration.vorschau_ohne_geroetet = !data.konfiguration.vorschau_ohne_geroetet;
+                },
                 _ => return,
             }
             
@@ -2444,7 +2534,6 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
     let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, seitenzahlen_zu_laden.as_ref(), &pdf.titelblatt)?;
     
     let ist_geladen = pdf.ist_geladen();
-    
     pdf.geladen.clear();
     pdf.analysiert = Grundbuch::default();
     
@@ -2497,7 +2586,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
   
         pdf.geladen.insert(sz, SeiteParsed {
             typ: seitentyp,
-            texte: textbloecke,
+            texte: textbloecke.clone(),
         });
 
         pdf.analysiert = match analysiere_grundbuch(&pdf) { 
@@ -2512,7 +2601,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
 
         let _ = std::fs::write(&cache_output_path, json.as_bytes());
     }
-
+    
     pdf.analysiert = match analysiere_grundbuch(&pdf) { 
         Some(o) => o, 
         None => return Ok(()), 

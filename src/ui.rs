@@ -88,19 +88,24 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         license_base64 = base64::encode(include_bytes!("../licenses.html")))
     } else if rpc_data.configuration_active {
         format!("
-            <div style='width:1200px;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px 100px;' onmousedown='event.stopPropagation();'>
+            <div style='pointer-events:unset;width:1200px;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px 100px;' onmousedown='event.stopPropagation();'>
                 <h2 style='font-size:20px;padding-bottom:10px;font-family:sans-serif;'>Konfiguration</h2>
                 <p style='font-size:12px;padding-bottom:5px;'>Pfad: {konfig_pfad}</p>
                 
                 <div style='padding:5px 0px;'>
                         <div style='display:flex;flex-direction:row;'>
-                        <input type='checkbox' id='__application_konfiguration_spalten_anzeigen' {spalten_anzeigen} data-checkBoxId='konfiguration-spalten-anzeigen' onchange='toggleCheckbox(event)'>
-                        <label for='__application_konfiguration_spalten_anzeigen'>Spalten anzeigen</label>
+                        <input type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_ausblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
+                        <label for='__application_konfiguration_spalten_ausblenden'>Spalten ausblenden</label>
                         </div>
                         
                         <div style='display:flex;flex-direction:row;'>
-                        <input type='checkbox' id='__application_konfiguration_ocr_text_clean' data-checkBoxId='konfiguration-clean-ocr' {ocr_text_clean} onchange='toggleCheckbox(event)'>
-                        <label for='__application_konfiguration_ocr_text_clean'>OCR Text beim Kopieren automatisch säubern</label>
+                        <input type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
+                        <label for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                        <input type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
+                        <label for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
                         </div>
                 </div>
                 <div style='padding:5px 0px;'>
@@ -186,7 +191,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <div style='padding:5px 0px;'>
                 
                     <div>
-                        <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
+                        <p style='font-faspalten_ausblendenmily:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
                             Rangvermerk auslesen (Abteilung 2)
                         </p>                        
                     </div>
@@ -303,8 +308,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         ", 
             konfig_pfad = Konfiguration::konfiguration_pfad(),
             
-            spalten_anzeigen = if rpc_data.konfiguration.spalten_anzeigen { "checked" } else { "" },
-            ocr_text_clean = if rpc_data.konfiguration.kein_autojoin_ocr_zeilen { "checked" } else { "" },
+            vorschau_ohne_geroetet = if rpc_data.konfiguration.vorschau_ohne_geroetet { "checked" } else { "" },
+            spalten_ausblenden = if rpc_data.konfiguration.spalten_ausblenden { "checked" } else { "" },
+            zeilenumbrueche_in_ocr_text = if rpc_data.konfiguration.zeilenumbrueche_in_ocr_text { "checked" } else { "" },
             
             regex = {
                 
@@ -413,7 +419,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         )
     } else if let Some(cm) = rpc_data.context_menu_active.clone() {
         format!("
-        <div style='padding:1px;position:absolute;left:{}px;top:{}px;{}background:white;border-radius:5px;box-shadow:0px 0px 5px #444;'>
+        <div style='pointer-events:unset;padding:1px;position:absolute;left:{}px;top:{}px;{}background:white;border-radius:5px;box-shadow:0px 0px 5px #444;'>
         <div style='border:1px solid #efefef;border-radius:5px;'>
             <p style='padding:5px 10px;font-size:10px;color:#444;margin-bottom:5px;'>Klassifiziere Seite als...</p>
             <div style='line-height:1.5;cursor:pointer;'>
@@ -482,9 +488,8 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         width: 100%;
         height: 100%;
         min-height: 100%;
-        position: fixed;
-        z-index:1000;
-        pointer-events:initial;' onmousedown='closePopOver()'>{}</div>", application_popover_color, pc
+        z-index:1001;
+        pointer-events:all;' onmousedown='closePopOver()'>{}</div>", application_popover_color, pc
     );
     
     normalize_for_js(pc)
@@ -1736,7 +1741,11 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
     
     let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-    let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)));
+    let pdftoppm_output_path = if rpc_data.konfiguration.vorschau_ohne_geroetet {
+        temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+    } else {
+        temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+    };
     
     if !pdftoppm_output_path.exists() {
         if let Ok(o) = std::fs::read(&file.datei) {
@@ -1771,7 +1780,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 let height = (col.max_y - col.min_y) / page_height * img_ui_height;
                 
                 format!("
-                    <div id='__application_spalte_{id}' style='
+                    <div class='__application_spalte' id='__application_spalte_{id}' style='
                         position:absolute;
                         width:{width}px;
                         height:{height}px;
@@ -1864,20 +1873,49 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         },
         None => { String::new() },
     };
-        
+    
+    let zeilen = file.anpassungen_seite
+    .get(&(open_file.1 as usize))
+    .map(|ap| ap.zeilen.clone())
+    .unwrap_or_default();
+    
+    let zeilen = render_pdf_image_zeilen(&zeilen, page_height, img_ui_height);
+    
     normalize_for_js(format!("
-        <div style='padding:20px;user-select:none;-webkit-user-select:none;' onmouseup='resizeColumnOnMouseDown(event);'>
-        
-            <div data-fileName='{}', data-pageNumber='{}' style='position:relative;user-select:none;-webkit-user-select:none;'>
-        
+        <div style='padding:20px;user-select:none;-webkit-user-select:none;'>
+            <div data-fileName='{file_name}' data-pageNumber='{page_number}' style='position:relative;user-select:none;-webkit-user-select:none;margin:0 auto;'>
+                
                 <img id='__application_page_img_inner' 
-                src='data:image/png;base64,{}' 
+                src='data:image/png;base64,{img_src}'
                 onmousedown='onOcrSelectionDragStart(event);'
                 onmousemove='onOcrSelectionDrag(event);' 
                 onmouseup='onOcrSelectionDragStop(event);' 
-                onmouseout='onOcrSelectionDragStop(event);' style='user-select:none;-webkit-user-select:none;cursor:crosshair;z-index:0;' />            
+                onmouseout='onOcrSelectionDragStop(event);' 
+                style='
+                    user-select:none;
+                    width:1200px;
+                    height:{img_ui_height}px;
+                    -webkit-user-select:none;
+                    cursor:crosshair;
+                ' />            
             
                 {spalten}
+                
+                <div id='__application_page_lines' style='
+                    height:{img_ui_height}px;
+                    position:absolute;
+                    top:0px;
+                    left:-20px;
+                    width:40px;
+                    cursor:pointer;
+                    background:repeating-linear-gradient(to bottom, #ccc 0%, #ccc 10%, white 11%, white 100%);
+                    background-size: 10px 10px;
+                ' data-fileName='{file_name}' data-pageNumber='{page_number}' 
+                onmouseenter='zeilePreviewShow(event);' 
+                onmouseleave='zeilePreviewHide(event);'
+                onmouseover='zeilePreviewMove(event);'
+                onmousemove='zeilePreviewMove(event);'
+                onmouseup='zeileNeu(event);'>{zeilen}</div>
                 
                 <div id='__application_ocr_selection' style='
                     position:absolute;
@@ -1894,10 +1932,29 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 
             </div>
         </div>", 
-            open_file.0,
-            open_file.1,
-            base64::encode(pdf_to_ppm_bytes),
-            spalten = if rpc_data.konfiguration.spalten_anzeigen {
+            file_name = open_file.0,
+            page_number = open_file.1,
+            img_src = base64::encode(pdf_to_ppm_bytes),
+            img_ui_height = img_ui_height,
+            zeilen = format!("
+                <div id='__application_zeilen' style='
+                    position:absolute;
+                    top: 0px;
+                    left: 0px;
+                    transform-origin: top left;
+                    width:0px;
+                    height:0px;
+                    overflow:visible;
+                    background: transparent;
+                    pointer-events:all;
+                '  data-fileName='{file_name}' data-pageNumber='{page_number}'>
+                    {zeilen}
+                </div>", 
+                    zeilen = zeilen, 
+                    file_name = open_file.0,
+                    page_number = open_file.1,
+                ),
+            spalten = if !rpc_data.konfiguration.spalten_ausblenden {
                 format!("
                 <div id='__application_spalten' style='
                     position:absolute;
@@ -1916,6 +1973,48 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 String::new()
             }
         ))
+}
+
+pub fn render_pdf_image_zeilen(zeilen: &[f32], page_height: f32, img_ui_height: f32) -> String {
+    
+    let mut z1 = zeilen.iter().enumerate().map(|(zeile_id, y)| format!("
+        <div class='__application_zeile' id='__application_zeile_{id}' style='
+            position:absolute;
+            width:50px;
+            height:20px;
+            left:-5px;
+            background:white;
+            border: 1px solid #222;
+            box-shadow:0px 0px 3px #ccccccee;
+            transform-origin: top left;
+            transform: translateY({y}px);
+        ' data-zeileId='{id}' onmouseup='zeileLoeschen(event);'>
+            <div style='pointer-events:none;width:1195px;position:absolute;height:2px;background:blue;opacity:0.5;left:50px;top:9px;'></div>
+        </div>
+    ", id = zeile_id, y = (y / page_height * img_ui_height) - 10.0))
+    .collect::<Vec<_>>()
+    .join("\r\n");
+    
+    
+    z1.push_str("
+        <div class='__application_zeile' id='__application_zeile_preview' style='
+            position:absolute;
+            width:50px;
+            height:20px;
+            left:-5px;
+            background:white;
+            border: 1px solid #222;
+            box-shadow:0px 0px 3px #ccccccee;
+            transform-origin: top left;
+            transform: translateY(0px);
+            pointer-events:none;
+            opacity:0;
+        '>
+            <div style='pointer-events:none;width:1195px;position:absolute;height:2px;background:blue;opacity:0.5;left:50px;top:9px;'></div>
+        </div>
+    ");
+    
+    normalize_for_js(z1)
 }
 
 pub fn normalize_for_js(s: String) -> String {
