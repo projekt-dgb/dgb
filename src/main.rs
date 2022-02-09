@@ -11,7 +11,7 @@ use serde_derive::{Serialize, Deserialize};
 use crate::digitalisiere::{
     SeiteParsed, Nebenbeteiligter, NebenbeteiligterExtra,
     NebenbeteiligterTyp, Titelblatt, SeitenTyp,
-    Grundbuch, 
+    Grundbuch, Fehler,
     Anrede, PdfToTextLayout,
     BvEintrag, BvZuschreibung, BvAbschreibung, 
     Abt1Eintrag, Abt1Veraenderung, Abt1Loeschung,
@@ -108,6 +108,7 @@ impl Default for RpcData {
             loaded_nb_paths: Vec::new(),
             konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
                 kein_autojoin_ocr_zeilen: false,
+                spalten_anzeigen: false,
                 regex: BTreeMap::new(),
                 abkuerzungen_script: Vec::new(),
                 text_saubern_script: Vec::new(),
@@ -223,6 +224,8 @@ impl PdfFile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Konfiguration {
+    #[serde(default)]
+    pub spalten_anzeigen: bool,
     #[serde(default)]
     pub kein_autojoin_ocr_zeilen: bool,
     pub regex: BTreeMap<String, String>,
@@ -398,7 +401,17 @@ pub enum Cmd {
         page_width: f32,
         page_height: f32,
     },
-  
+    #[serde(rename = "resize_column")]
+    ResizeColumn {
+        direction: String,
+        column_id: String,
+        number: f32,
+    },
+    #[serde(rename = "toggle_checkbox")]
+    ToggleCheckBox { checkbox_id: String },
+    #[serde(rename = "reload_grundbuch")]
+    ReloadGrundbuch,
+    
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
     SetActiveRibbonTab { new_tab: usize },
@@ -569,6 +582,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 if data.open_page.is_none() {
                     data.open_page = Some((file_name.clone(), 2));
                     webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
+                } else if data.open_page.as_ref().map(|s| s.0.clone()).unwrap_or_default() == *file_name {
+                    webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
                 }
                 webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
             }
@@ -609,9 +624,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Some(s) => s,
                 None => return,
             };
-            
-            println!("editText: {} - {}: {}", section, cell, new_value);
-            
+                        
             match (*section, *cell) {
                 ("bv", "lfd-nr") => {
                     let new_value = match new_value.parse::<usize>().ok() {
@@ -1258,7 +1271,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             });
             data.info_active = false;
             data.configuration_active = false;
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenConfiguration => {
             data.context_menu_active = None;
@@ -1533,21 +1546,20 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             open_file.klassifikation_neu.insert(*seite, seiten_typ_neu);
             data.context_menu_active = None;            
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
-            
                 
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
                 Some(s) => s,
                 None => return,
             };
             
-            klassifiziere_pdf_seiten_neu(open_file, &[*seite]);
+            klassifiziere_pdf_seiten_neu(open_file, &[*seite as u32]);
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::ClosePopOver { } => {
             data.context_menu_active = None;
             data.configuration_active = false;
             data.info_active = false;
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.eval(&format!("replacePopOver(`{}`)", String::new()));
         },
         Cmd::Undo => {
             println!("undo");
@@ -1628,7 +1640,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let width = width.round().max(0.0) as u32;
             let height = height.round().max(0.0) as u32;
             
-            let mut im = match image::open(&pdftoppm_output_path.clone())
+            let im = match image::open(&pdftoppm_output_path.clone())
             .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e)) {
                 Ok(o) => o,
                 Err(_) => {
@@ -1680,6 +1692,148 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
     
             webview.eval(&format!("copyTextToClipboard(`{}`)", text));
             webview.eval(&format!("resetOcrSelection()"));
+        },
+        Cmd::ReloadGrundbuch => {
+            
+            use tinyfiledialogs::{YesNo, MessageBoxIcon};
+            
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let (file_id, page) = match data.open_page.clone() {
+                Some((file, page)) => (file.clone(), page as usize),
+                None => return,
+            };
+            
+            {                
+                let open_file = match data.loaded_files.get_mut(&file_id) { 
+                    Some(s) => s,
+                    None => return,
+                };
+                
+                if tinyfiledialogs::message_box_yes_no(
+                    "Grundbuch neu laden?",
+                    &format!("Wenn das Grundbuch neu analysiert wird, werden alle manuell eingegebenen Daten überschrieben.\r\nFortfahren?"),
+                    MessageBoxIcon::Warning,
+                    YesNo::No,
+                ) == YesNo::No {
+                    return;
+                }
+                
+                open_file.geladen.clear();
+                open_file.analysiert = Grundbuch::default();
+            }
+            
+            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            
+            let open_file = match data.loaded_files.get(&file_id) { 
+                Some(s) => s,
+                None => return,
+            };
+                
+            let default_parent = Path::new("/");
+            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
+            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
+            let _ = reload_grundbuch(open_file.clone());
+            
+            webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
+        }
+        Cmd::ResizeColumn {
+            direction,
+            column_id,
+            number,
+        } => {
+                   
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let (file_id, page) = match data.open_page.clone() {
+                Some((file, page)) => (file.clone(), page as usize),
+                None => return,
+            };
+            
+            let open_file = match data.loaded_files.get_mut(&file_id) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let open_page = match open_file.geladen.get_mut(&(page as u32)) {
+                Some(s) => s,
+                None => return,
+            };
+            
+            let current_column = match open_page.typ.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
+                Some(s) => s.clone(),
+                None => return,
+            };
+            
+            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(page as u32)) {
+                Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
+                None => return,
+            };
+        
+            let img_ui_width = 1200.0; // px
+            let aspect_ratio = im_height / im_width;
+            let img_ui_height = img_ui_width * aspect_ratio;
+    
+            {
+                let rect_to_modify = open_file.anpassungen_seite
+                .entry(page)
+                .or_insert_with(|| AnpassungSeite::default())
+                .spalten
+                .entry(column_id.clone())
+                .or_insert_with(|| Rect {
+                    min_x: current_column.min_x,
+                    max_x: current_column.max_x,
+                    min_y: current_column.min_y,
+                    max_y: current_column.max_y,
+                });
+                
+                match direction.as_str() {
+                    "n" => { rect_to_modify.min_y = number / img_ui_height * page_height; },
+                    "s" => { rect_to_modify.max_y = number / img_ui_height * page_height; },
+                    "e" => { rect_to_modify.min_x = number / img_ui_width * page_width; },
+                    "w" => { rect_to_modify.max_x = number / img_ui_width * page_width; },
+                    _ => return,
+                };
+            }
+            
+            let new_column = match open_page.typ.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
+                Some(s) => s.clone(),
+                None => return,
+            };
+            
+            let new_width = (new_column.max_x - new_column.min_x).abs() / page_width * img_ui_width;
+            let new_height = (new_column.max_y - new_column.min_y).abs() / page_height * img_ui_height;
+            let new_x = new_column.min_x.min(new_column.max_x) / page_width * img_ui_width;
+            let new_y = new_column.min_y.min(new_column.max_y) / page_height * img_ui_height;
+
+            // speichern
+            let default_parent = Path::new("/");
+            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
+            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
+                let _ = std::fs::write(&target_output_path, json.as_bytes());
+            }
+        
+            webview.eval(&format!("adjustColumn(`{}`,`{}`,`{}`,`{}`,`{}`)", column_id, new_width, new_height, new_x, new_y));
+        },
+        Cmd::ToggleCheckBox { checkbox_id } => {
+            match checkbox_id.as_str() {
+                "konfiguration-clean-ocr" => {
+                    data.konfiguration.kein_autojoin_ocr_zeilen = !data.konfiguration.kein_autojoin_ocr_zeilen;
+                },
+                "konfiguration-spalten-anzeigen" => {
+                    data.konfiguration.spalten_anzeigen = !data.konfiguration.spalten_anzeigen;
+                }
+                _ => return,
+            }
+            
+            data.konfiguration.speichern();
         },
         Cmd::ImportNebenbeteiligte => {
             
@@ -1916,8 +2070,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => { },
             };
                         
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
+            webview.eval(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
         },
     }
 }
@@ -2047,7 +2200,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
     tsv
 }
 
-fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
+fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[u32]) {
         
     let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
     
@@ -2056,35 +2209,60 @@ fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
     let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
     let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
     let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            
+        
+    let datei_bytes = match fs::read(&pdf.datei) {
+        Ok(s) => s,
+        Err(e) => return,
+    };
+    
+    let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, seiten_neu.as_ref(), &pdf.titelblatt);
+
     for sz in seiten_neu {
 
-        let seitentyp = match pdf.klassifikation_neu.get(sz) {
+        if digitalisiere::ocr_seite(&pdf.titelblatt, *sz, max_sz).is_err() { continue; }
+
+        let seitentyp = match pdf.klassifikation_neu.get(&(*sz as usize)) {
             Some(s) => *s,
             None => {
-                match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, *sz as u32, max_sz) { 
+                match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, *sz, max_sz) { 
                     Ok(o) => o, 
                     Err(_) => continue, 
                 }
             }
         };
-                
-        let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, *sz as u32, max_sz, seitentyp, &pdf.pdftotext_layout, pdf.anpassungen_seite.get(sz)) { 
+                        
+        let spalten = match digitalisiere::formularspalten_ausschneiden(
+            &pdf.titelblatt, 
+            *sz, 
+            max_sz, 
+            seitentyp, 
+            &pdf.pdftotext_layout, 
+            pdf.anpassungen_seite.get(&(*sz as usize))
+        ) { 
             Ok(o) => o, 
             Err(e) => {
+                println!("FEHLER: {:?}", e);
                 continue;
             }, 
         };
+                        
+        if digitalisiere::ocr_spalten(&pdf.titelblatt, *sz, max_sz, &spalten).is_err() { continue; }
         
-        if digitalisiere::ocr_spalten(&pdf.titelblatt, *sz as u32, max_sz, &spalten).is_err() { continue; }
-        let textbloecke = match digitalisiere::textbloecke_aus_spalten(&pdf.titelblatt, *sz as u32, &spalten, &pdf.pdftotext_layout) { 
+        let textbloecke = match digitalisiere::textbloecke_aus_spalten(
+            &pdf.titelblatt, 
+            *sz, 
+            &spalten, 
+            &pdf.pdftotext_layout,
+            pdf.anpassungen_seite.get(&(*sz as usize))
+        ) { 
             Ok(o) => o, 
             Err(e) => {
+                println!("FEHLER: {:?}", e);
                 continue;
             }, 
         };
   
-        pdf.geladen.insert(*sz as u32, SeiteParsed {
+        pdf.geladen.insert(*sz, SeiteParsed {
             typ: seitentyp,
             texte: textbloecke,
         });
@@ -2109,89 +2287,112 @@ fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[usize]) {
 }
 
 fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
-    
-    for pdf in pdfs {
-    
-        rayon::spawn(move || {
+    std::thread::spawn(move || {
+        for pdf in pdfs {
         
-            let mut pdf = pdf;
+            rayon::spawn(move || {
             
-            let datei_bytes = match fs::read(&pdf.datei).ok() {
-                Some(s) => s,
-                None => return,
-            };
-            
-            let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
-            
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&pdf.datei).clone().parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
-            let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+                let mut pdf = pdf;
+                
+                let datei_bytes = match fs::read(&pdf.datei).ok() {
+                    Some(s) => s,
+                    None => return,
+                };
+                
+                let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
+                
+                let default_parent = Path::new("/");
+                let output_parent = Path::new(&pdf.datei).clone().parent().unwrap_or(&default_parent).to_path_buf();
+                let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
+                let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
+                let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
 
-            if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
-                pdf = cached_pdf;
-            }
-            if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
-                pdf = target_pdf;
-            }
-            
-            let seitenzahlen_zu_laden = pdf.seitenzahlen
-                .iter()
-                .filter(|sz| !pdf.geladen.contains_key(sz))
-                .copied()
-                .collect::<Vec<_>>();
-
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf.analysiert.bestandsverzeichnis);
-                        
-            let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
-            let _ = std::fs::write(&cache_output_path, json.as_bytes());
-            
-            for sz in seitenzahlen_zu_laden {
-            
-                if digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], &pdf.titelblatt).is_err() { continue; };
-                let pdftotext_layout = match digitalisiere::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { Ok(o) => o, Err(_) => continue, };
-                for (k, v) in pdftotext_layout.seiten.iter() {
-                    pdf.pdftotext_layout.seiten.insert(k.clone(), v.clone());
+                if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                    pdf = cached_pdf;
                 }
-                if digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz).is_err() { continue; }
-                let seitentyp = match pdf.klassifikation_neu.get(&(sz as usize)) {
-                    Some(s) => *s,
-                    None => {
-                        match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz) { 
-                            Ok(o) => o, 
-                            Err(_) => continue, 
-                        }
-                    }
-                };
-                let spalten = match digitalisiere::formularspalten_ausschneiden(&pdf.titelblatt, sz, max_sz, seitentyp, &pdftotext_layout, pdf.anpassungen_seite.get(&(sz as usize))) { Ok(o) => o, Err(_) => continue, };
-                if digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
-                let textbloecke = match digitalisiere::textbloecke_aus_spalten(&pdf.titelblatt, sz, &spalten, &pdftotext_layout) { Ok(o) => o, Err(_) => continue, };
+                if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                    pdf = target_pdf;
+                }
                 
-                pdf.geladen.insert(sz, SeiteParsed {
-                    typ: seitentyp,
-                    texte: textbloecke,
-                });
+                let seitenzahlen_zu_laden = pdf.seitenzahlen
+                    .iter()
+                    .filter(|sz| !pdf.geladen.contains_key(sz))
+                    .copied()
+                    .collect::<Vec<_>>();
 
-                pdf.analysiert = match analysiere_grundbuch(&pdf) { 
-                    Some(o) => o, 
-                    None => continue, 
-                };
-                
-                let json = match serde_json::to_string_pretty(&pdf) { 
-                    Ok(o) => o, 
-                    Err(_) => continue, 
-                };
-
+                crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf.analysiert.bestandsverzeichnis);
+                            
+                let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
                 let _ = std::fs::write(&cache_output_path, json.as_bytes());
-            }
-            
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf.analysiert.bestandsverzeichnis);
+                
+                let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &seitenzahlen_zu_laden, &pdf.titelblatt);
+                                
+                for sz in seitenzahlen_zu_laden {
+                
+                    let pdftotext_layout = match digitalisiere::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { Ok(o) => o, Err(_) => continue, };
+                    for (k, v) in pdftotext_layout.seiten.iter() {
+                        pdf.pdftotext_layout.seiten.insert(k.clone(), v.clone());
+                    }
+                    if digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz).is_err() { continue; }
+                    let seitentyp = match pdf.klassifikation_neu.get(&(sz as usize)) {
+                        Some(s) => *s,
+                        None => {
+                            match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz) { 
+                                Ok(o) => o, 
+                                Err(_) => continue, 
+                            }
+                        }
+                    };
+                    let spalten = match digitalisiere::formularspalten_ausschneiden(
+                        &pdf.titelblatt, 
+                        sz, 
+                        max_sz, 
+                        seitentyp, 
+                        &pdftotext_layout, 
+                        pdf.anpassungen_seite.get(&(sz as usize))
+                    ) { 
+                        Ok(o) => o, 
+                        Err(_) => continue, 
+                    };
+                    
+                    if digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
+                    
+                    let textbloecke = match digitalisiere::textbloecke_aus_spalten(
+                        &pdf.titelblatt, 
+                        sz, 
+                        &spalten, 
+                        &pdftotext_layout,
+                        pdf.anpassungen_seite.get(&(sz as usize))
+                    ) { 
+                        Ok(o) => o, 
+                        Err(_) => continue, 
+                    };
+                    
+                    pdf.geladen.insert(sz, SeiteParsed {
+                        typ: seitentyp,
+                        texte: textbloecke,
+                    });
 
-            let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
-            let _ = std::fs::write(&target_output_path, json.as_bytes());
-        });
-    }
+                    pdf.analysiert = match analysiere_grundbuch(&pdf) { 
+                        Some(o) => o, 
+                        None => continue, 
+                    };
+                    
+                    let json = match serde_json::to_string_pretty(&pdf) { 
+                        Ok(o) => o, 
+                        Err(_) => continue, 
+                    };
+
+                    let _ = std::fs::write(&cache_output_path, json.as_bytes());
+                }
+                
+                crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf.analysiert.bestandsverzeichnis);
+
+                let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
+                let _ = std::fs::write(&target_output_path, json.as_bytes());
+            });
+        }
+    });
 }
 
 fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
@@ -2214,6 +2415,119 @@ fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
     Some(gb)
 }
 
+fn reload_grundbuch(pdf: PdfFile) {
+
+    use tinyfiledialogs::MessageBoxIcon;
+            
+    std::thread::spawn(move || {
+        if let Err(e) = reload_grundbuch_inner(pdf) {
+            tinyfiledialogs::message_box_ok(
+                "Fehler",
+                &format!("Fehler beim Laden des Grundbuchs: {:?}", e),
+                MessageBoxIcon::Error,
+            );
+        }    
+    });
+}
+
+fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
+    
+    use rayon::prelude::*;
+    
+    let datei_bytes = match fs::read(&pdf.datei) {
+        Ok(s) => s,
+        Err(e) => return Err(Fehler::Io(pdf.datei.clone(), e)),
+    };
+        
+    let seitenzahlen_zu_laden = pdf.seitenzahlen.clone();
+    let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
+    let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, seitenzahlen_zu_laden.as_ref(), &pdf.titelblatt)?;
+    
+    let ist_geladen = pdf.ist_geladen();
+    
+    pdf.geladen.clear();
+    pdf.analysiert = Grundbuch::default();
+    
+    let default_parent = Path::new("/");
+    let output_parent = Path::new(&pdf.datei).clone().parent().unwrap_or(&default_parent).to_path_buf();
+    let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
+    let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
+    let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+            
+    for sz in seitenzahlen_zu_laden {
+            
+        if digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz).is_err() { 
+            continue; 
+        }
+                            
+        let seitentyp = match pdf.klassifikation_neu.get(&(sz as usize)) {
+            Some(s) => *s,
+            None => {
+                match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz) { 
+                    Ok(o) => o, 
+                    Err(e) => {
+                        println!("Fehler beim klassifizieren: {:?}", e);
+                        continue;
+                    }, 
+                }
+            }
+        };
+                
+        let spalten = match digitalisiere::formularspalten_ausschneiden(
+            &pdf.titelblatt, 
+            sz, 
+            max_sz, 
+            seitentyp, 
+            &pdf.pdftotext_layout, 
+            pdf.anpassungen_seite.get(&(sz as usize)),
+        ) { 
+            Ok(o) => o, 
+            Err(e) => continue, 
+        };
+        
+        let _ = digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten)?;
+
+        let textbloecke = digitalisiere::textbloecke_aus_spalten(
+            &pdf.titelblatt, 
+            sz, 
+            &spalten, 
+            &pdf.pdftotext_layout,
+            pdf.anpassungen_seite.get(&(sz as usize)),
+        )?;
+  
+        pdf.geladen.insert(sz, SeiteParsed {
+            typ: seitentyp,
+            texte: textbloecke,
+        });
+
+        pdf.analysiert = match analysiere_grundbuch(&pdf) { 
+            Some(o) => o, 
+            None => continue, 
+        };
+        
+        let json = match serde_json::to_string_pretty(&pdf) { 
+            Ok(o) => o, 
+            Err(_) => continue, 
+        };
+
+        let _ = std::fs::write(&cache_output_path, json.as_bytes());
+    }
+
+    pdf.analysiert = match analysiere_grundbuch(&pdf) { 
+        Some(o) => o, 
+        None => return Ok(()), 
+    };
+    
+    let json = match serde_json::to_string_pretty(&pdf) { 
+        Ok(o) => o, 
+        Err(_) => return Ok(()), 
+    };
+
+    let _ = std::fs::write(&cache_output_path, json.as_bytes());
+    let _ = std::fs::write(&target_output_path, json.as_bytes());
+
+    Ok(())
+}
 
 pub fn python_exec_kuerze_text_abt3<'py>(
     py: Python<'py>,

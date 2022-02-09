@@ -252,29 +252,31 @@ pub fn lese_titelblatt(pdf_bytes: &[u8]) -> Result<Titelblatt, Fehler> {
 // Konvertiert alle Seiten zu PNG Dateien (für Schrifterkennung)
 pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], titelblatt: &Titelblatt) -> Result<(), Fehler> {
     
+    use std::path::Path;
+    
     let temp_ordner = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
     
     let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
     
-    // TODO -nocache option!
-    // let _ = fs::remove_dir_all(temp_ordner.clone());
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
 
     let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-        
-    let _ = fs::remove_file(temp_pdf_pfad.clone());
-    fs::write(temp_pdf_pfad.clone(), pdf_bytes)
-        .map_err(|e| Fehler::Io(format!("{}", temp_pdf_pfad.display()), e))?;
-
-    let pdf_clean = clean_pdf(pdf_bytes, titelblatt)?;
+    
+    if !Path::new(&temp_pdf_pfad).exists() {
+        fs::write(temp_pdf_pfad.clone(), pdf_bytes)
+            .map_err(|e| Fehler::Io(format!("{}", temp_pdf_pfad.display()), e))?;
+    }
+    
     let temp_clean_pdf_pfad = temp_ordner.clone().join("temp-clean.pdf");
+    if !Path::new(&temp_clean_pdf_pfad).exists() {
+        let pdf_clean = clean_pdf(pdf_bytes, titelblatt)?;
+    
+        fs::write(temp_clean_pdf_pfad.clone(), pdf_clean)
+            .map_err(|e| Fehler::Io(format!("{}", temp_clean_pdf_pfad.display()), e))?;
+    }
         
-    let _ = fs::remove_file(temp_clean_pdf_pfad.clone());
-    fs::write(temp_clean_pdf_pfad.clone(), pdf_clean)
-        .map_err(|e| Fehler::Io(format!("{}", temp_clean_pdf_pfad.display()), e))?;
-
     seitenzahlen
     .par_iter()
     .for_each(|sz| {
@@ -297,12 +299,13 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
             .arg(&format!("{}", temp_ordner.clone().join(format!("page")).display()))     
             .status();
         }
-        
-        let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(*sz, max_sz)));
-
-        if !pdftoppm_output_path.exists() {
+                
+        let pdftoppm_clean_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(*sz, max_sz)));
+                
+        if !pdftoppm_clean_output_path.exists() {
+                
             // pdftoppm -q -r 150 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
-            // writes result to /tmp/test-01.png
+            // writes result to /tmp/page-clean-01.png
             let _ = Command::new("pdftoppm")
             .arg("-q")
             .arg("-r")
@@ -1219,14 +1222,42 @@ pub fn formularspalten_ausschneiden(
 
     use image::ImageOutputFormat;
     use std::fs::File;
+    use std::path::Path;
     
     let columns = seitentyp.get_columns(anpassungen_seite);
+    let temp_dir = std::env::temp_dir().join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
+
+    let columns_to_recalc = 
+    columns
+    .clone()
+    .par_iter()
+    .enumerate()
+    .filter_map(|(col_idx, col)| {
+        
+        let cropped_output_path = temp_dir.clone().join(format!("page-{}-col-{:02}-{:02}-{:02}-{:02}-{:02}.png", 
+            formatiere_seitenzahl(seitenzahl, max_seitenzahl), 
+            col_idx,
+            col.min_x,
+            col.min_y,
+            col.max_x,
+            col.max_y,
+        ));
+        
+        if Path::new(&cropped_output_path).exists() {
+            None
+        } else {
+            Some((col_idx, col.clone(), cropped_output_path))
+        }
+    }).collect::<Vec<_>>();
+    
+    if columns_to_recalc.is_empty() { 
+        return Ok(columns); 
+    }
     
     let seite = pdftotext_layout.seiten
         .get(&seitenzahl)
         .ok_or(Fehler::FalscheSeitenZahl(seitenzahl))?;
     
-    let temp_dir = std::env::temp_dir().join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
     let _ = fs::create_dir_all(temp_dir.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_dir.clone().display()), e))?;
     
@@ -1262,19 +1293,15 @@ pub fn formularspalten_ausschneiden(
     
     im = image::DynamicImage::ImageRgb8(rgb_bytes);
     
-    columns
-    .clone()
-    .par_iter()
-    .enumerate()
-    .for_each(|(col_idx, col)| {
-
-        let cropped_output_path = temp_dir.clone().join(format!("page-{}-col-{:02}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl), col_idx));
-
+    columns_to_recalc
+    .into_par_iter()
+    .for_each(|(col_idx, col, col_path)| {
+        
         // crop columns of image
         let x = col.min_x / page_width * im_width as f32;
         let y = col.min_y / page_height * im_height as f32;
         let width = (col.max_x - col.min_x) / page_width * im_width as f32;
-        let height = (col.max_y - col.min_y) / page_width * im_width as f32;
+        let height = (col.max_y - col.min_y) / page_height * im_height as f32;
         
         let cropped = im.crop_imm(
             x.round().max(0.0) as u32, 
@@ -1282,9 +1309,8 @@ pub fn formularspalten_ausschneiden(
             width.round().max(0.0) as u32, 
             height.round().max(0.0) as u32, 
         );
-                
-        // TODO: underline???
-        if let Ok(mut output_file) = File::create(cropped_output_path.clone()) {
+        
+        if let Ok(mut output_file) = File::create(col_path.clone()) {
             let _ = cropped.write_to(&mut output_file, ImageOutputFormat::Png);
         }
     });
@@ -1306,18 +1332,41 @@ pub fn formatiere_seitenzahl(zahl: u32, max_seiten: u32) -> String {
 // Lässt die Schrifterkennung über die Spalten laufen, Ausgabe in .hocr Dateien
 pub fn ocr_spalten(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32, spalten: &[Column]) -> Result<(), Fehler> {
     
+    use std::path::Path;
+    
     let temp_dir = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
 
     for (col_idx, col) in spalten.iter().enumerate() {
         
-        let cropped_output_path = temp_dir.clone().join(format!("page-{}-col-{:02}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl), col_idx));
-        let tesseract_output_path = temp_dir.clone().join(format!("tesseract-{:02}-col-{:02}.txt", seitenzahl, col_idx));
-
+        let cropped_output_path = temp_dir.clone().join(format!("page-{}-col-{:02}-{:02}-{:02}-{:02}-{:02}.png", 
+            formatiere_seitenzahl(seitenzahl, max_seitenzahl), 
+            col_idx,
+            col.min_x,
+            col.min_y,
+            col.max_x,
+            col.max_y,
+        ));
+        
+        let tesseract_path = format!("tesseract-{:02}-col-{:02}-{:02}-{:02}-{:02}-{:02}", 
+            seitenzahl, 
+            col_idx,
+            col.min_x,
+            col.min_y,
+            col.max_x,
+            col.max_y
+        );
+            
+        let tesseract_output_path = temp_dir.clone().join(format!("{}.hocr", tesseract_path));
+        
+        if Path::new(&tesseract_output_path).exists() {
+            continue;
+        }
+        
         if col.is_number_column {
             let _ = Command::new("tesseract")
             .arg(&format!("{}", cropped_output_path.display()))
-            .arg(&format!("{}", temp_dir.clone().join(format!("tesseract-{:02}-col-{:02}", seitenzahl, col_idx)).display()))     
+            .arg(&format!("{}", temp_dir.clone().join(tesseract_path.clone()).display()))     
             .arg("--dpi")
             .arg("600")
             .arg("--psm")
@@ -1332,7 +1381,7 @@ pub fn ocr_spalten(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32
         } else {
             let _ = Command::new("tesseract")
             .arg(&format!("{}", cropped_output_path.display()))
-            .arg(&format!("{}", temp_dir.clone().join(format!("tesseract-{:02}-col-{:02}", seitenzahl, col_idx)).display()))     
+            .arg(&format!("{}", temp_dir.clone().join(tesseract_path.clone()).display()))     
             .arg("--dpi")
             .arg("600")
             .arg("--psm")
@@ -1401,7 +1450,13 @@ pub fn zeilen_aus_tesseract_hocr(tesseract_hocr_path: String) -> Result<Vec<Stri
 }
 
 // Liest die Textblöcke aus den Spalten (mit Koordinaten in Pixeln) aus
-pub fn textbloecke_aus_spalten(titelblatt: &Titelblatt, seitenzahl: u32, spalten: &[Column], pdftotext: &PdfToTextLayout) -> Result<Vec<Vec<Textblock>>, Fehler> {
+pub fn textbloecke_aus_spalten(
+    titelblatt: &Titelblatt, 
+    seitenzahl: u32, 
+    spalten: &[Column], 
+    pdftotext: &PdfToTextLayout,
+    anpassungen_seite: Option<&AnpassungSeite>,
+) -> Result<Vec<Vec<Textblock>>, Fehler> {
     
     let temp_dir = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
@@ -1412,8 +1467,18 @@ pub fn textbloecke_aus_spalten(titelblatt: &Titelblatt, seitenzahl: u32, spalten
 
         // Textblöcke tesseract
         
-        let tesseract_hocr_path = temp_dir.clone()
-            .join(format!("tesseract-{:02}-col-{:02}.hocr", seitenzahl, col_idx));
+        let zeilen_vordefiniert = anpassungen_seite.map(|aps| aps.zeilen.clone()).unwrap_or_default();
+        
+        let tesseract_path = format!("tesseract-{:02}-col-{:02}-{:02}-{:02}-{:02}-{:02}", 
+            seitenzahl, 
+            col_idx,
+            col.min_x,
+            col.min_y,
+            col.max_x,
+            col.max_y
+        );
+            
+        let tesseract_hocr_path = temp_dir.clone().join(format!("{}.hocr", tesseract_path));
 
         // Read /tmp/tesseract-01-col-00.hocr
         let hocr_tesseract = fs::read_to_string(tesseract_hocr_path.clone())
@@ -1423,166 +1488,175 @@ pub fn textbloecke_aus_spalten(titelblatt: &Titelblatt, seitenzahl: u32, spalten
             .one(hocr_tesseract.as_str());
         
         let css_selector = ".ocr_line";
-        
-        let mut block_start_y = 0.0;
-        let mut block_end_y = 0.0;
-        let mut block_start_x = 0.0;
-        let mut block_end_x = 0.0;
-        
+            
         let mut text_blocks = Vec::new();
-        let mut current_text_block = Vec::new();
-        
-        if let Ok(m) = document.select(css_selector) {
+        if zeilen_vordefiniert.is_empty() {
+            
+            let mut block_start_y = 0.0;
+            let mut block_end_y = 0.0;
+            let mut block_start_x = 0.0;
+            let mut block_end_x = 0.0;
+            
+            let mut current_text_block = Vec::new();
+            
+            if let Ok(m) = document.select(css_selector) {
 
-            for css_match in m {
-                
-                let as_node = css_match.as_node();
-                let as_element = match as_node.as_element() {
-                    Some(s) => s,
-                    None => continue,
-                };
-                
-                let bbox_attribute = as_element.attributes.borrow();
-                let bbox = (&*bbox_attribute)
-                .get("title")
-                .and_then(|b| b.split(";").next());
-                
-                let line_text = as_node
-                    .text_contents()
-                    .lines()
-                    .map(|l| l.trim().to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .trim()
-                    .to_string();
-                
-                // "bbox 882 201 1227 254"
-                let bbox_clean = match bbox {
-                    Some(s) => s,
-                    None => continue,
-                };
-                
-                // startx, starty, endx, endy
-                // 882 201 1227 254
-                let bbox = bbox_clean.replace("bbox", "");
-                let values = bbox
-                    .trim()
-                    .split_whitespace()
-                    .filter_map(|s| s.parse::<f32>().ok())
-                    .collect::<Vec<_>>();
-                
-                let current_line_start_x = match values.get(0) {
-                    Some(s) => *s,
-                    None => continue,
-                };
-                
-                let current_line_start_y = match values.get(1) {
-                    Some(s) => *s,
-                    None => continue,
-                };
-                
-                let current_line_end_x = match values.get(2) {
-                    Some(s) => *s,
-                    None => continue,
-                };
-                
-                let current_line_end_y = match values.get(3) {
-                    Some(s) => *s,
-                    None => continue,
-                };
-                
-                // new text block start
-                if current_line_start_y > block_end_y + col.line_break_after_px && 
-                !current_text_block.is_empty() {
-                    text_blocks.push(Textblock {
-                        text: current_text_block.join("\r\n"),
-                        start_y: block_start_y,
-                        end_y: block_end_y,
-                        start_x: block_start_x,
-                        end_x: block_end_x,
-                    });
+                for css_match in m {
                     
-                    block_start_y = current_line_start_y;
-                    block_end_y = current_line_start_y;
-                    block_start_x = current_line_start_x;
-                    block_end_x = current_line_start_x;
-                    current_text_block.clear();
+                    let as_node = css_match.as_node();
+                    let as_element = match as_node.as_element() {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    
+                    let bbox_attribute = as_element.attributes.borrow();
+                    let bbox = (&*bbox_attribute)
+                    .get("title")
+                    .and_then(|b| b.split(";").next());
+                    
+                    let line_text = as_node
+                        .text_contents()
+                        .lines()
+                        .map(|l| l.trim().to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
+                    
+                    // "bbox 882 201 1227 254"
+                    let bbox_clean = match bbox {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    
+                    // startx, starty, endx, endy
+                    // 882 201 1227 254
+                    let bbox = bbox_clean.replace("bbox", "");
+                    let values = bbox
+                        .trim()
+                        .split_whitespace()
+                        .filter_map(|s| s.parse::<f32>().ok())
+                        .collect::<Vec<_>>();
+                    
+                    let current_line_start_x = match values.get(0) {
+                        Some(s) => *s,
+                        None => continue,
+                    };
+                    
+                    let current_line_start_y = match values.get(1) {
+                        Some(s) => *s,
+                        None => continue,
+                    };
+                    
+                    let current_line_end_x = match values.get(2) {
+                        Some(s) => *s,
+                        None => continue,
+                    };
+                    
+                    let current_line_end_y = match values.get(3) {
+                        Some(s) => *s,
+                        None => continue,
+                    };
+                    
+                    // new text block start
+                    if current_line_start_y > block_end_y + col.line_break_after_px && 
+                    !current_text_block.is_empty() {
+                        text_blocks.push(Textblock {
+                            text: current_text_block.join("\r\n"),
+                            start_y: block_start_y,
+                            end_y: block_end_y,
+                            start_x: block_start_x,
+                            end_x: block_end_x,
+                        });
+                        
+                        block_start_y = current_line_start_y;
+                        block_end_y = current_line_start_y;
+                        block_start_x = current_line_start_x;
+                        block_end_x = current_line_start_x;
+                        current_text_block.clear();
+                    }
+                    
+                    block_end_y = current_line_end_y.max(block_end_y);
+                    block_end_x = current_line_end_x.max(block_end_x);
+                    current_text_block.push(line_text.clone());
                 }
-                
-                block_end_y = current_line_end_y.max(block_end_y);
-                block_end_x = current_line_end_x.max(block_end_x);
-                current_text_block.push(line_text.clone());
             }
-        }
-        
-        if !current_text_block.is_empty() {
-            text_blocks.push(Textblock {
-                text: current_text_block.join("\r\n"),
-                start_y: block_start_y,
-                end_y: block_end_y,
-                start_x: block_start_x,
-                end_x: block_end_x,
-            });
-        }
-        
-        // Textblöcke pdftotext
-        let texts_on_page = pdftotext.seiten.get(&seitenzahl).map(|s| s.texte.clone()).unwrap_or_default();
-        for t in texts_on_page {
-            if column_contains_point(col, t.start_x, t.start_y) {
-                let mut merge = false;
-                
-                if let Some(last_y) = text_blocks.last().map(|last_t| last_t.end_y) {
-                    if t.start_y - last_y < col.line_break_after_px {
-                        merge = true;
+            
+            if !current_text_block.is_empty() {
+                text_blocks.push(Textblock {
+                    text: current_text_block.join("\r\n"),
+                    start_y: block_start_y,
+                    end_y: block_end_y,
+                    start_x: block_start_x,
+                    end_x: block_end_x,
+                });
+            }
+            
+            // Textblöcke pdftotext
+            let texts_on_page = pdftotext.seiten.get(&seitenzahl).map(|s| s.texte.clone()).unwrap_or_default();
+            for t in texts_on_page {
+                if column_contains_point(col, t.start_x, t.start_y) {
+                    let mut merge = false;
+                    
+                    if let Some(last_y) = text_blocks.last().map(|last_t| last_t.end_y) {
+                        if t.start_y - last_y < col.line_break_after_px {
+                            merge = true;
+                        }
+                    }
+                    
+                    if merge {
+                        if let Some(l) = text_blocks.last_mut() {
+                            l.text.push_str(&format!(" {}", t.text));
+                            l.end_x = l.end_x.max(t.end_x);
+                            l.start_x = l.start_x.min(t.start_x);
+                            l.start_y = l.start_y.min(t.start_y);
+                            l.end_y = l.end_y.max(t.end_y);
+                        }
+                    } else {
+                        text_blocks.push(t.clone());
                     }
                 }
-                
-                if merge {
-                    if let Some(l) = text_blocks.last_mut() {
-                        l.text.push_str(&format!(" {}", t.text));
-                        l.end_x = l.end_x.max(t.end_x);
-                        l.start_x = l.start_x.min(t.start_x);
-                        l.start_y = l.start_y.min(t.start_y);
-                        l.end_y = l.end_y.max(t.end_y);
-                    }
-                } else {
-                    text_blocks.push(t.clone());
-                }
             }
+        } else {
+            
         }
         
         Ok(text_blocks)
     }).collect::<Result<Vec<Vec<Textblock>>, Fehler>>()?)
 }
 
-pub const OP_PATH_CONST_MOVE_TO: &str                        = "m";
-/// Straight line to the two following points
-pub const OP_PATH_CONST_LINE_TO: &str                        = "l";
-/// Cubic bezier over four following points
-pub const OP_PATH_CONST_4BEZIER: &str                        = "c";
-/// Cubic bezier with two points in v1
-pub const OP_PATH_CONST_3BEZIER_V1: &str                     = "v";
-/// Cubic bezier with two points in v2
-pub const OP_PATH_CONST_3BEZIER_V2: &str                     = "y";
-/// Add rectangle to the path (width / height): x y width height re
-pub const OP_PATH_CONST_RECT: &str                           = "re";
-/// Close current sub-path (for appending custom patterns along line)
-pub const OP_PATH_CONST_CLOSE_SUBPATH: &str                  = "h";
-/// Current path is a clip path, non-zero winding order (usually in like `h W S`)
-pub const OP_PATH_CONST_CLIP_NZ: &str = "W";
-/// Current path is a clip path, non-zero winding order
-pub const OP_PATH_CONST_CLIP_EO: &str = "W*";
+/// Stroke path
+pub const OP_PATH_PAINT_STROKE: &str                         = "S";
+/// Close and stroke path
+pub const OP_PATH_PAINT_STROKE_CLOSE: &str                   = "s";
+/// Fill path using nonzero winding number rule
+pub const OP_PATH_PAINT_FILL_NZ: &str                        = "f";
+/// Fill path using nonzero winding number rule (obsolete)
+pub const OP_PATH_PAINT_FILL_NZ_OLD: &str                    = "F";
+/// Fill path using even-odd rule
+pub const OP_PATH_PAINT_FILL_EO: &str                        = "f*";
+/// Fill and stroke path using nonzero winding number rule
+pub const OP_PATH_PAINT_FILL_STROKE_NZ: &str                 = "B";
+/// Close, fill and stroke path using nonzero winding number rule
+pub const OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ: &str           = "b";
+/// Fill and stroke path using even-odd rule
+pub const OP_PATH_PAINT_FILL_STROKE_EO: &str                 = "B*";
+/// Close, fill and stroke path using even odd rule
+pub const OP_PATH_PAINT_FILL_STROKE_CLOSE_EO: &str           = "b*";
+/// End path without filling or stroking
+pub const OP_PATH_PAINT_END: &str                            = "n";
 
-const OPERATIONS_TO_CLEAN: &[&str;9] = &[
-    OP_PATH_CONST_MOVE_TO,
-    OP_PATH_CONST_LINE_TO,
-    OP_PATH_CONST_4BEZIER,
-    OP_PATH_CONST_3BEZIER_V1,
-    OP_PATH_CONST_3BEZIER_V2,
-    OP_PATH_CONST_RECT,
-    OP_PATH_CONST_CLOSE_SUBPATH,
-    OP_PATH_CONST_CLIP_NZ,
-    OP_PATH_CONST_CLIP_EO,
+const OPERATIONS_TO_CLEAN: &[&str;10] = &[
+    OP_PATH_PAINT_STROKE,
+    OP_PATH_PAINT_STROKE_CLOSE,
+    OP_PATH_PAINT_FILL_NZ,
+    OP_PATH_PAINT_FILL_NZ_OLD,
+    OP_PATH_PAINT_FILL_EO,
+    OP_PATH_PAINT_FILL_STROKE_NZ,
+    OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ,
+    OP_PATH_PAINT_FILL_STROKE_EO,
+    OP_PATH_PAINT_FILL_STROKE_CLOSE_EO,
+    OP_PATH_PAINT_END,
 ];
 
 use std::io::prelude::*;

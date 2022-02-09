@@ -156,6 +156,9 @@
 .kontextmenü-eintrag {
     padding: 0px 10px;
     cursor:pointer;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
     user-select: none;
 }
 

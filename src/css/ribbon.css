@@ -7,6 +7,8 @@
     font-family: sans-serif;
     padding: 2px;
     font-size: 12px;
+    user-select:none;
+    -webkit-user-select:none;
 }
 
 .__application-ribbon-section {
