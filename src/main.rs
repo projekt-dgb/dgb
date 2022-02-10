@@ -1535,6 +1535,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "bv-horz" => BestandsverzeichnisHorz,
                 "bv-horz-zu-und-abschreibungen" => BestandsverzeichnisHorzZuUndAbschreibungen,
                 "bv-vert" => BestandsverzeichnisVert,
+                "bv-vert-typ2" => BestandsverzeichnisVertTyp2,
                 "bv-vert-zu-und-abschreibungen" => BestandsverzeichnisVertZuUndAbschreibungen,
                 "abt1-horz" => Abt1Horz,
                 "abt1-vert" => Abt1Vert,

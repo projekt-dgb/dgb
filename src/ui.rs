@@ -432,6 +432,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <div class='kontextmenü-eintrag' data-seite-neu='bv-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                     Bestandsverzeichnis (Hochformat)
                 </div>
+                <div class='kontextmenü-eintrag' data-seite-neu='bv-vert-typ2' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                    Bestandsverzeichnis Variante 2 (Hochformat)
+                </div>
                 <div class='kontextmenü-eintrag' data-seite-neu='bv-vert-zu-und-abschreibungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                     Bestandsverzeichnis Zu- und Abschreibungen (Hochformat)
                 </div>
@@ -768,6 +771,7 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
               SeitenTyp::BestandsverzeichnisHorz
             | SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen
             | SeitenTyp::BestandsverzeichnisVert
+            | SeitenTyp::BestandsverzeichnisVertTyp2
             | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => {
                 "rgb(167,224,255)" // blau
             },

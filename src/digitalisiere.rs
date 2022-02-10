@@ -363,6 +363,8 @@ pub enum SeitenTyp {
 	BestandsverzeichnisHorzZuUndAbschreibungen,
     #[serde(rename = "bv-vert")]
     BestandsverzeichnisVert,
+    #[serde(rename = "bv-vert-typ2")]
+    BestandsverzeichnisVertTyp2,
     #[serde(rename = "bv-vert-zu-und-abschreibungen")]
 	BestandsverzeichnisVertZuUndAbschreibungen,
 	
@@ -491,6 +493,8 @@ pub fn klassifiziere_seitentyp(titelblatt: &Titelblatt, seitenzahl: u32, max_sz:
         } else {
             if ocr_text.contains("Abschreibungen") {
                 Ok(SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen)
+            } else if (ocr_text.contains("a/b/c") || ocr_text.contains("alb/c")) {
+                Ok(SeitenTyp::BestandsverzeichnisVertTyp2)
             } else {
                 Ok(SeitenTyp::BestandsverzeichnisVert)
             }
@@ -681,6 +685,63 @@ impl SeitenTyp {
                     max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.max_x).unwrap_or(567.0),
                     min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.min_y).unwrap_or(150.0),
                     max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert-groesse_m2")).map(|m| m.max_y).unwrap_or(810.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::BestandsverzeichnisVertTyp2 => vec![
+                
+                // "lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_vert_typ2-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr")).map(|m| m.min_x).unwrap_or(35.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr")).map(|m| m.max_x).unwrap_or(72.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr")).map(|m| m.min_y).unwrap_or(128.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Bisherige lfd. Nr."
+                Column {
+                    id: "bv_vert_typ2-bisherige_lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr")).map(|m| m.min_x).unwrap_or(75.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr")).map(|m| m.max_x).unwrap_or(110.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr")).map(|m| m.min_y).unwrap_or(128.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Gemarkung, Flur, Flurstück
+                Column {
+                    id: "bv_vert_typ2-gemarkung_flur_flurstueck",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck")).map(|m| m.min_x).unwrap_or(115.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck")).map(|m| m.max_x).unwrap_or(230.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck")).map(|m| m.min_y).unwrap_or(128.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Wirtschaftsart und Lage
+                Column {
+                    id: "bv_vert_typ2-lage",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lage")).map(|m| m.min_x).unwrap_or(235.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lage")).map(|m| m.max_x).unwrap_or(485.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lage")).map(|m| m.min_y).unwrap_or(128.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-lage")).map(|m| m.max_y).unwrap_or(785.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // Größe (m2)
+                Column {
+                    id: "bv_vert_typ2-groesse_m2",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2")).map(|m| m.min_x).unwrap_or(490.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2")).map(|m| m.max_x).unwrap_or(555.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2")).map(|m| m.min_y).unwrap_or(128.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2")).map(|m| m.max_y).unwrap_or(785.0),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1924,7 +1985,30 @@ pub struct Bestandsverzeichnis {
     pub zuschreibungen: Vec<BvZuschreibung>,
     pub abschreibungen: Vec<BvAbschreibung>,
 }
+/*
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BvEintrag {
+    Flurstueck(BvEintragFlurstueck),
+    Recht(BvEintragRecht),
+}
 
+// Eintrag für ein grundstücksgleiches Recht
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+pub struct BvEintragRecht {
+    pub lfd_nr: usize,
+    pub zu_nr: String,
+    pub bisherige_lfd_nr: Option<usize>,
+    pub text: String,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+pub struct BvEintragFlurstueck {
+*/
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 pub struct BvEintrag {
     pub lfd_nr: usize,
@@ -2049,7 +2133,8 @@ pub fn analysiere_bv(
     .iter()
     .filter(|(num, s)| {
         s.typ == SeitenTyp::BestandsverzeichnisHorz || 
-        s.typ == SeitenTyp::BestandsverzeichnisVert
+        s.typ == SeitenTyp::BestandsverzeichnisVert ||
+        s.typ == SeitenTyp::BestandsverzeichnisVertTyp2
     }).flat_map(|(seitenzahl, s)| {
         
         let zeilen_auf_seite = anpassungen_seite
@@ -2249,7 +2334,7 @@ pub fn analysiere_bv(
                 })
                 .collect::<Vec<_>>()
             }
-        } else {
+        } else if s.typ == SeitenTyp:: BestandsverzeichnisVert {
             if !zeilen_auf_seite.is_empty() {
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                     
@@ -2389,6 +2474,138 @@ pub fn analysiere_bv(
                 })
                 .collect::<Vec<_>>()
             }
+        } else if s.typ == SeitenTyp::BestandsverzeichnisVertTyp2 {
+            if !zeilen_auf_seite.is_empty() {
+                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                    
+                    let lfd_nr = s.texte
+                    .get(0)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    }).unwrap_or(0);
+                    
+                    let bisherige_lfd_nr = s.texte
+                    .get(1)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let mut gemarkung = None;
+                    let mut flurstueck = String::new();
+                    let mut flur = 0;
+                    
+                    if let Some(s) = s.texte.get(2).and_then(|zeilen| zeilen.get(i)) {
+                        let mut split_whitespace = s.text.trim().split_whitespace().rev();
+                        
+                        flurstueck = split_whitespace.next().map(|s| {
+                            String::from_iter(s.chars().filter(|c| c.is_numeric() || *c == '/'))
+                        }).unwrap_or_default();
+                        flur = split_whitespace.next().and_then(|s| {
+                            let numeric_chars = String::from_iter(s.chars().filter(|c| c.is_numeric()));
+                            numeric_chars.parse::<usize>().ok()
+                        }).unwrap_or_default();
+                        let gemarkung_str = split_whitespace.into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
+                        gemarkung = if gemarkung_str.is_empty() { None } else { Some(gemarkung_str) };
+                    }
+                    
+                    let bezeichnung = s.texte
+                    .get(3)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
+                    
+                    let m2 = s.texte
+                    .get(4)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let groesse = FlurstueckGroesse::Metrisch { m2 };
+                        
+                    BvEintrag {
+                        lfd_nr,
+                        bisherige_lfd_nr,
+                        flur,
+                        flurstueck,
+                        gemarkung,
+                        bezeichnung,
+                        groesse,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                s.texte.get(0)
+                .unwrap_or(&default_texte)
+                .iter().enumerate()
+                .filter_map(|(lfd_num, ldf_nr_text)| {
+                                
+                    // TODO: auch texte "1-3"
+                    let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
+                    
+                    let lfd_nr_start_y = ldf_nr_text.start_y;
+                    let lfd_nr_end_y = ldf_nr_text.end_y;
+                    
+                    last_lfd_nr = lfd_nr;
+                    
+                    let bisherige_lfd_nr = get_erster_text_bei_ca(
+                        &s.texte.get(1).unwrap_or(&default_texte),
+                        lfd_num,
+                        lfd_nr_start_y,
+                        lfd_nr_end_y,
+                    ).and_then(|t| t.text.parse::<usize>().ok());
+                    
+                    let mut gemarkung = None;
+                    let mut flurstueck = String::new();
+                    let mut flur = 0;
+                    
+                    if let Some(s) = get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y) {
+                        let mut split_whitespace = s.text.trim().split_whitespace().rev();
+                        
+                        flurstueck = split_whitespace.next().map(|s| {
+                            String::from_iter(s.chars().filter(|c| c.is_numeric() || *c == '/'))
+                        }).unwrap_or_default();
+                        flur = split_whitespace.next().and_then(|s| {
+                            let numeric_chars = String::from_iter(s.chars().filter(|c| c.is_numeric()));
+                            numeric_chars.parse::<usize>().ok()
+                        }).unwrap_or_default();
+                        let gemarkung_str = split_whitespace.into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
+                        gemarkung = if gemarkung_str.is_empty() { None } else { Some(gemarkung_str) };
+                    }
+                        
+                    let bezeichnung = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
+                        .map(|t| t.text.trim().to_string());
+                    
+                    let groesse = {
+                        let m2 = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
+                        .and_then(|t| t.text.parse::<usize>().ok());
+                        FlurstueckGroesse::Metrisch { m2 }
+                    };
+                    
+                    Some(BvEintrag {
+                        lfd_nr,
+                        bisherige_lfd_nr,
+                        flur,
+                        flurstueck,
+                        gemarkung,
+                        bezeichnung,
+                        groesse,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    })
+                })
+                .collect::<Vec<_>>()
+            }
+        } else {
+            Vec::new() 
         }
     })
     .filter(|bv| !bv.ist_leer())
@@ -2648,73 +2865,123 @@ pub fn analysiere_abt1(
     anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
 ) -> Result<Abteilung1, Fehler> {
-      
+    
     let default_texte = Vec::new();
+    
     let abt1_eintraege = seiten
-    .values()
-    .filter(|s| {
+    .iter()
+    .filter(|(num, s)| {
         s.typ == SeitenTyp::Abt1Vert || 
         s.typ == SeitenTyp::Abt1Horz
-    }).flat_map(|s| {
+    }).flat_map(|(seitenzahl, s)| {
     
-        let mut texte = s.texte.clone();
-        texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-        
-        texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
-            
-            let text_start_y = text.start_y;
-            let text_end_y = text.end_y;
-
-            // TODO: bv-nr korrigieren!
-
-            // TODO: auch texte "1-3"
-            let lfd_nr = get_erster_text_bei_ca(
-                &texte.get(0).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).and_then(|s| s.text.trim().parse::<usize>().ok()).unwrap_or(0);
-            
-            let eigentuemer = get_erster_text_bei_ca(
-                &texte.get(1).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            )
-            .map(|s| s.text.trim().to_string())
+        let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
-            
-            // versehentlich Fußzeile erwischt
-            if eigentuemer.contains("JVA Branden") {
-                return None;
-            }
-            
-            let bv_nr = get_erster_text_bei_ca(
-                &texte.get(2).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).map(|t| t.text.trim().to_string())?;
-            
-            let grundlage_der_eintragung = get_erster_text_bei_ca(
-                &texte.get(3).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).map(|t| t.text.trim().to_string())?;
-            
-            Some(Abt1Eintrag {
-                lfd_nr,
-                eigentuemer,
-                bv_nr: bv_nr.to_string(),
-                grundlage_der_eintragung,
-                automatisch_geroetet: false,
-                manuell_geroetet: None,
-            })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
         
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let lfd_nr = s.texte
+                    .get(0)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    }).unwrap_or(0);
+
+                let eigentuemer = s.texte
+                .get(1)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let bv_nr = s.texte
+                .get(2)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let bv_nr = s.texte
+                .get(2)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let grundlage_der_eintragung = s.texte
+                .get(3)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                Abt1Eintrag {
+                    lfd_nr,
+                    eigentuemer,
+                    bv_nr,
+                    grundlage_der_eintragung,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                }
+            }).collect::<Vec<_>>()
+        } else {
+            let mut texte = s.texte.clone();
+            texte.get_mut(1).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+            
+            texte.get(1).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+                
+                let text_start_y = text.start_y;
+                let text_end_y = text.end_y;
+
+                // TODO: bv-nr korrigieren!
+
+                // TODO: auch texte "1-3"
+                let lfd_nr = get_erster_text_bei_ca(
+                    &texte.get(0).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).and_then(|s| s.text.trim().parse::<usize>().ok()).unwrap_or(0);
+                
+                let eigentuemer = get_erster_text_bei_ca(
+                    &texte.get(1).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                )
+                .map(|s| s.text.trim().to_string())
+                .unwrap_or_default();
+                
+                // versehentlich Fußzeile erwischt
+                if eigentuemer.contains("JVA Branden") {
+                    return None;
+                }
+                
+                let bv_nr = get_erster_text_bei_ca(
+                    &texte.get(2).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).map(|t| t.text.trim().to_string())?;
+                
+                let grundlage_der_eintragung = get_erster_text_bei_ca(
+                    &texte.get(3).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).map(|t| t.text.trim().to_string())?;
+                
+                Some(Abt1Eintrag {
+                    lfd_nr,
+                    eigentuemer,
+                    bv_nr,
+                    grundlage_der_eintragung,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                })
+            })
+            .collect::<Vec<_>>()
+        }.into_iter()
     }).collect();
     
     Ok(Abteilung1 {
@@ -3088,92 +3355,160 @@ pub fn analysiere_abt2(
 ) -> Result<Abteilung2, Fehler> {
         
     let default_texte = Vec::new();
-    let abt2_eintraege = seiten
-    .values()
-    .filter(|s| {
-        s.typ == SeitenTyp::Abt2Vert || 
-        s.typ == SeitenTyp::Abt2Horz
-    }).flat_map(|s| {
     
-        let mut texte = s.texte.clone();
-        texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+    let abt2_eintraege = seiten
+    .iter()
+    .filter(|(num, s)| {
+        s.typ == SeitenTyp::Abt2Vert || 
+        s.typ == SeitenTyp::Abt2Vert
+    }).flat_map(|(seitenzahl, s)| {
+    
+        let zeilen_auf_seite = anpassungen_seite
+        .get(&(*seitenzahl as usize))
+        .map(|aps| aps.zeilen.clone())
+        .unwrap_or_default();
         
-        texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
-            
-            let text_start_y = text.start_y;
-            let text_end_y = text.end_y;
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let lfd_nr = s.texte
+                .get(0)
+                .and_then(|zeilen| zeilen.get(i))
+                .and_then(|t| {
+                    let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                    numeric_chars.parse::<usize>().ok()
+                }).unwrap_or(0);
 
-            // TODO: bv-nr korrigieren!
-
-            // TODO: auch texte "1-3"
-            let lfd_nr = get_erster_text_bei_ca(
-                &texte.get(0).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).and_then(|s| s.text.trim().parse::<usize>().ok()).unwrap_or(0);
-                        
-            let bv_nr = get_erster_text_bei_ca(
-                &texte.get(1).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).map(|t| t.text.trim().to_string())?;
-                        
-            // versehentlich Fußzeile erwischt
-            if bv_nr.contains("JVA Branden") {
-                return None;
-            }
+                let bv_nr = s.texte
+                .get(1)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let text = s.texte
+                .get(2)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                Abt2Eintrag {
+                    lfd_nr,
+                    bv_nr,
+                    text,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                }
+            }).collect::<Vec<_>>()
+        
+        } else {
             
-            Some(Abt2Eintrag {
-                lfd_nr,
-                bv_nr: bv_nr.to_string(),
-                text: text.text.trim().to_string(),
-                automatisch_geroetet: false,
-                manuell_geroetet: None,
+            let mut texte = s.texte.clone();
+            texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+            
+            texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+                
+                let text_start_y = text.start_y;
+                let text_end_y = text.end_y;
+
+                // TODO: bv-nr korrigieren!
+
+                // TODO: auch texte "1-3"
+                let lfd_nr = get_erster_text_bei_ca(
+                    &texte.get(0).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).and_then(|s| s.text.trim().parse::<usize>().ok()).unwrap_or(0);
+                            
+                let bv_nr = get_erster_text_bei_ca(
+                    &texte.get(1).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).map(|t| t.text.trim().to_string())?;
+                            
+                // versehentlich Fußzeile erwischt
+                if bv_nr.contains("JVA Branden") {
+                    return None;
+                }
+                
+                Some(Abt2Eintrag {
+                    lfd_nr,
+                    bv_nr: bv_nr.to_string(),
+                    text: text.text.trim().to_string(),
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                })
             })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+            .collect::<Vec<_>>()   
+        }.into_iter()
         
     }).collect();
     
     let abt2_veraenderungen = seiten
-    .values()
-    .filter(|s| {
+    .iter()
+    .filter(|(num, s)| {
         s.typ == SeitenTyp::Abt2VertVeraenderungen || 
         s.typ == SeitenTyp::Abt2HorzVeraenderungen
-    }).flat_map(|s| {
-    
-        let mut texte = s.texte.clone();
-        texte.get_mut(1).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+    }).flat_map(|(seitenzahl, s)| {
 
-        texte.get(1).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
-            
-            let text_start_y = text.start_y;
-            let text_end_y = text.end_y;
+        let zeilen_auf_seite = anpassungen_seite
+        .get(&(*seitenzahl as usize))
+        .map(|aps| aps.zeilen.clone())
+        .unwrap_or_default();
+        
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let lfd_nr = s.texte
+                .get(0)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let text = s.texte
+                .get(1)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                Abt2Veraenderung {
+                    lfd_nr,
+                    text: text.trim().to_string(),
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                }
+            }).collect::<Vec<_>>()
+        } else {
+            let mut texte = s.texte.clone();
+            texte.get_mut(1).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
 
-            // TODO: bv-nr korrigieren!
+            texte.get(1).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+                
+                let text_start_y = text.start_y;
+                let text_end_y = text.end_y;
 
-            // TODO: auch texte "1-3"
-            let lfd_nr = get_erster_text_bei_ca(
-                &texte.get(0).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).map(|s| s.text.trim().to_string())?;
-                             
-            // TODO: recht analysieren!
-            
-            Some(Abt2Veraenderung {
-                lfd_nr,
-                text: text.text.trim().to_string(),
-                automatisch_geroetet: false,
-                manuell_geroetet: None,
+                // TODO: bv-nr korrigieren!
+
+                // TODO: auch texte "1-3"
+                let lfd_nr = get_erster_text_bei_ca(
+                    &texte.get(0).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).map(|s| s.text.trim().to_string())?;
+                                
+                // TODO: recht analysieren!
+                
+                Some(Abt2Veraenderung {
+                    lfd_nr,
+                    text: text.text.trim().to_string(),
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                })
             })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+            .collect::<Vec<_>>()
+        }.into_iter()
         
     }).collect();
     
@@ -3252,79 +3587,124 @@ pub fn analysiere_abt3(
     bestandsverzeichnis: &Bestandsverzeichnis
 ) -> Result<Abteilung3, Fehler> {
     
-    
     let mut last_lfd_nr = 1;
     
     let default_texte = Vec::new();
-    let abt2_eintraege = seiten
-    .values()
-    .filter(|s| {
+    
+    let abt3_eintraege = seiten
+    .iter()
+    .filter(|(num, s)| {
         s.typ == SeitenTyp::Abt3Horz || 
         s.typ == SeitenTyp::Abt3Vert
-    }).flat_map(|s| {
+    }).flat_map(|(seitenzahl, s)| {
     
-        let mut texte = s.texte.clone();
-        texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+        let zeilen_auf_seite = anpassungen_seite
+        .get(&(*seitenzahl as usize))
+        .map(|aps| aps.zeilen.clone())
+        .unwrap_or_default();
         
-        texte.get(3).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let lfd_nr = s.texte
+                .get(0)
+                .and_then(|zeilen| zeilen.get(i))
+                .and_then(|t| {
+                    let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                    numeric_chars.parse::<usize>().ok()
+                }).unwrap_or(0);
+                
+                let bv_nr = s.texte
+                .get(1)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let betrag = s.texte
+                .get(2)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let text = s.texte
+                .get(3)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                Abt3Eintrag {
+                    lfd_nr,
+                    bv_nr: bv_nr.to_string(),
+                    betrag: betrag.trim().to_string(),
+                    text: text.trim().to_string(),
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                }
+            }).collect::<Vec<_>>()
+        } else {
+        
+            let mut texte = s.texte.clone();
+            texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
             
-            let text_start_y = text.start_y;
-            let text_end_y = text.end_y;
+            texte.get(3).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+                
+                let text_start_y = text.start_y;
+                let text_end_y = text.end_y;
 
-            // TODO: bv-nr korrigieren!
+                // TODO: bv-nr korrigieren!
 
-            // TODO: auch texte "1-3"
-            let lfd_nr = match get_erster_text_bei_ca(
-                &texte.get(0).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            )
-            .and_then(|t| t.text.parse::<usize>().ok()) {
-                Some(s) => s,
-                None => last_lfd_nr,
-            };
-            
-            last_lfd_nr = lfd_nr + 1;
-                        
-            let bv_nr = get_erster_text_bei_ca(
-                &texte.get(1).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).map(|t| t.text.trim().to_string())?;
-            
-            let betrag = get_erster_text_bei_ca(
-                &texte.get(2).unwrap_or(&default_texte), 
-                text_num,
-                text_start_y,
-                text_end_y,
-            ).map(|t| t.text.trim().to_string())?;
-            
-            // TODO: recht analysieren!
-            
-            // versehentlich Fußzeile erwischt
-            if bv_nr.contains("JVA Branden") {
-                return None;
-            }
-            
-            Some(Abt3Eintrag {
-                lfd_nr,
-                bv_nr: bv_nr.to_string(),
-                betrag: betrag.trim().to_string(),
-                text: text.text.trim().to_string(),
-                automatisch_geroetet: false,
-                manuell_geroetet: None,
+                // TODO: auch texte "1-3"
+                let lfd_nr = match get_erster_text_bei_ca(
+                    &texte.get(0).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                )
+                .and_then(|t| t.text.parse::<usize>().ok()) {
+                    Some(s) => s,
+                    None => last_lfd_nr,
+                };
+                
+                last_lfd_nr = lfd_nr + 1;
+                            
+                let bv_nr = get_erster_text_bei_ca(
+                    &texte.get(1).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).map(|t| t.text.trim().to_string())?;
+                
+                let betrag = get_erster_text_bei_ca(
+                    &texte.get(2).unwrap_or(&default_texte), 
+                    text_num,
+                    text_start_y,
+                    text_end_y,
+                ).map(|t| t.text.trim().to_string())?;
+                
+                // TODO: recht analysieren!
+                
+                // versehentlich Fußzeile erwischt
+                if bv_nr.contains("JVA Branden") {
+                    return None;
+                }
+                
+                Some(Abt3Eintrag {
+                    lfd_nr,
+                    bv_nr: bv_nr.to_string(),
+                    betrag: betrag.trim().to_string(),
+                    text: text.text.trim().to_string(),
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                })
             })
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
+            .collect::<Vec<_>>()
+        }.into_iter()
         
     }).collect();
     
     
     Ok(Abteilung3 {
-        eintraege: abt2_eintraege,
+        eintraege: abt3_eintraege,
         veraenderungen: Vec::new(),
         loeschungen: Vec::new(),
     })
