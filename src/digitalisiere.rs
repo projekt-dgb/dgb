@@ -284,7 +284,7 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
         let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", formatiere_seitenzahl(*sz, max_sz)));
         
         if !pdftoppm_output_path.exists() {
-            // pdftoppm -q -r 150 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
+            // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
             // writes result to /tmp/test-01.png
             let _ = Command::new("pdftoppm")
             .arg("-q")
@@ -304,7 +304,7 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
                 
         if !pdftoppm_clean_output_path.exists() {
                 
-            // pdftoppm -q -r 150 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
+            // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
             // writes result to /tmp/page-clean-01.png
             let _ = Command::new("pdftoppm")
             .arg("-q")
@@ -1452,14 +1452,24 @@ pub fn zeilen_aus_tesseract_hocr(tesseract_hocr_path: String) -> Result<Vec<Stri
 // Liest die Textblöcke aus den Spalten (mit Koordinaten in Pixeln) aus
 pub fn textbloecke_aus_spalten(
     titelblatt: &Titelblatt, 
-    seitenzahl: u32, 
+    seitenzahl: u32,
+    max_seitenzahl: u32,
     spalten: &[Column], 
     pdftotext: &PdfToTextLayout,
     anpassungen_seite: Option<&AnpassungSeite>,
 ) -> Result<Vec<Vec<Textblock>>, Fehler> {
-    
+
+    use crate::Rect;
+
     let temp_dir = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
+    
+    let pdftoppm_output_path = temp_dir.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(seitenzahl, max_seitenzahl)));
+    let (im_width, im_height) = image::image_dimensions(&pdftoppm_output_path)
+        .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
+
+    let im_width = im_width as f32;
+    let im_height = im_height as f32;
     
     Ok(spalten.par_iter().enumerate().map(|(col_idx, col)| {
     
@@ -1467,7 +1477,9 @@ pub fn textbloecke_aus_spalten(
 
         // Textblöcke tesseract
         
-        let zeilen_vordefiniert = anpassungen_seite.map(|aps| aps.zeilen.clone()).unwrap_or_default();
+        let zeilen_vordefiniert = anpassungen_seite
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
         
         let tesseract_path = format!("tesseract-{:02}-col-{:02}-{:02}-{:02}-{:02}-{:02}", 
             seitenzahl, 
@@ -1481,17 +1493,29 @@ pub fn textbloecke_aus_spalten(
         let tesseract_hocr_path = temp_dir.clone().join(format!("{}.hocr", tesseract_path));
 
         // Read /tmp/tesseract-01-col-00.hocr
-        let hocr_tesseract = fs::read_to_string(tesseract_hocr_path.clone())
-            .map_err(|e| Fehler::Io(format!("{}", tesseract_hocr_path.display()), e))?;
+        let hocr_tesseract = match fs::read_to_string(tesseract_hocr_path.clone()) {
+            Ok(o) => o,
+            Err(e) => { return Err(Fehler::Io(format!("{}", tesseract_hocr_path.display()), e)); },
+        };
         
         let document = kuchiki::parse_html()
             .one(hocr_tesseract.as_str());
         
         let css_selector = ".ocr_line";
+        
+        let (page_width, page_height) = match pdftotext.seiten.get(&seitenzahl) {
+            Some(o) => (o.breite_mm, o.hoehe_mm),
+            None => { return Err(Fehler::FalscheSeitenZahl(seitenzahl)); },
+        };
+                
+        let col_width_px = (col.max_x - col.min_x).abs() / page_width * im_width as f32;
+        let col_height_px = (col.max_y - col.min_y).abs() / page_height * im_height as f32;
+        let col_width_mm = (col.max_x - col.min_x).abs();
+        let col_height_mm = (col.max_y - col.min_y).abs();
             
-        let mut text_blocks = Vec::new();
         if zeilen_vordefiniert.is_empty() {
             
+            let mut text_blocks = Vec::new();
             let mut block_start_y = 0.0;
             let mut block_end_y = 0.0;
             let mut block_start_x = 0.0;
@@ -1539,22 +1563,22 @@ pub fn textbloecke_aus_spalten(
                         .collect::<Vec<_>>();
                     
                     let current_line_start_x = match values.get(0) {
-                        Some(s) => *s,
+                        Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
                         None => continue,
                     };
                     
                     let current_line_start_y = match values.get(1) {
-                        Some(s) => *s,
+                        Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
                         None => continue,
                     };
                     
                     let current_line_end_x = match values.get(2) {
-                        Some(s) => *s,
+                        Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
                         None => continue,
                     };
                     
                     let current_line_end_y = match values.get(3) {
-                        Some(s) => *s,
+                        Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
                         None => continue,
                     };
                     
@@ -1562,7 +1586,7 @@ pub fn textbloecke_aus_spalten(
                     if current_line_start_y > block_end_y + col.line_break_after_px && 
                     !current_text_block.is_empty() {
                         text_blocks.push(Textblock {
-                            text: current_text_block.join("\r\n "),
+                            text: current_text_block.join(" "),
                             start_y: block_start_y,
                             end_y: block_end_y,
                             start_x: block_start_x,
@@ -1584,7 +1608,7 @@ pub fn textbloecke_aus_spalten(
             
             if !current_text_block.is_empty() {
                 text_blocks.push(Textblock {
-                    text: current_text_block.join("\r\n "),
+                    text: current_text_block.join(" "),
                     start_y: block_start_y,
                     end_y: block_end_y,
                     start_x: block_start_x,
@@ -1593,7 +1617,11 @@ pub fn textbloecke_aus_spalten(
             }
             
             // Textblöcke pdftotext
-            let texts_on_page = pdftotext.seiten.get(&seitenzahl).map(|s| s.texte.clone()).unwrap_or_default();
+            let texts_on_page = pdftotext.seiten
+                .get(&seitenzahl)
+                .map(|s| s.texte.clone())
+                .unwrap_or_default();
+            
             for t in texts_on_page {
                 if column_contains_point(col, t.start_x, t.start_y) {
                     let mut merge = false;
@@ -1617,11 +1645,141 @@ pub fn textbloecke_aus_spalten(
                     }
                 }
             }
-        } else {
             
-        }
+            Ok(text_blocks)
+
+        } else {
         
-        Ok(text_blocks)
+            let mut zellen = zeilen_vordefiniert.iter().map(|z| Rect {
+                min_x: col.min_x,
+                min_y: col.min_y,
+                max_x: col.max_x,
+                max_y: col.max_y,
+            }).collect::<Vec<_>>();
+            
+            zellen.push(Rect {
+                min_x: col.min_x,
+                min_y: col.min_y,
+                max_x: col.max_x,
+                max_y: col.max_y,
+            });
+            
+            for (i, y) in zeilen_vordefiniert.iter().enumerate() {
+                zellen[i + 1].min_y = *y;
+                zellen[i].max_y = *y;
+            }
+            
+            let mut zeilen = Vec::new();
+
+            if let Ok(m) = document.select(css_selector) {
+
+                for css_match in m {
+            
+                    let as_node = css_match.as_node();
+                    let as_element = match as_node.as_element() {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    
+                    let bbox_attribute = as_element.attributes.borrow();
+                    let bbox = (&*bbox_attribute)
+                    .get("title")
+                    .and_then(|b| b.split(";").next());
+                    
+                    let line_text = as_node
+                        .text_contents()
+                        .lines()
+                        .map(|l| l.trim().to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
+                    
+                    // "bbox 882 201 1227 254"
+                    let bbox_clean = match bbox {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    
+                    // startx, starty, endx, endy
+                    // 882 201 1227 254
+                    let bbox = bbox_clean.replace("bbox", "");
+                    let values = bbox
+                        .trim()
+                        .split_whitespace()
+                        .filter_map(|s| s.parse::<f32>().ok())
+                        .collect::<Vec<_>>();
+                    
+                    let current_line_start_x = match values.get(0) {
+                        Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
+                        None => continue,
+                    };
+                    
+                    let current_line_start_y = match values.get(1) {
+                        Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
+                        None => continue,
+                    };
+                    
+                    let current_line_end_x = match values.get(2) {
+                        Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
+                        None => continue,
+                    };
+                    
+                    let current_line_end_y = match values.get(3) {
+                        Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
+                        None => continue,
+                    };
+                    
+                    zeilen.push(Textblock {
+                        text: line_text,
+                        start_y: current_line_start_y,
+                        end_y: current_line_end_y,
+                        start_x: current_line_start_x,
+                        end_x: current_line_end_x,
+                    });
+                }
+            }
+            
+            let texts_on_page = pdftotext.seiten
+                .get(&seitenzahl)
+                .map(|s| s.texte.clone())
+                .unwrap_or_default();
+            
+            // Textblöcke pdftotext
+            for t in texts_on_page {
+                if column_contains_point(col, t.start_x, t.start_y) {
+                    zeilen.push(t.clone());
+                }
+            }
+                           
+            fn zelle_contains_point(z: &Rect, x: f32, y: f32) -> bool {
+                x <= z.max_x &&
+                x >= z.min_x &&
+                y <= z.max_y &&
+                y >= z.min_y
+            }
+
+            Ok(zellen.into_iter().map(|z| {
+                
+                let texte_in_zelle = zeilen.iter().filter(|zeile| {
+                    zelle_contains_point(&z, zeile.start_x, zeile.start_y)
+                }).collect::<Vec<_>>();
+                
+                let texte_in_zelle_string = texte_in_zelle
+                    .iter()
+                    .map(|s| s.text.clone())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                
+                Textblock {
+                    text: texte_in_zelle_string,
+                    start_y: z.min_y,
+                    end_y: z.max_y,
+                    start_x: z.min_x,
+                    end_x: z.max_x,
+                }
+            }).collect::<Vec<_>>())
+        }
     }).collect::<Result<Vec<Vec<Textblock>>, Fehler>>()?)
 }
 
@@ -1799,6 +1957,16 @@ impl BvEintrag {
         } 
     }
     
+    pub fn ist_leer(&self) -> bool {
+        self.lfd_nr == 0 &&
+        self.bisherige_lfd_nr == None &&
+        self.flur == 0 &&
+        self.flurstueck == String::new() &&
+        self.gemarkung == None &&
+        self.bezeichnung == None &&
+        self.groesse.ist_leer()
+    }
+    
     pub fn ist_geroetet(&self) -> bool { 
         self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
     }
@@ -1819,6 +1987,15 @@ pub enum FlurstueckGroesse {
     }
 }
 
+impl FlurstueckGroesse {
+    pub fn ist_leer(&self) -> bool {
+        match self {
+            FlurstueckGroesse::Metrisch { m2 } => m2.is_none(),
+            FlurstueckGroesse::Hektar { ha, a, m2 } => m2.is_none() && ha.is_none() && a.is_none(),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BvZuschreibung {
     pub bv_nr: String,
@@ -1832,6 +2009,10 @@ pub struct BvZuschreibung {
 impl BvZuschreibung {
     pub fn ist_geroetet(&self) -> bool { 
         self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+    pub fn ist_leer(&self) -> bool {
+        self.bv_nr.is_empty() &&
+        self.text.is_empty()
     }
 }
 
@@ -1849,231 +2030,569 @@ impl BvAbschreibung {
     pub fn ist_geroetet(&self) -> bool { 
         self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
     }
+    
+    pub fn ist_leer(&self) -> bool {
+        self.bv_nr.is_empty() &&
+        self.text.is_empty()
+    }
 }
 
-pub fn analysiere_bv(seiten: &BTreeMap<u32, SeiteParsed>) -> Result<Bestandsverzeichnis, Fehler> {
+pub fn analysiere_bv(
+    seiten: &BTreeMap<u32, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>
+) -> Result<Bestandsverzeichnis, Fehler> {
 
     let default_texte = Vec::new();
     let mut last_lfd_nr = 1;
 
-    let bv_eintraege = seiten
-    .values()
-    .filter(|s| {
+    let mut bv_eintraege = seiten
+    .iter()
+    .filter(|(num, s)| {
         s.typ == SeitenTyp::BestandsverzeichnisHorz || 
         s.typ == SeitenTyp::BestandsverzeichnisVert
-    }).flat_map(|s| {
+    }).flat_map(|(seitenzahl, s)| {
+        
+        let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
+        
         if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-            s.texte.get(4)
-            .unwrap_or(&default_texte)
-            .iter().enumerate()
-            .filter_map(|(lfd_num, flurstueck_text)| {
-                            
-                // TODO: auch texte "1-3"
-                let flurstueck = flurstueck_text.text.trim().to_string();
-                let flurstueck_start_y = flurstueck_text.start_y;
-                let flurstueck_end_y = flurstueck_text.end_y;
+            
+            if !zeilen_auf_seite.is_empty() {
+                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                 
-                let lfd_nr = match get_erster_text_bei_ca(
-                    &s.texte.get(0).unwrap_or(&default_texte), 
-                    lfd_num,
-                    flurstueck_start_y,
-                    flurstueck_end_y,
-                )
-                .and_then(|t| t.text.parse::<usize>().ok()) {
-                    Some(s) => s,
-                    None => last_lfd_nr,
-                };
-                
-                last_lfd_nr = lfd_nr;
-                
-                let bisherige_lfd_nr = get_erster_text_bei_ca(
-                    &s.texte.get(1).unwrap_or(&default_texte),
-                    lfd_num,
-                    flurstueck_start_y,
-                    flurstueck_end_y,
-                ).and_then(|t| t.text.parse::<usize>().ok());
-                
-                let mut gemarkung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                    get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                    let lfd_nr = s.texte
+                    .get(0)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    }).unwrap_or(0);
+                    
+                    let bisherige_lfd_nr = s.texte
+                    .get(1)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let gemarkung = s.texte
+                    .get(2)
+                    .and_then(|zeilen| zeilen.get(i))
                     .map(|t| t.text.trim().to_string())
-                } else { 
-                    None 
-                };
+                    .unwrap_or_default();
+                    
+                    let gemarkung = if gemarkung.is_empty() { None } else { Some(gemarkung) };
+                    
+                    let flur = s.texte
+                    .get(3)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    })
+                    .unwrap_or_default();
+                    
+                    let flurstueck = s.texte
+                    .get(4)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric() || *c == '/'));                            
+                        Some(numeric_chars)
+                    })
+                    .unwrap_or_default();
+                    
+                    let bezeichnung = s.texte
+                    .get(5)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
+                    
+                    let ha = s.texte
+                    .get(6)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let a = s.texte
+                    .get(7)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                
+                    let m2 = s.texte
+                    .get(8)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let groesse = FlurstueckGroesse::Hektar { ha, a, m2 };
+                        
+                    BvEintrag {
+                        lfd_nr,
+                        bisherige_lfd_nr,
+                        flur,
+                        flurstueck,
+                        gemarkung,
+                        bezeichnung,
+                        groesse,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                s.texte.get(4)
+                .unwrap_or(&default_texte)
+                .iter()
+                .enumerate()
+                .filter_map(|(lfd_num, flurstueck_text)| {
                                 
-                let flur = {
-                    if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                        get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| {
-                            let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
-                            numeric_chars.parse::<usize>().ok()
-                        })?
-                    } else {
+                    // TODO: auch texte "1-3"
+                    let flurstueck = flurstueck_text.text.trim().to_string();
+                    let flurstueck_start_y = flurstueck_text.start_y;
+                    let flurstueck_end_y = flurstueck_text.end_y;
+                    
+                    let lfd_nr = match get_erster_text_bei_ca(
+                        &s.texte.get(0).unwrap_or(&default_texte), 
+                        lfd_num,
+                        flurstueck_start_y,
+                        flurstueck_end_y,
+                    )
+                    .and_then(|t| t.text.parse::<usize>().ok()) {
+                        Some(s) => s,
+                        None => last_lfd_nr,
+                    };
+                    
+                    last_lfd_nr = lfd_nr;
+                    
+                    let bisherige_lfd_nr = get_erster_text_bei_ca(
+                        &s.texte.get(1).unwrap_or(&default_texte),
+                        lfd_num,
+                        flurstueck_start_y,
+                        flurstueck_end_y,
+                    ).and_then(|t| t.text.parse::<usize>().ok());
+                    
+                    let mut gemarkung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                         get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| {
-                            // ignoriere Zusatzbemerkungen zu Gemarkung
-                            let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
-                            let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
-                            
-                            if !non_numeric_chars.is_empty() {
-                                gemarkung = Some(non_numeric_chars.trim().to_string());
-                            }
-                            
-                            numeric_chars.parse::<usize>().ok()
-                        })?
-                    }
-                };
-                
-                let bezeichnung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                    get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                    .map(|t| t.text.trim().to_string())
-                } else {
-                    get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                    .map(|t| t.text.trim().to_string())
-                };
-                
-                let groesse = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                    let ha = get_erster_text_bei_ca(&s.texte.get(6).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                    .and_then(|t| t.text.parse::<usize>().ok());
-                    let a = get_erster_text_bei_ca(&s.texte.get(7).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                    .and_then(|t| t.text.parse::<usize>().ok());
-                    let m2 = get_erster_text_bei_ca(&s.texte.get(8).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                    .and_then(|t| t.text.parse::<usize>().ok());
-                    
-                    FlurstueckGroesse::Hektar { ha, a, m2 }
-                } else {
-                    let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                    .and_then(|t| t.text.parse::<usize>().ok());
-                    FlurstueckGroesse::Metrisch { m2 }
-                };
-                
-                Some(BvEintrag {
-                    lfd_nr,
-                    bisherige_lfd_nr,
-                    flur,
-                    flurstueck,
-                    gemarkung,
-                    bezeichnung,
-                    groesse,
-                    automatisch_geroetet: false,
-                    manuell_geroetet: None,
-                })
-            })
-            .collect::<Vec<_>>()
-        } else {
-            s.texte.get(0)
-            .unwrap_or(&default_texte)
-            .iter().enumerate()
-            .filter_map(|(lfd_num, ldf_nr_text)| {
-                            
-                // TODO: auch texte "1-3"
-                let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
-                
-                let lfd_nr_start_y = ldf_nr_text.start_y;
-                let lfd_nr_end_y = ldf_nr_text.end_y;
-                
-                last_lfd_nr = lfd_nr;
-                
-                let bisherige_lfd_nr = get_erster_text_bei_ca(
-                    &s.texte.get(1).unwrap_or(&default_texte),
-                    lfd_num,
-                    lfd_nr_start_y,
-                    lfd_nr_end_y,
-                ).and_then(|t| t.text.parse::<usize>().ok());
-                
-                let mut gemarkung = None;
+                        .map(|t| t.text.trim().to_string())
+                    } else { 
+                        None 
+                    };
+                                    
+                    let flur = {
+                        if s.typ == SeitenTyp::BestandsverzeichnisHorz {
+                            get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                            .and_then(|t| {
+                                let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                                numeric_chars.parse::<usize>().ok()
+                            })?
+                        } else {
+                            get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                            .and_then(|t| {
+                                // ignoriere Zusatzbemerkungen zu Gemarkung
+                                let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
                                 
-                let flur = get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                .and_then(|t| {
-                    // ignoriere Zusatzbemerkungen zu Gemarkung
-                    let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
-                    let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
+                                if !non_numeric_chars.is_empty() {
+                                    gemarkung = Some(non_numeric_chars.trim().to_string());
+                                }
+                                
+                                numeric_chars.parse::<usize>().ok()
+                            })?
+                        }
+                    };
                     
-                    if !non_numeric_chars.is_empty() {
-                        gemarkung = Some(non_numeric_chars.trim().to_string());
-                    }
+                    let bezeichnung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
+                        get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                        .map(|t| t.text.trim().to_string())
+                    } else {
+                        get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                        .map(|t| t.text.trim().to_string())
+                    };
                     
-                    numeric_chars.parse::<usize>().ok()
-                })?;
-                
-                let flurstueck = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                    .map(|t| t.text.trim().to_string())?;
+                    let groesse = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
+                        let ha = get_erster_text_bei_ca(&s.texte.get(6).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                        .and_then(|t| t.text.parse::<usize>().ok());
+                        let a = get_erster_text_bei_ca(&s.texte.get(7).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                        .and_then(|t| t.text.parse::<usize>().ok());
+                        let m2 = get_erster_text_bei_ca(&s.texte.get(8).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                        .and_then(|t| t.text.parse::<usize>().ok());
+                        
+                        FlurstueckGroesse::Hektar { ha, a, m2 }
+                    } else {
+                        let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
+                        .and_then(|t| t.text.parse::<usize>().ok());
+                        FlurstueckGroesse::Metrisch { m2 }
+                    };
                     
-                let bezeichnung = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                    .map(|t| t.text.trim().to_string());
-                
-                let groesse = {
-                    let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                    .and_then(|t| t.text.parse::<usize>().ok());
-                    FlurstueckGroesse::Metrisch { m2 }
-                };
-                
-                Some(BvEintrag {
-                    lfd_nr,
-                    bisherige_lfd_nr,
-                    flur,
-                    flurstueck,
-                    gemarkung,
-                    bezeichnung,
-                    groesse,
-                    automatisch_geroetet: false,
-                    manuell_geroetet: None,
+                    Some(BvEintrag {
+                        lfd_nr,
+                        bisherige_lfd_nr,
+                        flur,
+                        flurstueck,
+                        gemarkung,
+                        bezeichnung,
+                        groesse,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    })
                 })
-            })
-            .collect::<Vec<_>>()
+                .collect::<Vec<_>>()
+            }
+        } else {
+            if !zeilen_auf_seite.is_empty() {
+                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                    
+                    let lfd_nr = s.texte
+                    .get(0)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    }).unwrap_or(0);
+                    
+                    let bisherige_lfd_nr = s.texte
+                    .get(1)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let mut gemarkung = None;
+                    
+                    let flur = s.texte
+                    .get(2)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        // ignoriere Zusatzbemerkungen zu Gemarkung
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                        let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
+                        
+                        if !non_numeric_chars.is_empty() {
+                            let gemarkung_str = non_numeric_chars.trim().to_string();
+                            gemarkung = if gemarkung_str.is_empty() { None } else { Some(gemarkung_str) };
+                        }
+                        
+                        numeric_chars.parse::<usize>().ok()
+                    })
+                    .unwrap_or_default();
+                    
+                    let flurstueck = s.texte
+                    .get(3)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric() || *c == '/'));                            
+                        Some(numeric_chars)
+                    })
+                    .unwrap_or_default();
+                    
+                    let bezeichnung = s.texte
+                    .get(4)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
+                    
+                    let m2 = s.texte
+                    .get(5)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .and_then(|t| {
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
+                        numeric_chars.parse::<usize>().ok()
+                    });
+                    
+                    let groesse = FlurstueckGroesse::Metrisch { m2 };
+                        
+                    BvEintrag {
+                        lfd_nr,
+                        bisherige_lfd_nr,
+                        flur,
+                        flurstueck,
+                        gemarkung,
+                        bezeichnung,
+                        groesse,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                s.texte.get(0)
+                .unwrap_or(&default_texte)
+                .iter().enumerate()
+                .filter_map(|(lfd_num, ldf_nr_text)| {
+                                
+                    // TODO: auch texte "1-3"
+                    let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
+                    
+                    let lfd_nr_start_y = ldf_nr_text.start_y;
+                    let lfd_nr_end_y = ldf_nr_text.end_y;
+                    
+                    last_lfd_nr = lfd_nr;
+                    
+                    let bisherige_lfd_nr = get_erster_text_bei_ca(
+                        &s.texte.get(1).unwrap_or(&default_texte),
+                        lfd_num,
+                        lfd_nr_start_y,
+                        lfd_nr_end_y,
+                    ).and_then(|t| t.text.parse::<usize>().ok());
+                    
+                    let mut gemarkung = None;
+                                    
+                    let flur = get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
+                    .and_then(|t| {
+                        // ignoriere Zusatzbemerkungen zu Gemarkung
+                        let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                        let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
+                        
+                        if !non_numeric_chars.is_empty() {
+                            gemarkung = Some(non_numeric_chars.trim().to_string());
+                        }
+                        
+                        numeric_chars.parse::<usize>().ok()
+                    })?;
+                    
+                    let flurstueck = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
+                        .map(|t| t.text.trim().to_string())?;
+                        
+                    let bezeichnung = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
+                        .map(|t| t.text.trim().to_string());
+                    
+                    let groesse = {
+                        let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
+                        .and_then(|t| t.text.parse::<usize>().ok());
+                        FlurstueckGroesse::Metrisch { m2 }
+                    };
+                    
+                    Some(BvEintrag {
+                        lfd_nr,
+                        bisherige_lfd_nr,
+                        flur,
+                        flurstueck,
+                        gemarkung,
+                        bezeichnung,
+                        groesse,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    })
+                })
+                .collect::<Vec<_>>()
+            }
         }
-    }).collect();
+    })
+    .filter(|bv| !bv.ist_leer())
+    .collect::<Vec<_>>();
 
+    // lfd. Nrn. korrigieren
+    let bv_mit_0 = bv_eintraege.iter().enumerate().filter_map(|(i, bv)| {
+        if bv.lfd_nr == 0 { Some(i) } else { None }
+    }).collect::<Vec<_>>();
+    
+    for bv_idx in bv_mit_0 {
+        let bv_clone = bv_eintraege[bv_idx].clone();
+        if bv_idx == 0 { continue; }
+        let bv_idx_minus_eins = bv_idx - 1;
+        let bv_minus_eins_clone = bv_eintraege[bv_idx_minus_eins].clone();
+        if bv_minus_eins_clone.lfd_nr == 0 {
+            continue;
+        }
+        
+        let mut remove = false;
+        if bv_clone.bisherige_lfd_nr.is_some() && 
+           bv_minus_eins_clone.bisherige_lfd_nr.is_none() {
+           bv_eintraege[bv_idx_minus_eins].bisherige_lfd_nr = bv_clone.bisherige_lfd_nr.clone();
+           remove = true;
+        }
+        
+        if bv_clone.gemarkung.is_some() && 
+           bv_minus_eins_clone.gemarkung.is_none() {
+           bv_eintraege[bv_idx_minus_eins].gemarkung = bv_clone.gemarkung.clone();
+           remove = true;
+        }
+        
+        if bv_clone.flur == 0 && 
+           bv_minus_eins_clone.flur != 0 {
+           bv_eintraege[bv_idx_minus_eins].flur = bv_clone.flur.clone();
+           remove = true;
+        }
+        
+        if bv_clone.flurstueck.is_empty() && 
+           !bv_minus_eins_clone.flurstueck.is_empty() {
+           bv_eintraege[bv_idx_minus_eins].flurstueck = bv_clone.flurstueck.clone();
+           remove = true;
+        }
+        
+        if bv_clone.bezeichnung.is_none() && 
+           !bv_minus_eins_clone.bezeichnung.is_none() {
+           bv_eintraege[bv_idx_minus_eins].bezeichnung = bv_clone.bezeichnung.clone();
+           remove = true;
+        }
+        
+        if bv_clone.groesse.ist_leer() && 
+           !bv_minus_eins_clone.groesse.ist_leer() {
+           bv_eintraege[bv_idx_minus_eins].groesse = bv_clone.groesse.clone();
+           remove = true;
+        }
+        
+        if remove {
+            bv_eintraege[bv_idx] = BvEintrag::new(0);
+        }
+    }
+    
+    let mut bv_eintraege = bv_eintraege
+        .into_iter()
+        .filter(|bv| !bv.ist_leer())
+        .collect::<Vec<BvEintrag>>();
+    
+    let bv_mit_irregulaerer_lfd_nr = bv_eintraege.iter().enumerate().filter_map(|(i, bv)| {
+        if i == 0 { return None; }
+        if bv_eintraege[i - 1].lfd_nr > bv.lfd_nr { Some(i) } else { None }
+    }).collect::<Vec<_>>();
+    
+    let bv_irr_korrigieren = bv_mit_irregulaerer_lfd_nr.into_iter().filter_map(|bv_irr| {
+        let vorherige_lfd = bv_eintraege.get(bv_irr - 1)?.lfd_nr;
+        let naechste_lfd = bv_eintraege.get(bv_irr + 1)?.lfd_nr;
+        match naechste_lfd - vorherige_lfd {
+            2 => Some((bv_irr, vorherige_lfd + 1)),
+            1 => if bv_eintraege[bv_irr].bisherige_lfd_nr == Some(vorherige_lfd) { Some((bv_irr, naechste_lfd)) } else { None }
+            _ => None,
+        }
+    }).collect::<Vec<(usize, usize)>>();
+    
+    for (idx, lfd_neu) in bv_irr_korrigieren {
+        if let Some(bv) = bv_eintraege.get_mut(idx) {
+            bv.lfd_nr = lfd_neu;
+        }
+    }
+    
     let bv_bestand_und_zuschreibungen = seiten
-    .values()
-    .filter(|s| {
+    .iter()
+    .filter(|(num, s)| {
         s.typ == SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen || 
         s.typ == SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen
-    }).flat_map(|s| {
-        s.texte.get(0).unwrap_or(&default_texte).iter().enumerate().filter_map(|(lfd_num, lfd_nr_text)| {
+    }).flat_map(|(seitenzahl, s)| {
+    
+        let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
+    
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let zur_lfd_nr = s.texte
+                .get(0)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+
+                let bestand_und_zuschreibungen = s.texte
+                .get(1)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                BvZuschreibung {
+                    bv_nr: zur_lfd_nr,
+                    text: bestand_und_zuschreibungen,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                }
+            }).collect::<Vec<_>>()
+        } else {
+            s.texte.get(0).unwrap_or(&default_texte).iter().enumerate().filter_map(|(lfd_num, lfd_nr_text)| {
             
-            // TODO: auch texte "1-3"
-            let zur_lfd_nr = lfd_nr_text.text.trim().to_string();
-                            
-            let lfd_nr_text_start_y = lfd_nr_text.start_y;
-            let lfd_nr_text_end_y = lfd_nr_text.start_y;
-            
-            let bestand_und_zuschreibungen = get_erster_text_bei_ca(&s.texte.get(1).unwrap_or(&default_texte), lfd_num, lfd_nr_text_start_y, lfd_nr_text_end_y)
-                .map(|t| t.text.trim().to_string())?;            
-            
-            Some(BvZuschreibung {
-                bv_nr: zur_lfd_nr,
-                text: bestand_und_zuschreibungen,
-                automatisch_geroetet: false,
-                manuell_geroetet: None,
-            })
-        }).collect::<Vec<_>>().into_iter()
-    }).collect();
+                // TODO: auch texte "1-3"
+                let zur_lfd_nr = lfd_nr_text.text.trim().to_string();
+                                
+                let lfd_nr_text_start_y = lfd_nr_text.start_y;
+                let lfd_nr_text_end_y = lfd_nr_text.start_y;
+                
+                let bestand_und_zuschreibungen = get_erster_text_bei_ca(&s.texte.get(1).unwrap_or(&default_texte), lfd_num, lfd_nr_text_start_y, lfd_nr_text_end_y)
+                    .map(|t| t.text.trim().to_string())?;            
+                
+                Some(BvZuschreibung {
+                    bv_nr: zur_lfd_nr,
+                    text: bestand_und_zuschreibungen,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                })
+            }).collect::<Vec<_>>()
+        }.into_iter()
+        
+    })
+    .filter(|bvz| !bvz.ist_leer())
+    .collect();
     
     let bv_abschreibungen = seiten
-    .values()
-    .filter(|s| {
+    .iter()
+    .filter(|(num, s)| {
         s.typ == SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen || 
         s.typ == SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen
-    }).flat_map(|s| {
-        s.texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(lfd_num, lfd_nr_text)| {
+    }).flat_map(|(seitenzahl, s)| {
+    
+        let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
             
-            // TODO: auch texte "1-3"
-            let zur_lfd_nr = lfd_nr_text.text.trim().to_string();
-                            
-            let lfd_nr_text_start_y = lfd_nr_text.start_y;
-            let lfd_nr_text_end_y = lfd_nr_text.end_y;
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let zur_lfd_nr = s.texte
+                .get(2)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let abschreibungen = s.texte
+                .get(3)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                BvAbschreibung {
+                    bv_nr: zur_lfd_nr,
+                    text: abschreibungen,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                }
+            }).collect::<Vec<_>>()
+        } else {
+            s.texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(lfd_num, lfd_nr_text)| {
+            
+                // TODO: auch texte "1-3"
+                let zur_lfd_nr = lfd_nr_text.text.trim().to_string();
+                                
+                let lfd_nr_text_start_y = lfd_nr_text.start_y;
+                let lfd_nr_text_end_y = lfd_nr_text.end_y;
 
-            let abschreibungen = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_text_start_y, lfd_nr_text_end_y)
-                .map(|t| t.text.trim().to_string())?;            
-            
-            Some(BvAbschreibung {
-                bv_nr: zur_lfd_nr,
-                text: abschreibungen,
-                automatisch_geroetet: false,
-                manuell_geroetet: None,
-            })
-        }).collect::<Vec<_>>().into_iter()
-    }).collect();
+                let abschreibungen = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_text_start_y, lfd_nr_text_end_y)
+                    .map(|t| t.text.trim().to_string())?;            
+                
+                Some(BvAbschreibung {
+                    bv_nr: zur_lfd_nr,
+                    text: abschreibungen,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                })
+            }).collect::<Vec<_>>()
+        
+        }.into_iter()
+    })
+    .filter(|bva| !bva.ist_leer())
+    .collect();
     
     Ok(Bestandsverzeichnis { 
         eintraege: bv_eintraege,
@@ -2126,6 +2645,7 @@ impl Abt1Eintrag {
 
 pub fn analysiere_abt1(
     seiten: &BTreeMap<u32, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
 ) -> Result<Abteilung1, Fehler> {
       
@@ -2563,6 +3083,7 @@ impl Abt2Loeschung {
 
 pub fn analysiere_abt2(
     seiten: &BTreeMap<u32, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
 ) -> Result<Abteilung2, Fehler> {
         
@@ -2727,6 +3248,7 @@ pub struct Abt3Loeschung {
 
 pub fn analysiere_abt3(
     seiten: &BTreeMap<u32, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis
 ) -> Result<Abteilung3, Fehler> {
     

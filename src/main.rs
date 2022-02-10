@@ -1762,12 +1762,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let mut ap = open_file.anpassungen_seite
                 .entry(*page)
                 .or_insert_with(|| AnpassungSeite::default());
-            
+
             let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
                 Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
                 None => return,
             };
-    
+            
             let img_ui_width = 1200.0; // px
             let aspect_ratio = im_height / im_width;
             let img_ui_height = img_ui_width * aspect_ratio;
@@ -2341,6 +2341,7 @@ fn klassifiziere_pdf_seiten_neu(pdf: &mut PdfFile, seiten_neu: &[u32]) {
         let textbloecke = match digitalisiere::textbloecke_aus_spalten(
             &pdf.titelblatt, 
             *sz, 
+            max_sz,
             &spalten, 
             &pdf.pdftotext_layout,
             pdf.anpassungen_seite.get(&(*sz as usize))
@@ -2450,6 +2451,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                     let textbloecke = match digitalisiere::textbloecke_aus_spalten(
                         &pdf.titelblatt, 
                         sz, 
+                        max_sz,
                         &spalten, 
                         &pdftotext_layout,
                         pdf.anpassungen_seite.get(&(sz as usize))
@@ -2487,10 +2489,10 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
 
 fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
 
-    let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.geladen).ok()?;
-    let abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &bestandsverzeichnis).ok()?;
-    let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &bestandsverzeichnis).ok()?;
-    let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &bestandsverzeichnis).ok()?;
+    let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.geladen, &pdf.anpassungen_seite).ok()?;
+    let abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     
     let mut gb = Grundbuch {
         titelblatt: pdf.titelblatt.clone(),
@@ -2579,6 +2581,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         let textbloecke = digitalisiere::textbloecke_aus_spalten(
             &pdf.titelblatt, 
             sz, 
+            max_sz,
             &spalten, 
             &pdf.pdftotext_layout,
             pdf.anpassungen_seite.get(&(sz as usize)),
