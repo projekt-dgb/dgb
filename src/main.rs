@@ -148,12 +148,16 @@ pub struct AnpassungSeite {
     pub zeilen: Vec<f32>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Rect {
     min_x: f32,
     min_y: f32,
     max_x: f32,
     max_y: f32,
+}
+
+impl Rect {
+    pub fn zero() -> Self { Self::default() }
 }
 
 impl PdfFile {
@@ -1199,8 +1203,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
 
                 ("abt1", false) => { 
-                    if !open_file.analysiert.abt1.veraenderungen.is_empty() {
-                        open_file.analysiert.abt1.veraenderungen.remove(row);
+                    if !open_file.analysiert.abt1.eintraege.is_empty() {
+                        open_file.analysiert.abt1.eintraege.remove(row);
                     }
                 },
                 ("abt1", true) => { 
@@ -2258,21 +2262,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
-            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
-            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
-            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
-            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
-            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
-            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
-            webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
+            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
         },
@@ -2640,7 +2630,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
 
 fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
 
-    let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.geladen, &pdf.anpassungen_seite).ok()?;
+    let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite).ok()?;
     let abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;

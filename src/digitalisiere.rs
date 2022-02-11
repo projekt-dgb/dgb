@@ -7,7 +7,7 @@ use lopdf::Error as LoPdfError;
 use image::ImageError;
 use serde_derive::{Serialize, Deserialize};
 use rayon::prelude::*;
-use crate::AnpassungSeite;
+use crate::{Rect, AnpassungSeite};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2056,6 +2056,43 @@ pub struct Grundbuch {
     pub abt3: Abteilung3,
 }
 
+#[derive(Debug, Default, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
+pub struct PositionInPdf {
+    pub seite: u32,
+    pub rect: OptRect,
+}
+
+#[derive(Debug, Default, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
+pub struct OptRect {
+    pub min_x: Option<f32>,
+    pub max_x: Option<f32>,
+    pub min_y: Option<f32>,
+    pub max_y: Option<f32>,
+}
+
+impl OptRect {
+    pub fn zero() -> Self { Self::default() }
+}
+
+impl PositionInPdf {
+
+    pub fn expand(&mut self, t: &Textblock) {
+        self.rect.min_x = Some(self.rect.min_x.get_or_insert(t.start_x).min(t.start_x));
+        self.rect.max_x = Some(self.rect.max_x.get_or_insert(t.end_x).max(t.end_x));
+        self.rect.min_y = Some(self.rect.min_y.get_or_insert(t.start_y).min(t.start_y));
+        self.rect.max_y = Some(self.rect.max_y.get_or_insert(t.end_y).max(t.end_y));
+    }
+    
+    pub fn get_rect(&self) -> Rect {
+        Rect {
+            min_x: self.rect.min_x.unwrap_or(0.0),
+            max_x: self.rect.max_x.unwrap_or(0.0),
+            min_y: self.rect.min_y.unwrap_or(0.0),
+            max_y: self.rect.max_y.unwrap_or(0.0),
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Bestandsverzeichnis {
     // Index = lfd. Nr. der Grundstücke
@@ -2064,7 +2101,7 @@ pub struct Bestandsverzeichnis {
     pub abschreibungen: Vec<BvAbschreibung>,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BvEintrag {
     Flurstueck(BvEintragFlurstueck),
@@ -2072,7 +2109,7 @@ pub enum BvEintrag {
 }
 
 // Eintrag für ein grundstücksgleiches Recht
-#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct BvEintragRecht {
     pub lfd_nr: usize,
     pub zu_nr: String,
@@ -2082,9 +2119,11 @@ pub struct BvEintragRecht {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct BvEintragFlurstueck {
     pub lfd_nr: usize,
     pub bisherige_lfd_nr: Option<usize>,
@@ -2098,6 +2137,8 @@ pub struct BvEintragFlurstueck {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl BvEintragFlurstueck {
@@ -2112,6 +2153,7 @@ impl BvEintragFlurstueck {
             groesse: FlurstueckGroesse::Metrisch { m2: None },
             automatisch_geroetet: false,
             manuell_geroetet: None,
+            position_in_pdf: None,
         }
     }
 }
@@ -2125,6 +2167,7 @@ impl BvEintragRecht {
             text: String::new(),
             automatisch_geroetet: false,
             manuell_geroetet: None,
+            position_in_pdf: None,
         }
     }
 }
@@ -2132,6 +2175,13 @@ impl BvEintragRecht {
 impl BvEintrag {
     pub fn neu(lfd_nr: usize) -> Self { 
         BvEintrag::Flurstueck(BvEintragFlurstueck::neu(lfd_nr))
+    }
+    
+    pub fn get_position_in_pdf(&self) -> Option<PositionInPdf> { 
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.position_in_pdf.clone(),
+            BvEintrag::Recht(recht) => recht.position_in_pdf.clone(),
+        }
     }
     
     pub fn get_flur(&self) -> usize {
@@ -2255,6 +2305,13 @@ impl BvEintrag {
         }
     }
     
+    pub fn set_automatisch_geroetet(&mut self, val: bool) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.automatisch_geroetet = val; },
+            BvEintrag::Recht(recht) => { recht.automatisch_geroetet = val; },
+        }
+    }
+    
     pub fn get_manuell_geroetet(&self) -> Option<bool> {
         match self {
             BvEintrag::Flurstueck(flst) => { flst.manuell_geroetet },
@@ -2302,6 +2359,8 @@ pub struct BvZuschreibung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl BvZuschreibung {
@@ -2322,6 +2381,8 @@ pub struct BvAbschreibung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl BvAbschreibung {
@@ -2336,10 +2397,15 @@ impl BvAbschreibung {
 }
 
 pub fn analysiere_bv(
+    titelblatt: &Titelblatt,
+    pdftotext_layout: &PdfToTextLayout,
     seiten: &BTreeMap<u32, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<usize, AnpassungSeite>
 ) -> Result<Bestandsverzeichnis, Fehler> {
 
+    let seitenzahlen = seiten.keys().cloned().collect::<Vec<_>>();
+    let max_seitenzahl = seitenzahlen.iter().copied().max().unwrap_or(0);
+    
     let default_texte = Vec::new();
     let mut last_lfd_nr = 1;
 
@@ -2361,10 +2427,16 @@ pub fn analysiere_bv(
             if !zeilen_auf_seite.is_empty() {
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                 
+                    let mut position_in_pdf = PositionInPdf {
+                        seite: *seitenzahl,
+                        rect: OptRect::zero(),
+                    };
+                    
                     let lfd_nr = s.texte
                     .get(0)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     }).unwrap_or(0);
@@ -2373,6 +2445,7 @@ pub fn analysiere_bv(
                     .get(1)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2380,7 +2453,10 @@ pub fn analysiere_bv(
                     let gemarkung = s.texte
                     .get(2)
                     .and_then(|zeilen| zeilen.get(i))
-                    .map(|t| t.text.trim().to_string())
+                    .map(|t| {
+                        position_in_pdf.expand(&t);
+                        t.text.trim().to_string()
+                    })
                     .unwrap_or_default();
                     
                     let gemarkung = if gemarkung.is_empty() { None } else { Some(gemarkung) };
@@ -2389,6 +2465,7 @@ pub fn analysiere_bv(
                     .get(3)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     })
@@ -2398,6 +2475,7 @@ pub fn analysiere_bv(
                     .get(4)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric() || *c == '/'));                            
                         Some(numeric_chars)
                     })
@@ -2406,7 +2484,10 @@ pub fn analysiere_bv(
                     let bezeichnung = s.texte
                     .get(5)
                     .and_then(|zeilen| zeilen.get(i))
-                    .map(|t| t.text.trim().to_string())
+                    .map(|t| {
+                        position_in_pdf.expand(&t);
+                        t.text.trim().to_string()
+                    })
                     .unwrap_or_default();
                     
                     let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
@@ -2415,6 +2496,7 @@ pub fn analysiere_bv(
                     .get(6)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2423,6 +2505,7 @@ pub fn analysiere_bv(
                     .get(7)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2431,6 +2514,7 @@ pub fn analysiere_bv(
                     .get(8)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2447,6 +2531,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: Some(position_in_pdf),
                     })
                 }).collect::<Vec<_>>()
             } else {
@@ -2455,7 +2540,14 @@ pub fn analysiere_bv(
                 .iter()
                 .enumerate()
                 .filter_map(|(lfd_num, flurstueck_text)| {
-                                
+                    
+                    let mut position_in_pdf = PositionInPdf {
+                        seite: *seitenzahl,
+                        rect: OptRect::zero(),
+                    };
+                    
+                    position_in_pdf.expand(&flurstueck_text); 
+
                     // TODO: auch texte "1-3"
                     let flurstueck = flurstueck_text.text.trim().to_string();
                     let flurstueck_start_y = flurstueck_text.start_y;
@@ -2466,8 +2558,7 @@ pub fn analysiere_bv(
                         lfd_num,
                         flurstueck_start_y,
                         flurstueck_end_y,
-                    )
-                    .and_then(|t| t.text.parse::<usize>().ok()) {
+                    ).and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() }) {
                         Some(s) => s,
                         None => last_lfd_nr,
                     };
@@ -2479,11 +2570,11 @@ pub fn analysiere_bv(
                         lfd_num,
                         flurstueck_start_y,
                         flurstueck_end_y,
-                    ).and_then(|t| t.text.parse::<usize>().ok());
+                    ).and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                     
                     let mut gemarkung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                         get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .map(|t| t.text.trim().to_string())
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string()})
                     } else { 
                         None 
                     };
@@ -2492,12 +2583,14 @@ pub fn analysiere_bv(
                         if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                             get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
                             .and_then(|t| {
+                                position_in_pdf.expand(&t); 
                                 let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                                 numeric_chars.parse::<usize>().ok()
                             })?
                         } else {
                             get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
                             .and_then(|t| {
+                                position_in_pdf.expand(&t); 
                                 // ignoriere Zusatzbemerkungen zu Gemarkung
                                 let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
                                 let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
@@ -2513,24 +2606,24 @@ pub fn analysiere_bv(
                     
                     let bezeichnung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                         get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .map(|t| t.text.trim().to_string())
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string()})
                     } else {
                         get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .map(|t| t.text.trim().to_string())
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string()})
                     };
                     
                     let groesse = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                         let ha = get_erster_text_bei_ca(&s.texte.get(6).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| t.text.parse::<usize>().ok());
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                         let a = get_erster_text_bei_ca(&s.texte.get(7).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| t.text.parse::<usize>().ok());
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                         let m2 = get_erster_text_bei_ca(&s.texte.get(8).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| t.text.parse::<usize>().ok());
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                         
                         FlurstueckGroesse::Hektar { ha, a, m2 }
                     } else {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| t.text.parse::<usize>().ok());
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
@@ -2544,6 +2637,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: Some(position_in_pdf),
                     }))
                 })
                 .collect::<Vec<_>>()
@@ -2552,10 +2646,16 @@ pub fn analysiere_bv(
             if !zeilen_auf_seite.is_empty() {
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                     
+                    let mut position_in_pdf = PositionInPdf {
+                        seite: *seitenzahl,
+                        rect: OptRect::zero(),
+                    };
+                    
                     let lfd_nr = s.texte
                     .get(0)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     }).unwrap_or(0);
@@ -2564,6 +2664,7 @@ pub fn analysiere_bv(
                     .get(1)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2574,6 +2675,7 @@ pub fn analysiere_bv(
                     .get(2)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         // ignoriere Zusatzbemerkungen zu Gemarkung
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
                         let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
@@ -2591,6 +2693,7 @@ pub fn analysiere_bv(
                     .get(3)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric() || *c == '/'));                            
                         Some(numeric_chars)
                     })
@@ -2599,7 +2702,10 @@ pub fn analysiere_bv(
                     let bezeichnung = s.texte
                     .get(4)
                     .and_then(|zeilen| zeilen.get(i))
-                    .map(|t| t.text.trim().to_string())
+                    .map(|t| { 
+                        position_in_pdf.expand(&t); 
+                        t.text.trim().to_string() 
+                    })
                     .unwrap_or_default();
                     
                     let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
@@ -2608,6 +2714,7 @@ pub fn analysiere_bv(
                     .get(5)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2624,6 +2731,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: Some(position_in_pdf),
                     })
                 }).collect::<Vec<_>>()
             } else {
@@ -2631,7 +2739,14 @@ pub fn analysiere_bv(
                 .unwrap_or(&default_texte)
                 .iter().enumerate()
                 .filter_map(|(lfd_num, ldf_nr_text)| {
-                                
+                    
+                    let mut position_in_pdf = PositionInPdf {
+                        seite: *seitenzahl,
+                        rect: OptRect::zero(),
+                    };
+                    
+                    position_in_pdf.expand(&ldf_nr_text); 
+                    
                     // TODO: auch texte "1-3"
                     let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
                     
@@ -2645,12 +2760,14 @@ pub fn analysiere_bv(
                         lfd_num,
                         lfd_nr_start_y,
                         lfd_nr_end_y,
-                    ).and_then(|t| t.text.parse::<usize>().ok());
+                    ).and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                     
                     let mut gemarkung = None;
                                     
                     let flur = get_erster_text_bei_ca(&s.texte.get(2).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
+                        
                         // ignoriere Zusatzbemerkungen zu Gemarkung
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
                         let non_numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
@@ -2663,14 +2780,14 @@ pub fn analysiere_bv(
                     })?;
                     
                     let flurstueck = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .map(|t| t.text.trim().to_string())?;
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string() })?;
                         
                     let bezeichnung = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .map(|t| t.text.trim().to_string());
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string() });
                     
                     let groesse = {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .and_then(|t| t.text.parse::<usize>().ok());
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
@@ -2684,6 +2801,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: Some(position_in_pdf),
                     }))
                 })
                 .collect::<Vec<_>>()
@@ -2692,10 +2810,16 @@ pub fn analysiere_bv(
             if !zeilen_auf_seite.is_empty() {
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                     
+                    let mut position_in_pdf = PositionInPdf {
+                        seite: *seitenzahl,
+                        rect: OptRect::zero(),
+                    };
+                    
                     let lfd_nr = s.texte
                     .get(0)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     }).unwrap_or(0);
@@ -2704,6 +2828,7 @@ pub fn analysiere_bv(
                     .get(1)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2714,7 +2839,7 @@ pub fn analysiere_bv(
                     
                     if let Some(s) = s.texte.get(2).and_then(|zeilen| zeilen.get(i)) {
                         let mut split_whitespace = s.text.trim().split_whitespace().rev();
-                        
+                        position_in_pdf.expand(&s); 
                         flurstueck = split_whitespace.next().map(|s| {
                             String::from_iter(s.chars().filter(|c| c.is_numeric() || *c == '/'))
                         }).unwrap_or_default();
@@ -2729,7 +2854,7 @@ pub fn analysiere_bv(
                     let bezeichnung = s.texte
                     .get(3)
                     .and_then(|zeilen| zeilen.get(i))
-                    .map(|t| t.text.trim().to_string())
+                    .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string() })
                     .unwrap_or_default();
                     
                     let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
@@ -2738,6 +2863,7 @@ pub fn analysiere_bv(
                     .get(4)
                     .and_then(|zeilen| zeilen.get(i))
                     .and_then(|t| {
+                        position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
                         numeric_chars.parse::<usize>().ok()
                     });
@@ -2754,6 +2880,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: Some(position_in_pdf),
                     })
                 }).collect::<Vec<_>>()
             } else {
@@ -2761,7 +2888,14 @@ pub fn analysiere_bv(
                 .unwrap_or(&default_texte)
                 .iter().enumerate()
                 .filter_map(|(lfd_num, ldf_nr_text)| {
-                                
+                    
+                    let mut position_in_pdf = PositionInPdf {
+                        seite: *seitenzahl,
+                        rect: OptRect::zero(),
+                    };
+                    
+                    position_in_pdf.expand(&ldf_nr_text); 
+                    
                     // TODO: auch texte "1-3"
                     let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
                     
@@ -2814,6 +2948,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: Some(position_in_pdf),
                     }))
                 })
                 .collect::<Vec<_>>()
@@ -2950,6 +3085,52 @@ pub fn analysiere_bv(
         }
     }
     
+    // Automatisch BV Einträge röten
+    for bv in bv_eintraege.iter_mut() {
+        let ist_geroetet = {
+            if let Some(position_in_pdf) = bv.get_position_in_pdf() {
+                
+                use image::Pixel;
+                use image::GenericImageView;
+
+                let bv_rect = position_in_pdf.get_rect();
+                
+                let temp_ordner = std::env::temp_dir()
+                .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
+                
+                let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
+                let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(position_in_pdf.seite, max_seitenzahl)));
+                
+                match image::open(&pdftoppm_output_path).ok()
+                .and_then(|o| {
+                    
+                    let (im_width, im_height) = o.dimensions();
+                    let (page_width, page_height) = pdftotext_layout.seiten.get(&position_in_pdf.seite).map(|o| (o.breite_mm, o.hoehe_mm))?;
+                    let im_width = im_width as f32;
+                    let im_height = im_height as f32;
+                    
+                    Some(o.crop_imm(
+                        (bv_rect.min_x / page_width * im_width).round() as u32, 
+                        (bv_rect.min_y / page_height * im_height).round() as u32, 
+                        ((bv_rect.max_x - bv_rect.min_x).abs() / page_width * im_width).round() as u32, 
+                        ((bv_rect.max_y - bv_rect.min_y).abs() / page_height * im_height).round() as u32, 
+                    ).to_rgb8())
+                }) {
+                    Some(cropped) => cropped.pixels().any(|px| {                        
+                        px.channels().get(0).copied().unwrap_or(0) > 200 && 
+                        px.channels().get(1).copied().unwrap_or(0) < 120 &&
+                        px.channels().get(2).copied().unwrap_or(0) < 120
+                    }),
+                    None => false,
+                }   
+            } else {
+                false
+            }
+        };
+        
+        bv.set_automatisch_geroetet(ist_geroetet);
+    }
+    
     let bv_bestand_und_zuschreibungen = seiten
     .iter()
     .filter(|(num, s)| {
@@ -2982,6 +3163,7 @@ pub fn analysiere_bv(
                     text: bestand_und_zuschreibungen,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 }
             }).collect::<Vec<_>>()
         } else {
@@ -3001,6 +3183,7 @@ pub fn analysiere_bv(
                     text: bestand_und_zuschreibungen,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 })
             }).collect::<Vec<_>>()
         }.into_iter()
@@ -3041,6 +3224,7 @@ pub fn analysiere_bv(
                     text: abschreibungen,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 }
             }).collect::<Vec<_>>()
         } else {
@@ -3060,6 +3244,7 @@ pub fn analysiere_bv(
                     text: abschreibungen,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 })
             }).collect::<Vec<_>>()
         
@@ -3097,6 +3282,8 @@ pub struct Abt1Eintrag {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl Abt1Eintrag {
@@ -3109,6 +3296,7 @@ impl Abt1Eintrag {
             
             automatisch_geroetet: false,
             manuell_geroetet: None,
+            position_in_pdf: None,
         } 
     }
     
@@ -3179,6 +3367,7 @@ pub fn analysiere_abt1(
                     grundlage_der_eintragung,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 }
             }).collect::<Vec<_>>()
         } else {
@@ -3235,6 +3424,7 @@ pub fn analysiere_abt1(
                     grundlage_der_eintragung,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 })
             })
             .collect::<Vec<_>>()
@@ -3549,6 +3739,8 @@ pub struct Abt1Veraenderung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl Abt1Veraenderung {
@@ -3565,6 +3757,8 @@ pub struct Abt1Loeschung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl Abt1Loeschung {
@@ -3581,6 +3775,8 @@ pub struct Abt2Veraenderung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl Abt2Veraenderung {
@@ -3597,6 +3793,8 @@ pub struct Abt2Loeschung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl Abt2Loeschung {
@@ -3734,6 +3932,7 @@ pub fn analysiere_abt2(
                     text: text.trim().to_string(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 }
             }).collect::<Vec<_>>()
         } else {
@@ -3762,6 +3961,7 @@ pub fn analysiere_abt2(
                     text: text.text.trim().to_string(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 })
             })
             .collect::<Vec<_>>()
@@ -3799,6 +3999,8 @@ pub struct Abt3Eintrag {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 impl Abt3Eintrag {
@@ -3810,6 +4012,7 @@ impl Abt3Eintrag {
             betrag: String::new(),
             automatisch_geroetet: false,
             manuell_geroetet: None,
+            position_in_pdf: None,
         } 
     }
     
@@ -3829,6 +4032,8 @@ pub struct Abt3Veraenderung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -3842,6 +4047,8 @@ pub struct Abt3Loeschung {
     pub automatisch_geroetet: bool,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
 }
 
 pub fn analysiere_abt3(
@@ -3902,6 +4109,7 @@ pub fn analysiere_abt3(
                     text: text.trim().to_string(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 }
             }).collect::<Vec<_>>()
         
@@ -3959,6 +4167,7 @@ pub fn analysiere_abt3(
                     text: text.text.trim().to_string(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
+                    position_in_pdf: None,
                 })
             })
             .collect::<Vec<_>>()
@@ -4006,6 +4215,7 @@ pub fn analysiere_abt3(
                         text: text.trim().to_string(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: None,
                     }
                 }).collect::<Vec<_>>()
             } else {
@@ -4038,6 +4248,7 @@ pub fn analysiere_abt3(
                         text: text.text.trim().to_string(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: None,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -4087,6 +4298,7 @@ pub fn analysiere_abt3(
                         text: text.trim().to_string(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: None,
                     }
                 }).collect::<Vec<_>>()
             } else {
@@ -4119,6 +4331,7 @@ pub fn analysiere_abt3(
                         text: text.text.trim().to_string(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
+                        position_in_pdf: None,
                     }
                 })
                 .collect::<Vec<_>>()

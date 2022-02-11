@@ -284,7 +284,12 @@ function logInfo(info) {
 // Function called from Rust on init to initialize the entire screen
 function replaceEntireScreen(html) {
     document.body.innerHTML = html;
+}
 
+function replaceMainContainer(s) {
+    let ribbon = document.getElementById("__application-main-container");
+    if (ribbon)
+         ribbon.innerHTML = s;
 }
 
 function replaceRibbon(s) {
@@ -391,7 +396,7 @@ function replaceAbt3Loeschungen(s) {
 }
 
 function replaceAnalyseGrundbuch(s) {
-    let e = document.getElementById("__application-");
+    let e = document.getElementById("__application-analyse-grundbuch");
     if (e)
         e.innerHTML = s;
 }

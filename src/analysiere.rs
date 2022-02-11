@@ -461,9 +461,6 @@ fn get_belastete_flurstuecke(
     }
     
     // deduplicate found entries
-    let hashset = bv_belastet.into_iter().collect::<BTreeSet<_>>();
-    let mut bv_belastet = hashset.into_iter().collect::<Vec<_>>();
-    
     bv_belastet.retain(|bv| !bv.ist_geroetet());
     bv_belastet.sort_by(|a, b| a.get_lfd_nr().cmp(&b.get_lfd_nr()));
     bv_belastet.dedup();
