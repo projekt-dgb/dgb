@@ -493,7 +493,7 @@ pub fn klassifiziere_seitentyp(titelblatt: &Titelblatt, seitenzahl: u32, max_sz:
         } else {
             if ocr_text.contains("Abschreibungen") {
                 Ok(SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen)
-            } else if (ocr_text.contains("a/b/c") || ocr_text.contains("alb/c")) {
+            } else if ocr_text.contains("a/b/c") || ocr_text.contains("alb/c") {
                 Ok(SeitenTyp::BestandsverzeichnisVertTyp2)
             } else {
                 Ok(SeitenTyp::BestandsverzeichnisVert)
@@ -1985,7 +1985,7 @@ pub struct Bestandsverzeichnis {
     pub zuschreibungen: Vec<BvZuschreibung>,
     pub abschreibungen: Vec<BvAbschreibung>,
 }
-/*
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BvEintrag {
@@ -2008,9 +2008,6 @@ pub struct BvEintragRecht {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 pub struct BvEintragFlurstueck {
-*/
-#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
-pub struct BvEintrag {
     pub lfd_nr: usize,
     pub bisherige_lfd_nr: Option<usize>,
     pub flur: usize,
@@ -2025,10 +2022,9 @@ pub struct BvEintrag {
     pub manuell_geroetet: Option<bool>,
 }
 
-
-impl BvEintrag {
-    pub fn new(lfd_nr: usize) -> Self { 
-        BvEintrag { 
+impl BvEintragFlurstueck {
+    pub fn neu(lfd_nr: usize) -> Self {
+        BvEintragFlurstueck {
             lfd_nr,
             bisherige_lfd_nr: None,
             flur: 0,
@@ -2038,21 +2034,161 @@ impl BvEintrag {
             groesse: FlurstueckGroesse::Metrisch { m2: None },
             automatisch_geroetet: false,
             manuell_geroetet: None,
-        } 
+        }
+    }
+}
+
+impl BvEintragRecht {
+    pub fn neu(lfd_nr: usize) -> Self {
+        BvEintragRecht {
+            lfd_nr,
+            zu_nr: String::new(),
+            bisherige_lfd_nr: None,
+            text: String::new(),
+            automatisch_geroetet: false,
+            manuell_geroetet: None,
+        }
+    }
+}
+
+impl BvEintrag {
+    pub fn neu(lfd_nr: usize) -> Self { 
+        BvEintrag::Flurstueck(BvEintragFlurstueck::neu(lfd_nr))
+    }
+    
+    pub fn get_flur(&self) -> usize {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.flur,
+            BvEintrag::Recht(recht) => 0,
+        }
+    }
+    
+    pub fn get_flurstueck(&self) -> String {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.flurstueck.clone(),
+            BvEintrag::Recht(recht) => String::new(),
+        }
     }
     
     pub fn ist_leer(&self) -> bool {
-        self.lfd_nr == 0 &&
-        self.bisherige_lfd_nr == None &&
-        self.flur == 0 &&
-        self.flurstueck == String::new() &&
-        self.gemarkung == None &&
-        self.bezeichnung == None &&
-        self.groesse.ist_leer()
+        match self {
+            BvEintrag::Flurstueck(flst) => {
+                flst.lfd_nr == 0 &&
+                flst.bisherige_lfd_nr == None &&
+                flst.flur == 0 &&
+                flst.flurstueck == String::new() &&
+                flst.gemarkung == None &&
+                flst.bezeichnung == None &&
+                flst.groesse.ist_leer()
+            },
+            BvEintrag::Recht(recht) => {
+                recht.lfd_nr == 0 &&
+                recht.bisherige_lfd_nr == None &&
+                recht.text.is_empty()
+            }
+        }
     }
     
-    pub fn ist_geroetet(&self) -> bool { 
-        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    pub fn ist_geroetet(&self) -> bool {
+        match self {
+            BvEintrag::Flurstueck(flst) => {
+                flst.manuell_geroetet.unwrap_or(flst.automatisch_geroetet)
+            },
+            BvEintrag::Recht(recht) => {
+                recht.manuell_geroetet.unwrap_or(recht.automatisch_geroetet)
+            }
+        }
+    }
+    
+    pub fn get_lfd_nr(&self) -> usize {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.lfd_nr,
+            BvEintrag::Recht(recht) => recht.lfd_nr,
+        }
+    }
+    
+    pub fn set_lfd_nr(&mut self, nr: usize) {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.lfd_nr = nr,
+            BvEintrag::Recht(recht) => recht.lfd_nr = nr,
+        }
+    }
+    
+    pub fn get_bisherige_lfd_nr(&self) -> Option<usize> {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.bisherige_lfd_nr,
+            BvEintrag::Recht(recht) => recht.bisherige_lfd_nr,
+        }
+    }
+    
+    pub fn set_bisherige_lfd_nr(&mut self, nr: Option<usize>) {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.bisherige_lfd_nr = nr,
+            BvEintrag::Recht(recht) => recht.bisherige_lfd_nr = nr,
+        }
+    }
+    
+    pub fn set_zu_nr(&mut self, val: String) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { },
+            BvEintrag::Recht(recht) => { recht.zu_nr = val; },
+        }
+    }
+    
+    pub fn set_recht_text(&mut self, val: String) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { },
+            BvEintrag::Recht(recht) => { recht.text = val; },
+        }
+    }
+    
+    pub fn set_gemarkung(&mut self, val: Option<String>) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.gemarkung = val; },
+            BvEintrag::Recht(recht) => { },
+        }
+    }
+    
+    pub fn set_flur(&mut self, val: usize) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.flur = val; },
+            BvEintrag::Recht(recht) => { },
+        }
+    }
+    
+    pub fn set_flurstueck(&mut self, val: String) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.flurstueck = val; },
+            BvEintrag::Recht(recht) => { },
+        }
+    }
+    
+    pub fn set_groesse(&mut self, val: FlurstueckGroesse) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.groesse = val; },
+            BvEintrag::Recht(recht) => { },
+        }
+    }
+    
+    pub fn get_automatisch_geroetet(&self) -> bool {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.automatisch_geroetet },
+            BvEintrag::Recht(recht) => { recht.automatisch_geroetet },
+        }
+    }
+    
+    pub fn get_manuell_geroetet(&self) -> Option<bool> {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.manuell_geroetet },
+            BvEintrag::Recht(recht) => { recht.manuell_geroetet },
+        }
+    }
+    
+    pub fn set_manuell_geroetet(&mut self, val: Option<bool>) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.manuell_geroetet = val; },
+            BvEintrag::Recht(recht) => { recht.manuell_geroetet = val; },
+        }
     }
 }
 
@@ -2223,7 +2359,7 @@ pub fn analysiere_bv(
                     
                     let groesse = FlurstueckGroesse::Hektar { ha, a, m2 };
                         
-                    BvEintrag {
+                    BvEintrag::Flurstueck(BvEintragFlurstueck {
                         lfd_nr,
                         bisherige_lfd_nr,
                         flur,
@@ -2233,7 +2369,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
-                    }
+                    })
                 }).collect::<Vec<_>>()
             } else {
                 s.texte.get(4)
@@ -2320,7 +2456,7 @@ pub fn analysiere_bv(
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
-                    Some(BvEintrag {
+                    Some(BvEintrag::Flurstueck(BvEintragFlurstueck {
                         lfd_nr,
                         bisherige_lfd_nr,
                         flur,
@@ -2330,7 +2466,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
-                    })
+                    }))
                 })
                 .collect::<Vec<_>>()
             }
@@ -2400,7 +2536,7 @@ pub fn analysiere_bv(
                     
                     let groesse = FlurstueckGroesse::Metrisch { m2 };
                         
-                    BvEintrag {
+                    BvEintrag::Flurstueck(BvEintragFlurstueck {
                         lfd_nr,
                         bisherige_lfd_nr,
                         flur,
@@ -2410,7 +2546,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
-                    }
+                    })
                 }).collect::<Vec<_>>()
             } else {
                 s.texte.get(0)
@@ -2460,7 +2596,7 @@ pub fn analysiere_bv(
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
-                    Some(BvEintrag {
+                    Some(BvEintrag::Flurstueck(BvEintragFlurstueck {
                         lfd_nr,
                         bisherige_lfd_nr,
                         flur,
@@ -2470,7 +2606,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
-                    })
+                    }))
                 })
                 .collect::<Vec<_>>()
             }
@@ -2530,7 +2666,7 @@ pub fn analysiere_bv(
                     
                     let groesse = FlurstueckGroesse::Metrisch { m2 };
                         
-                    BvEintrag {
+                    BvEintrag::Flurstueck(BvEintragFlurstueck {
                         lfd_nr,
                         bisherige_lfd_nr,
                         flur,
@@ -2540,7 +2676,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
-                    }
+                    })
                 }).collect::<Vec<_>>()
             } else {
                 s.texte.get(0)
@@ -2590,7 +2726,7 @@ pub fn analysiere_bv(
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
-                    Some(BvEintrag {
+                    Some(BvEintrag::Flurstueck(BvEintragFlurstueck {
                         lfd_nr,
                         bisherige_lfd_nr,
                         flur,
@@ -2600,7 +2736,7 @@ pub fn analysiere_bv(
                         groesse,
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
-                    })
+                    }))
                 })
                 .collect::<Vec<_>>()
             }
@@ -2613,58 +2749,101 @@ pub fn analysiere_bv(
 
     // lfd. Nrn. korrigieren
     let bv_mit_0 = bv_eintraege.iter().enumerate().filter_map(|(i, bv)| {
-        if bv.lfd_nr == 0 { Some(i) } else { None }
+        if bv.get_lfd_nr() == 0 { Some(i) } else { None }
     }).collect::<Vec<_>>();
     
     for bv_idx in bv_mit_0 {
+        
         let bv_clone = bv_eintraege[bv_idx].clone();
         if bv_idx == 0 { continue; }
+        
         let bv_idx_minus_eins = bv_idx - 1;
+        
         let bv_minus_eins_clone = bv_eintraege[bv_idx_minus_eins].clone();
-        if bv_minus_eins_clone.lfd_nr == 0 {
+        
+        if bv_minus_eins_clone.get_lfd_nr() == 0 {
             continue;
         }
-        
+                
         let mut remove = false;
-        if bv_clone.bisherige_lfd_nr.is_some() && 
-           bv_minus_eins_clone.bisherige_lfd_nr.is_none() {
-           bv_eintraege[bv_idx_minus_eins].bisherige_lfd_nr = bv_clone.bisherige_lfd_nr.clone();
-           remove = true;
-        }
+        let (bv_clone_neu, bv_minus_eins_clone_neu) = match (bv_clone, bv_minus_eins_clone) {
+            (BvEintrag::Flurstueck(mut bv_clone), BvEintrag::Flurstueck(mut bv_minus_eins_clone)) => {
+                
+                if  bv_clone.bisherige_lfd_nr.is_some() && 
+                    bv_minus_eins_clone.bisherige_lfd_nr.is_none() {
+                    
+                    bv_minus_eins_clone.bisherige_lfd_nr = bv_clone.bisherige_lfd_nr;
+                    remove = true;
+                }
+                
+                if  bv_clone.gemarkung.is_some() && 
+                    bv_minus_eins_clone.gemarkung.is_none() {
+                    
+                    bv_minus_eins_clone.gemarkung = bv_clone.gemarkung.clone();
+                    remove = true;
+                }
+                
+                if  bv_clone.flur == 0 && 
+                    bv_minus_eins_clone.flur != 0 {
+                    
+                    bv_minus_eins_clone.flur = bv_clone.flur.clone();
+                    remove = true;
+                }
+                
+                if   bv_clone.flurstueck.is_empty() && 
+                    !bv_minus_eins_clone.flurstueck.is_empty() {
+                    
+                    bv_minus_eins_clone.flurstueck = bv_clone.flurstueck.clone();
+                    remove = true;
+                }
+                
+                if  bv_clone.bezeichnung.is_none() && 
+                    !bv_minus_eins_clone.bezeichnung.is_none() {
+                    
+                    bv_minus_eins_clone.bezeichnung = bv_clone.bezeichnung.clone();
+                    remove = true;
+                }
+                
+                if  bv_clone.groesse.ist_leer() && 
+                    !bv_minus_eins_clone.groesse.ist_leer() {
+                
+                    bv_minus_eins_clone.groesse = bv_clone.groesse.clone();
+                    remove = true;
+                }
+                
+                if remove {
+                    bv_clone = BvEintragFlurstueck::neu(0);
+                }
+                
+                (BvEintrag::Flurstueck(bv_clone), BvEintrag::Flurstueck(bv_minus_eins_clone))
+            },
+            (BvEintrag::Recht(mut bv_clone), BvEintrag::Recht(mut bv_minus_eins_clone)) => {
+                
+                if  bv_clone.bisherige_lfd_nr.is_some() && 
+                    bv_minus_eins_clone.bisherige_lfd_nr.is_none() {
+                    
+                    bv_minus_eins_clone.bisherige_lfd_nr = bv_clone.bisherige_lfd_nr;
+                    remove = true;
+                }
+                
+                if  bv_clone.text.is_empty() && 
+                    !bv_minus_eins_clone.text.is_empty() {
+                    
+                    bv_minus_eins_clone.text = bv_clone.text.clone();
+                    remove = true;
+                }
+                
+                if remove {
+                    bv_clone = BvEintragRecht::neu(0);
+                }
+                
+                (BvEintrag::Recht(bv_clone), BvEintrag::Recht(bv_minus_eins_clone))
+            },
+            (a, b) => (a, b)
+        };
         
-        if bv_clone.gemarkung.is_some() && 
-           bv_minus_eins_clone.gemarkung.is_none() {
-           bv_eintraege[bv_idx_minus_eins].gemarkung = bv_clone.gemarkung.clone();
-           remove = true;
-        }
-        
-        if bv_clone.flur == 0 && 
-           bv_minus_eins_clone.flur != 0 {
-           bv_eintraege[bv_idx_minus_eins].flur = bv_clone.flur.clone();
-           remove = true;
-        }
-        
-        if bv_clone.flurstueck.is_empty() && 
-           !bv_minus_eins_clone.flurstueck.is_empty() {
-           bv_eintraege[bv_idx_minus_eins].flurstueck = bv_clone.flurstueck.clone();
-           remove = true;
-        }
-        
-        if bv_clone.bezeichnung.is_none() && 
-           !bv_minus_eins_clone.bezeichnung.is_none() {
-           bv_eintraege[bv_idx_minus_eins].bezeichnung = bv_clone.bezeichnung.clone();
-           remove = true;
-        }
-        
-        if bv_clone.groesse.ist_leer() && 
-           !bv_minus_eins_clone.groesse.ist_leer() {
-           bv_eintraege[bv_idx_minus_eins].groesse = bv_clone.groesse.clone();
-           remove = true;
-        }
-        
-        if remove {
-            bv_eintraege[bv_idx] = BvEintrag::new(0);
-        }
+        bv_eintraege[bv_idx] = bv_clone_neu;
+        bv_eintraege[bv_idx - 1] = bv_minus_eins_clone_neu;
     }
     
     let mut bv_eintraege = bv_eintraege
@@ -2674,22 +2853,22 @@ pub fn analysiere_bv(
     
     let bv_mit_irregulaerer_lfd_nr = bv_eintraege.iter().enumerate().filter_map(|(i, bv)| {
         if i == 0 { return None; }
-        if bv_eintraege[i - 1].lfd_nr > bv.lfd_nr { Some(i) } else { None }
+        if bv_eintraege[i - 1].get_lfd_nr() > bv.get_lfd_nr() { Some(i) } else { None }
     }).collect::<Vec<_>>();
     
     let bv_irr_korrigieren = bv_mit_irregulaerer_lfd_nr.into_iter().filter_map(|bv_irr| {
-        let vorherige_lfd = bv_eintraege.get(bv_irr - 1)?.lfd_nr;
-        let naechste_lfd = bv_eintraege.get(bv_irr + 1)?.lfd_nr;
+        let vorherige_lfd = bv_eintraege.get(bv_irr - 1)?.get_lfd_nr();
+        let naechste_lfd = bv_eintraege.get(bv_irr + 1)?.get_lfd_nr();
         match naechste_lfd - vorherige_lfd {
             2 => Some((bv_irr, vorherige_lfd + 1)),
-            1 => if bv_eintraege[bv_irr].bisherige_lfd_nr == Some(vorherige_lfd) { Some((bv_irr, naechste_lfd)) } else { None }
+            1 => if bv_eintraege[bv_irr].get_bisherige_lfd_nr() == Some(vorherige_lfd) { Some((bv_irr, naechste_lfd)) } else { None }
             _ => None,
         }
     }).collect::<Vec<(usize, usize)>>();
     
     for (idx, lfd_neu) in bv_irr_korrigieren {
         if let Some(bv) = bv_eintraege.get_mut(idx) {
-            bv.lfd_nr = lfd_neu;
+            bv.set_lfd_nr(lfd_neu);
         }
     }
     

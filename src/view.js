@@ -64,6 +64,7 @@ let rpc = {
   schuldenart_script_testen: function(arg) { rpc.invoke({ cmd: 'schuldenart_script_testen', text: arg }); },
   edit_rechtsinhaber_auslesen_abt3_script: function(neu) { rpc.invoke({ cmd: 'edit_rechtsinhaber_auslesen_abt3_script', neu: neu }); },
   rechtsinhaber_auslesen_abt3_script_testen: function(arg) { rpc.invoke({ cmd: 'rechtsinhaber_auslesen_abt3_script_testen', text: arg }); },
+  bv_eintrag_typ_aendern: function(path, value) { rpc.invoke({ cmd: 'bv_eintrag_typ_aendern', path: path, value: value }); },
 
   klassifiziere_seite_neu: function(seite, klassifikation_neu) { rpc.invoke({ cmd: 'klassifiziere_seite_neu', seite: seite, klassifikation_neu: klassifikation_neu }); },
   resize_column: function(direction, columnId, number) { rpc.invoke({ cmd: 'resize_column', direction: direction, column_id: columnId, number: number }); },
@@ -1034,6 +1035,10 @@ function replacePdfImageZeilen(s) {
         return;
 
     zeilen.innerHTML = s;
+}
+
+function bvEintragTypAendern(path, value) {
+    rpc.bv_eintrag_typ_aendern(path, value);
 }
 
 // Init

@@ -343,8 +343,8 @@ fn get_belastete_flurstuecke(
         .iter()
         .rev()
         .find(|bv_eintrag| { 
-            bv_eintrag.flur == *flur && 
-            bv_eintrag.flurstueck == *flurstueck 
+            bv_eintrag.get_flur() == *flur && 
+            bv_eintrag.get_flurstueck() == *flurstueck 
         });
         
         let bv_eintrag = match bv_eintrag_gefunden {
@@ -357,7 +357,7 @@ fn get_belastete_flurstuecke(
             },
         };
         
-        teil_von_flst.push(bv_eintrag.lfd_nr);        
+        teil_von_flst.push(bv_eintrag.get_lfd_nr());        
         bv_teilweise.push(bv_eintrag);
     }
     
@@ -373,7 +373,7 @@ fn get_belastete_flurstuecke(
         let mut bv_eintrag_gefunden = grundbuch.bestandsverzeichnis.eintraege
         .iter()
         .rev()
-        .filter(|bv_eintrag| bv_eintrag.lfd_nr == bv || bv_eintrag.bisherige_lfd_nr == Some(bv))
+        .filter(|bv_eintrag| bv_eintrag.get_lfd_nr() == bv || bv_eintrag.get_bisherige_lfd_nr() == Some(bv))
         .cloned()
         .collect::<Vec<_>>();
         
@@ -407,14 +407,14 @@ fn get_belastete_flurstuecke(
             let mut fortgeführt_als = grundbuch.bestandsverzeichnis.eintraege
                 .iter()
                 .filter(|b| {
-                    b.flur == bv.flur && 
-                    b.flurstueck == bv.flurstueck &&
-                    b.lfd_nr > bv.lfd_nr
+                    b.get_flur() == bv.get_flur() && 
+                    b.get_flurstueck() == bv.get_flurstueck() &&
+                    b.get_lfd_nr() > bv.get_lfd_nr()
                 })
                 .cloned()
                 .collect::<Vec<_>>();
             
-            fortgeführt_als.sort_by(|a, b| a.lfd_nr.cmp(&b.lfd_nr));
+            fortgeführt_als.sort_by(|a, b| a.get_lfd_nr().cmp(&b.get_lfd_nr()));
             fortgeführt_als.dedup();
             
             if fortgeführt_als.is_empty() {
@@ -437,10 +437,10 @@ fn get_belastete_flurstuecke(
                 
             if fortgeführt_als.len() == 1 {
                 warnung.push(format!("Flur {} Flst. {} wird automatisch fortgeführt von BV-Nr. {} auf BV-Nr. {}", 
-                    fortgeführt_als[0].flur,
-                    fortgeführt_als[0].flurstueck,
-                    bv.lfd_nr,
-                    fortgeführt_als[0].lfd_nr,
+                    fortgeführt_als[0].get_flur(),
+                    fortgeführt_als[0].get_flurstueck(),
+                    bv.get_lfd_nr(),
+                    fortgeführt_als[0].get_lfd_nr(),
                 ));
                 alle_fortgefuehrt = false; // nochmal prüfen
                 bv_belastet[bv_idx] = fortgeführt_als[0].clone(); // Fortführung ausführen
@@ -451,8 +451,8 @@ fn get_belastete_flurstuecke(
 
             } else {
                 return Err(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}", 
-                    bv.lfd_nr,
-                    fortgeführt_als.iter().map(|l| l.lfd_nr).collect::<Vec<_>>(),
+                    bv.get_lfd_nr(),
+                    fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
                 ));
             }
         }
@@ -465,7 +465,7 @@ fn get_belastete_flurstuecke(
     let mut bv_belastet = hashset.into_iter().collect::<Vec<_>>();
     
     bv_belastet.retain(|bv| !bv.ist_geroetet());
-    bv_belastet.sort_by(|a, b| a.lfd_nr.cmp(&b.lfd_nr));
+    bv_belastet.sort_by(|a, b| a.get_lfd_nr().cmp(&b.get_lfd_nr()));
     bv_belastet.dedup();
     
     Ok(bv_belastet)
@@ -485,10 +485,10 @@ fn analysiere_bestandsverzeichnis(bv: &Bestandsverzeichnis, bv_zu_ab: &Bestandsv
     let mut flurstuecke_zu_roeten = Vec::new();
 
     // Prüfe, dass alle lfd. Nr. von 0 - MAX eingetragen sind
-    let max_nr_bv = bv.eintraege.iter().map(|f| f.lfd_nr).max().unwrap_or(1);
+    let max_nr_bv = bv.eintraege.iter().map(|f| f.get_lfd_nr()).max().unwrap_or(1);
     let mut alle_eintraege = (1..max_nr_bv.max(1)).collect::<BTreeSet<_>>();
     for e in bv.eintraege.iter() {
-        alle_eintraege.remove(&e.lfd_nr);
+        alle_eintraege.remove(&e.get_lfd_nr());
     }
     if !alle_eintraege.is_empty() {
         warnungen.push(format!("BV-Nummer(n) {:?} scheinen nicht zu existieren", alle_eintraege));
@@ -499,9 +499,9 @@ fn analysiere_bestandsverzeichnis(bv: &Bestandsverzeichnis, bv_zu_ab: &Bestandsv
     for e in bv.eintraege.iter() {
         if !e.ist_geroetet() {
             flur_flurstuecke_reverse
-                .entry((e.flur, e.flurstueck.clone()))
+                .entry((e.get_flur(), e.get_flurstueck().clone()))
                 .or_insert_with(|| Vec::new())
-                .push(e.lfd_nr);
+                .push(e.get_lfd_nr());
         }
     }
     
@@ -510,9 +510,9 @@ fn analysiere_bestandsverzeichnis(bv: &Bestandsverzeichnis, bv_zu_ab: &Bestandsv
             // Automatisch Flurstück mit kleinerer lfd. Nr. röten
             let letzte_lfd_nr = lfd_nrn.iter().max().unwrap();
             flurstuecke_zu_roeten.extend(bv.eintraege.iter().filter(|bve| {
-                bve.flur == *flur &&
-                bve.flurstueck == *flurstueck &&
-                bve.lfd_nr < *letzte_lfd_nr
+                bve.get_flur() == *flur &&
+                bve.get_flurstueck() == *flurstueck &&
+                bve.get_lfd_nr() < *letzte_lfd_nr
             }).cloned());
         }
     }

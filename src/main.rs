@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::{fs, thread};
+use std::fs;
 use std::sync::Mutex;
 
 use urlencoding::encode;
@@ -419,6 +419,8 @@ pub enum Cmd {
     ZeileNeu { file: String, page: usize, y: f32 },
     #[serde(rename = "zeile_loeschen")]
     ZeileLoeschen { file: String, page: usize, zeilen_id: usize },
+    #[serde(rename = "bv_eintrag_typ_aendern")]
+    BvEintragTypAendern { path: String, value: String },
     
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
@@ -642,9 +644,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     let mut bv_eintrag = get_mut_or_insert_last(
                         &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
                         row, 
-                        BvEintrag::new(row + 1)
+                        BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.lfd_nr = new_value.clone();
+                    bv_eintrag.set_lfd_nr(new_value.clone());
                 },
                 ("bv", "bisherige-lfd-nr") => {
                     let new_value = match new_value.parse::<usize>().ok() {
@@ -654,21 +656,37 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     let mut bv_eintrag = get_mut_or_insert_last(
                         &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
                         row, 
-                        BvEintrag::new(row + 1)
+                        BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.bisherige_lfd_nr = new_value.clone();
+                    bv_eintrag.set_bisherige_lfd_nr(new_value.clone());
+                },
+                ("bv", "zu-nr") => {
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::neu(row + 1)
+                    );
+                    bv_eintrag.set_zu_nr(new_value.clone());
+                },
+                ("bv", "recht-text") => {
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::neu(row + 1)
+                    );
+                    bv_eintrag.set_recht_text(new_value.clone());
                 },
                 ("bv", "gemarkung") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
                         &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
                         row, 
-                        BvEintrag::new(row + 1)
+                        BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.gemarkung = if new_value.trim().is_empty() { 
+                    bv_eintrag.set_gemarkung(if new_value.trim().is_empty() { 
                         None 
                     } else { 
                         Some(new_value.clone()) 
-                    };
+                    });
                 },
                 ("bv", "flur") => {
                     let new_value = match new_value.parse::<usize>().ok() {
@@ -678,17 +696,17 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     let mut bv_eintrag = get_mut_or_insert_last(
                         &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
                         row, 
-                        BvEintrag::new(row + 1)
+                        BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.flur = new_value.clone();
+                    bv_eintrag.set_flur(new_value.clone());
                 },
                 ("bv", "flurstueck") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
                         &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
                         row, 
-                        BvEintrag::new(row + 1)
+                        BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.flurstueck = new_value.clone();
+                    bv_eintrag.set_flurstueck(new_value.clone());
                 },
                 ("bv", "groesse") => {
                     let new_value = match new_value.parse::<usize>().ok() {
@@ -698,9 +716,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     let mut bv_eintrag = get_mut_or_insert_last(
                         &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
                         row, 
-                        BvEintrag::new(row + 1)
+                        BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.groesse = FlurstueckGroesse::Metrisch { m2: new_value };
+                    bv_eintrag.set_groesse(FlurstueckGroesse::Metrisch { m2: new_value });
                 },
                 ("bv-zuschreibung", "bv-nr") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -949,10 +967,64 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration)));
         },
+                Cmd::BvEintragTypAendern { path, value } => {
+        
+            use crate::digitalisiere::{BvEintragFlurstueck, BvEintragRecht};
+
+            let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let split = path.split(":").collect::<Vec<_>>();
+            
+            match split.get(0) {
+                Some(s) => if *s != "bv" { return; } else { },
+                None => return,
+            };
+            
+            let row = match split.get(1).and_then(|s| s.parse::<usize>().ok()) {
+                Some(s) => s,
+                None => return,
+            };
+            
+            match value.as_str() {
+                "flst" => {
+                    if let Some(BvEintrag::Recht(BvEintragRecht { lfd_nr, bisherige_lfd_nr, .. })) = open_file.analysiert.bestandsverzeichnis.eintraege.get(row).cloned() {
+                        open_file.analysiert.bestandsverzeichnis.eintraege[row] = BvEintrag::Flurstueck(BvEintragFlurstueck {
+                            lfd_nr,
+                            bisherige_lfd_nr,
+                            .. BvEintragFlurstueck::neu(0)
+                        });
+                    }
+                },
+                "recht" => {
+                    if let Some(BvEintrag::Flurstueck(BvEintragFlurstueck { lfd_nr, bisherige_lfd_nr, .. })) = open_file.analysiert.bestandsverzeichnis.eintraege.get(row).cloned() {
+                        open_file.analysiert.bestandsverzeichnis.eintraege[row] = BvEintrag::Recht(BvEintragRecht {
+                            lfd_nr,
+                            bisherige_lfd_nr,
+                            .. BvEintragRecht::neu(0)
+                        });
+                    }
+                },
+                _ => { return; }
+            }
+            
+            // speichern
+            let default_parent = Path::new("/");
+            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
+            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
+                let _ = std::fs::write(&target_output_path, json.as_bytes());
+            }
+            
+            let analyse_neu = ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration);
+            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", analyse_neu));    
+        },
         Cmd::EintragNeu { path } => {
             
-            use crate::digitalisiere::{BvEintrag, Abt2Eintrag, Abt3Eintrag};
-
             let split = path.split(":").collect::<Vec<_>>();
             
             let section = match split.get(0) {
@@ -982,7 +1054,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
 
             match *section {
-                "bv" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.eintraege, row, BvEintrag::new(row + 2)),
+                "bv" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.eintraege, row, BvEintrag::neu(row + 2)),
                 "bv-zuschreibung" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.zuschreibungen, row, BvZuschreibung::default()),
                 "bv-abschreibung" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.abschreibungen, row, BvAbschreibung::default()),
                 
@@ -1021,6 +1093,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 _ => return,
             };
             
+            // speichern
             let default_parent = Path::new("/");
             let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
             let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
@@ -1069,8 +1142,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     open_file.analysiert.bestandsverzeichnis.eintraege
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
-                        e.manuell_geroetet = Some(!cur);
+                        let cur = *e.get_manuell_geroetet().get_or_insert_with(|| e.get_automatisch_geroetet());
+                        e.set_manuell_geroetet(Some(!cur));
                     });
                 },
                 
@@ -1254,6 +1327,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
 
+            // speichern
             let default_parent = Path::new("/");
             let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
             let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
@@ -1591,12 +1665,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         } => {
             
             use std::env::temp_dir;
-            use crate::digitalisiere::Fehler;
             use std::fs::File;
-            use crate::digitalisiere::formatiere_seitenzahl;
             use std::process::Command;
             use image::ImageOutputFormat;
-            use crate::digitalisiere::zeilen_aus_tesseract_hocr;
+            use crate::digitalisiere::{formatiere_seitenzahl, zeilen_aus_tesseract_hocr};
             
             let file = match data.loaded_files.get_mut(file_name.as_str()) {
                 Some(s) => s,

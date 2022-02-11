@@ -954,15 +954,29 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                 },
                 belastete_flurstuecke = 
                     a2a.belastete_flurstuecke.iter().map(|belastet| {
-                        format!("<span style='display:flex;'>
-                            <img src='{pfeil}' style='width:12px;height:12px;'/>
-                            <p style='display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
-                            </span>", 
-                            pfeil = pfeil_str,
-                            flur = belastet.flur,
-                            flurstueck = belastet.flurstueck,
-                            bv_nr = belastet.lfd_nr,
-                        ) 
+                        use crate::digitalisiere::BvEintrag;
+                        match belastet {
+                            BvEintrag::Flurstueck(flst) => {
+                                format!("<span style='display:flex;'>
+                                    <img src='{pfeil}' style='width:12px;height:12px;'/>
+                                    <p style='display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
+                                    </span>", 
+                                    pfeil = pfeil_str,
+                                    flur = flst.flur,
+                                    flurstueck = flst.flurstueck,
+                                    bv_nr = flst.lfd_nr,
+                                ) 
+                            },
+                            BvEintrag::Recht(recht) => {
+                                format!("<span style='display:flex;'>
+                                    <img src='{pfeil}' style='width:12px;height:12px;'/>
+                                    <p style='display:inline-block;margin-left:10px;'>Grundstücksgl. Recht (BV-Nr. {bv_nr})</p>
+                                    </span>", 
+                                    pfeil = pfeil_str,
+                                    bv_nr = recht.lfd_nr,
+                                ) 
+                            },
+                        }
                     })
                     .collect::<Vec<String>>()
                     .join("\r\n"),
@@ -1030,15 +1044,29 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                 },
                 belastete_flurstuecke = 
                     a3a.belastete_flurstuecke.iter().map(|belastet| {
-                        format!("<span style='display:flex;'>
-                            <img src='{pfeil}' style='width:12px;height:12px;'/>
-                            <p style='display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
-                            </span>", 
-                            pfeil = pfeil_str,
-                            flur = belastet.flur,
-                            flurstueck = belastet.flurstueck,
-                            bv_nr = belastet.lfd_nr,
-                        ) 
+                        use crate::digitalisiere::BvEintrag;
+                        match belastet {
+                            BvEintrag::Flurstueck(flst) => {
+                                format!("<span style='display:flex;'>
+                                    <img src='{pfeil}' style='width:12px;height:12px;'/>
+                                    <p style='display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
+                                    </span>", 
+                                    pfeil = pfeil_str,
+                                    flur = flst.flur,
+                                    flurstueck = flst.flurstueck,
+                                    bv_nr = flst.lfd_nr,
+                                ) 
+                            },
+                            BvEintrag::Recht(recht) => {
+                                format!("<span style='display:flex;'>
+                                    <img src='{pfeil}' style='width:12px;height:12px;'/>
+                                    <p style='display:inline-block;margin-left:10px;'>Grundstücksgl. Recht (BV-Nr. {bv_nr})</p>
+                                    </span>", 
+                                    pfeil = pfeil_str,
+                                    bv_nr = recht.lfd_nr,
+                                ) 
+                            },
+                        }
                     })
                     .collect::<Vec<String>>()
                     .join("\r\n"),
@@ -1079,71 +1107,123 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
 }
 
 pub fn render_bestandsverzeichnis(open_file: &mut PdfFile) -> String {
+    
     use crate::digitalisiere::BvEintrag;
 
     crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
 
     let mut bestandsverzeichnis = open_file.analysiert.bestandsverzeichnis.clone();
     if bestandsverzeichnis.eintraege.is_empty() {
-        bestandsverzeichnis.eintraege = vec![BvEintrag::new(1)];
+        bestandsverzeichnis.eintraege = vec![BvEintrag::neu(1)];
     }
     
     let bv = bestandsverzeichnis.eintraege.iter().enumerate().map(|(zeile_nr, bve)| {
-        
+                
         let bv_geroetet = if bve.ist_geroetet() { 
             "background:rgb(255,195,195);" 
         } else { 
             "background:white;" 
         };
         
-        format!("
-        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
-                id='bv_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
-            />
-            <input type='number' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
-                id='bv_{zeile_nr}_bisherige-lfd-nr'
-                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
-                oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
-            />
-            <input type='text' style='width: 160px;{bv_geroetet}'  value='{gemarkung}' 
-                id='bv_{zeile_nr}_gemarkung'
-                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:gemarkung\", event)'
-                oninput='editText(\"bv:{zeile_nr}:gemarkung\", event)'
-            />
-            <input type='number' style='width: 80px;{bv_geroetet}'  value='{flur}' 
-                id='bv_{zeile_nr}_flur'
-                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flur\", event)'
-                oninput='editText(\"bv:{zeile_nr}:flur\", event)'
-            />
-            <input type='text' style='width: 80px;{bv_geroetet}'  value='{flurstueck}' 
-                id='bv_{zeile_nr}_flurstueck'
-                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flurstueck\", event)'
-                oninput='editText(\"bv:{zeile_nr}:flurstueck\", event)'
-            />
-            <div style='display:flex;flex-direction:row;flex-grow:1;'>
-                <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"bv:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
-            </div>
-        </div>", 
-            bv_geroetet = bv_geroetet,
-            zeile_nr = zeile_nr,
-            lfd_nr = format!("{}", bve.lfd_nr),
-            bisherige_lfd_nr = bve.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
-            flur = format!("{}", bve.flur),
-            flurstueck = format!("{}", bve.flurstueck),
-            gemarkung = bve.gemarkung.clone().unwrap_or_default(),
-        )
+        match bve {
+            BvEintrag::Flurstueck(flst) => {
+                format!("
+                <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+                    <select style='width: 60px;{bv_geroetet}' id='bv_{zeile_nr}_typ' onchange='bvEintragTypAendern(\"bv:{zeile_nr}:typ\", this.options[this.selectedIndex].value)'>
+                        <option value='flst' selected='selected'>Flst.</option>
+                        <option value='recht'>Recht</option>
+                    </select>
+                    <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
+                        id='bv_{zeile_nr}_lfd-nr'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
+                        oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
+                    />
+                    <input type='number' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
+                        id='bv_{zeile_nr}_bisherige-lfd-nr'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
+                        oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
+                    />
+                    <input type='text' style='width: 160px;{bv_geroetet}'  value='{gemarkung}' 
+                        id='bv_{zeile_nr}_gemarkung'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:gemarkung\", event)'
+                        oninput='editText(\"bv:{zeile_nr}:gemarkung\", event)'
+                    />
+                    <input type='number' style='width: 80px;{bv_geroetet}'  value='{flur}' 
+                        id='bv_{zeile_nr}_flur'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flur\", event)'
+                        oninput='editText(\"bv:{zeile_nr}:flur\", event)'
+                    />
+                    <input type='text' style='width: 80px;{bv_geroetet}'  value='{flurstueck}' 
+                        id='bv_{zeile_nr}_flurstueck'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flurstueck\", event)'
+                        oninput='editText(\"bv:{zeile_nr}:flurstueck\", event)'
+                    />
+                    <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                        <div style='display:flex;flex-grow:1'></div>
+                        <button onclick='eintragNeu(\"bv:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                        <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                        <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                    </div>
+                </div>",
+                    bv_geroetet = bv_geroetet,
+                    zeile_nr = zeile_nr,
+                    lfd_nr = format!("{}", flst.lfd_nr),
+                    bisherige_lfd_nr = flst.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
+                    flur = format!("{}", flst.flur),
+                    flurstueck = format!("{}", flst.flurstueck),
+                    gemarkung = flst.gemarkung.clone().unwrap_or_default(),
+                )
+            },
+            BvEintrag::Recht(recht) => {
+                format!("
+                <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+                    <select style='width: 60px;{bv_geroetet}' id='bv_{zeile_nr}_typ' onchange='bvEintragTypAendern(\"bv:{zeile_nr}:typ\", this.options[this.selectedIndex].value)'>
+                        <option value='flst'>Flst.</option>
+                        <option value='recht' selected='selected'>Recht</option>
+                    </select>
+                    <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
+                        id='bv_{zeile_nr}_lfd-nr'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
+                        oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
+                    />
+                    <input type='number' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
+                        id='bv_{zeile_nr}_bisherige-lfd-nr'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
+                        oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
+                    />
+                    <input type='text' style='width: 30px;{bv_geroetet}' value='{zu_nr}' 
+                        id='bv_{zeile_nr}_zu-nr'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:zu-nr\", event)' 
+                        oninput='editText(\"bv:{zeile_nr}:zu-nr\", event)'
+                    />
+                    <textarea rows='5' cols='45' style='width: 320px;{bv_geroetet}'  value='{recht_text}' 
+                        id='bv_{zeile_nr}_recht-text'
+                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:recht-text\", event)'
+                        oninput='editText(\"bv:{zeile_nr}:recht-text\", event)'
+                    ></textarea>
+                    <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                        <div style='display:flex;flex-grow:1'></div>
+                        <button onclick='eintragNeu(\"bv:{zeile_nr}\")' class='btn btn_neu' >neu</button>
+                        <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
+                        <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                    </div>
+                </div>", 
+                    bv_geroetet = bv_geroetet,
+                    zeile_nr = zeile_nr,
+                    lfd_nr = format!("{}", recht.lfd_nr),
+                    zu_nr = recht.zu_nr,
+                    bisherige_lfd_nr = recht.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
+                    recht_text = recht.text,
+                )
+            },
+        }
     }).collect::<Vec<String>>().join("\r\n");
     
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis</h4>
         
         <div class='__application-table-header'>
+            <p style='width: 60px;'>Typ</p>
             <p style='width: 30px;'>Nr.</p>
             <p style='width: 80px;'>Nr. (alt)</p>
             <p style='width: 160px;'>Gemarkung</p>
