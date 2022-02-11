@@ -249,6 +249,84 @@ pub fn lese_titelblatt(pdf_bytes: &[u8]) -> Result<Titelblatt, Fehler> {
     })    
 }
 
+pub fn konvertiere_pdf_seite_zu_png_prioritaet(pdf_bytes: &[u8], seitenzahlen: &[u32], titelblatt: &Titelblatt, geroetet: bool) -> Result<(), Fehler> {
+    
+    use std::path::Path;
+    
+    let temp_ordner = std::env::temp_dir()
+    .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
+    
+    let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
+    
+    let _ = fs::create_dir_all(temp_ordner.clone())
+        .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
+
+    for sz in seitenzahlen {
+        
+        if geroetet {
+        
+            let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
+    
+            if !Path::new(&temp_pdf_pfad).exists() {
+                fs::write(temp_pdf_pfad.clone(), pdf_bytes)
+                    .map_err(|e| Fehler::Io(format!("{}", temp_pdf_pfad.display()), e))?;
+            }
+        
+            let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", formatiere_seitenzahl(*sz, max_sz)));
+        
+            if !pdftoppm_output_path.exists() {
+                // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
+                // writes result to /tmp/test-01.png
+                let _ = Command::new("pdftoppm")
+                .arg("-q")
+                .arg("-r")
+                .arg("600") // 600 DPI
+                .arg("-png")
+                .arg("-f")
+                .arg(&format!("{}", sz))
+                .arg("-l")
+                .arg(&format!("{}", sz))
+                .arg(&format!("{}", temp_pdf_pfad.display()))     
+                .arg(&format!("{}", temp_ordner.clone().join(format!("page")).display()))     
+                .status();
+            }
+                
+                
+        } else {
+                
+            let temp_clean_pdf_pfad = temp_ordner.clone().join("temp-clean.pdf");
+            if !Path::new(&temp_clean_pdf_pfad).exists() {
+                let pdf_clean = clean_pdf(pdf_bytes, titelblatt)?;
+            
+                fs::write(temp_clean_pdf_pfad.clone(), pdf_clean)
+                    .map_err(|e| Fehler::Io(format!("{}", temp_clean_pdf_pfad.display()), e))?;
+            }
+            
+            let pdftoppm_clean_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(*sz, max_sz)));
+                    
+            if !pdftoppm_clean_output_path.exists() {
+                    
+                // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
+                // writes result to /tmp/page-clean-01.png
+                let _ = Command::new("pdftoppm")
+                .arg("-q")
+                .arg("-r")
+                .arg("600") // 600 DPI
+                .arg("-png")
+                .arg("-f")
+                .arg(&format!("{}", sz))
+                .arg("-l")
+                .arg(&format!("{}", sz))
+                .arg(&format!("{}", temp_clean_pdf_pfad.display()))     
+                .arg(&format!("{}", temp_ordner.clone().join(format!("page-clean")).display()))     
+                .status();
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 // Konvertiert alle Seiten zu PNG Dateien (für Schrifterkennung)
 pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], titelblatt: &Titelblatt) -> Result<(), Fehler> {
     

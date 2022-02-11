@@ -1106,11 +1106,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
 
 }
 
-pub fn render_bestandsverzeichnis(open_file: &mut PdfFile) -> String {
+pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
     
     use crate::digitalisiere::BvEintrag;
-
-    crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
 
     let mut bestandsverzeichnis = open_file.analysiert.bestandsverzeichnis.clone();
     if bestandsverzeichnis.eintraege.is_empty() {
@@ -1833,7 +1831,12 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     
     if !pdftoppm_output_path.exists() {
         if let Ok(o) = std::fs::read(&file.datei) {
-            let _ = crate::digitalisiere::konvertiere_pdf_seiten_zu_png(&o, &[open_file.1], &file.titelblatt);
+            let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
+                &o, 
+                &[open_file.1], 
+                &file.titelblatt, 
+                !rpc_data.konfiguration.vorschau_ohne_geroetet
+            );
         }
     }
     

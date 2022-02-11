@@ -2134,35 +2134,84 @@ function replacePageList(s) {
          page_list.innerHTML = s;
 }
 
-function replaceMainContainer(s) {
-    let page_list = document.getElementById("__application-main-container");
-    if (page_list)
-         page_list.innerHTML = s;
+function replaceBestandsverzeichnis(s) {
+    let e = document.getElementById("__application-bestandsverzeichnis");
+    if (e)
+        e.innerHTML = s;
 }
 
-function replaceBestandsverzeichnis(s) {
-    let page_list = document.getElementById("__application-bestandsverzeichnis");
-    if (page_list)
-         page_list.innerHTML = s;
+function replaceBestandsverzeichnisZuschreibungen(s) {
+    let e = document.getElementById("__application-bestandsverzeichnis-veraenderungen");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceBestandsverzeichnisAbschreibungen(s) {
+    let e = document.getElementById("__application-bestandsverzeichnis-loeschungen");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt1(s) {
+    let e = document.getElementById("__application-abteilung-1");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt1Veraenderungen(s) {
+    let e = document.getElementById("__application-abteilung-1-veraenderungen");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt1Loeschungen(s) {
+    let e = document.getElementById("__application-abteilung-1-loeschungen");
+    if (e)
+        e.innerHTML = s;
 }
 
 function replaceAbt2(s) {
-    let page_list = document.getElementById("__application-abteilung-2");
-    if (page_list)
-         page_list.innerHTML = s;
+    let e = document.getElementById("__application-abteilung-2");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt2Veraenderungen(s) {
+    let e = document.getElementById("__application-abteilung-2-veraenderungen");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt2Loeschungen(s) {
+    let e = document.getElementById("__application-abteilung-2-loeschungen");
+    if (e)
+        e.innerHTML = s;
 }
 
 function replaceAbt3(s) {
-    let page_list = document.getElementById("__application-abteilung-3");
-    if (page_list)
-         page_list.innerHTML = s;
+    let e = document.getElementById("__application-abteilung-3");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt3Veraenderungen(s) {
+    let e = document.getElementById("__application-abteilung-3-veraenderungen");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAbt3Loeschungen(s) {
+    let e = document.getElementById("__application-abteilung-3-loeschungen");
+    if (e)
+        e.innerHTML = s;
 }
 
 function replaceAnalyseGrundbuch(s) {
-    let page_list = document.getElementById("__application-analyse-grundbuch");
-    if (page_list)
-         page_list.innerHTML = s;
+    let e = document.getElementById("__application-");
+    if (e)
+        e.innerHTML = s;
 }
+
 
 function openConfiguration(e) {
     rpc.open_configuration();

@@ -1019,9 +1019,20 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
             
-            let analyse_neu = ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration);
-            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", analyse_neu));    
+            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
+            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
         },
         Cmd::EintragNeu { path } => {
             
@@ -1101,10 +1112,22 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Ok(json) = serde_json::to_string_pretty(&open_file) {
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
-            
-            let analyse_neu = ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration);
-            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", analyse_neu));            
+                       
+            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
+            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+          
             webview.eval(&format!("document.getElementById(`{}`).focus();", next_focus));
         },
         Cmd::EintragLoeschen { path } | 
@@ -1335,11 +1358,22 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Ok(json) = serde_json::to_string_pretty(&open_file) {
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
+    
+            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
+            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
             
-            let analyse_neu = ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration);
-
-            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", analyse_neu));            
             webview.eval(&format!("(function() {{ 
                 let element = document.getElementById(`{}`); 
                 if (element) {{ element.focus(); }};
@@ -2217,8 +2251,30 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 None => { },
             };
-                        
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            
+            
+            let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get(&file)) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
+            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+            webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
+            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
         },
         Cmd::SetOpenPage { active_page } => {
             
@@ -2232,8 +2288,30 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 None => { },
             };
-                        
-            webview.eval(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
+            
+            
+            let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get(&file)) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
+            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+            webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
+            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
         },
     }
 }
