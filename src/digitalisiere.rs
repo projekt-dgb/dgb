@@ -3564,6 +3564,9 @@ impl Abt3Eintrag {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Veraenderung {
     pub lfd_nr: String,
+    #[serde(default)]
+    pub betrag: String,
+    #[serde(default)]
     pub text: String,
     #[serde(default)]
     pub automatisch_geroetet: bool,
@@ -3574,6 +3577,9 @@ pub struct Abt3Veraenderung {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Loeschung {
     pub lfd_nr: String,
+    #[serde(default)]
+    pub betrag: String,
+    #[serde(default)]
     pub text: String,
     #[serde(default)]
     pub automatisch_geroetet: bool,
@@ -3641,6 +3647,7 @@ pub fn analysiere_abt3(
                     manuell_geroetet: None,
                 }
             }).collect::<Vec<_>>()
+        
         } else {
         
             let mut texte = s.texte.clone();
@@ -3702,11 +3709,172 @@ pub fn analysiere_abt3(
         
     }).collect();
     
+    let abt3_veraenderungen = seiten
+    .iter()
+    .filter(|(num, s)| {
+        s.typ == SeitenTyp::Abt3HorzVeraenderungen || 
+        s.typ == SeitenTyp::Abt3VertVeraenderungen
+    }).flat_map(|(seitenzahl, s)| {
+        if s.typ == SeitenTyp::Abt3VertVeraenderungen {
+            
+            let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
+            
+            if !zeilen_auf_seite.is_empty() {
+                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                    
+                    let lfd_nr = s.texte
+                    .get(0)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                
+                    let betrag = s.texte
+                    .get(1)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    let text = s.texte
+                    .get(2)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    Abt3Veraenderung {
+                        lfd_nr,
+                        betrag,
+                        text: text.trim().to_string(),
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                let mut texte = s.texte.clone();
+                texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+
+                texte.get(2).unwrap_or(&default_texte).iter().enumerate().map(|(text_num, text)| {
+                    
+                    let text_start_y = text.start_y;
+                    let text_end_y = text.end_y;
+
+                    // TODO: auch texte "1-3"
+                    let lfd_nr = get_erster_text_bei_ca(
+                        &texte.get(0).unwrap_or(&default_texte), 
+                        text_num,
+                        text_start_y,
+                        text_end_y,
+                    ).map(|s| s.text.trim().to_string()).unwrap_or_default();
+                
+                    let betrag = get_erster_text_bei_ca(
+                        &texte.get(1).unwrap_or(&default_texte), 
+                        text_num,
+                        text_start_y,
+                        text_end_y,
+                    ).map(|s| s.text.trim().to_string()).unwrap_or_default();
+                    
+                    Abt3Veraenderung {
+                        lfd_nr,
+                        betrag,
+                        text: text.text.trim().to_string(),
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                })
+                .collect::<Vec<_>>()
+            }
+        } else { 
+            Vec::new() 
+        }.into_iter()
+    }).collect();
+    
+    let abt3_loeschungen = seiten
+    .iter()
+    .filter(|(num, s)| {
+        s.typ == SeitenTyp::Abt3HorzLoeschungen || 
+        s.typ == SeitenTyp::Abt3VertLoeschungen
+    }).flat_map(|(seitenzahl, s)| {
+        if s.typ == SeitenTyp::Abt3VertLoeschungen {
+            
+            let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
+            
+            if !zeilen_auf_seite.is_empty() {
+                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                    
+                    let lfd_nr = s.texte
+                    .get(0)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    let betrag = s.texte
+                    .get(1)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    let text = s.texte
+                    .get(2)
+                    .and_then(|zeilen| zeilen.get(i))
+                    .map(|t| t.text.trim().to_string())
+                    .unwrap_or_default();
+                    
+                    Abt3Loeschung {
+                        lfd_nr,
+                        betrag,
+                        text: text.trim().to_string(),
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                let mut texte = s.texte.clone();
+                texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+
+                texte.get(2).unwrap_or(&default_texte).iter().enumerate().map(|(text_num, text)| {
+                    
+                    let text_start_y = text.start_y;
+                    let text_end_y = text.end_y;
+
+                    // TODO: auch texte "1-3"
+                    let lfd_nr = get_erster_text_bei_ca(
+                        &texte.get(0).unwrap_or(&default_texte), 
+                        text_num,
+                        text_start_y,
+                        text_end_y,
+                    ).map(|s| s.text.trim().to_string()).unwrap_or_default();
+                    
+                    let betrag = get_erster_text_bei_ca(
+                        &texte.get(1).unwrap_or(&default_texte), 
+                        text_num,
+                        text_start_y,
+                        text_end_y,
+                    ).map(|s| s.text.trim().to_string()).unwrap_or_default();
+                    
+                    Abt3Loeschung {
+                        lfd_nr,
+                        betrag,
+                        text: text.text.trim().to_string(),
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                    }
+                })
+                .collect::<Vec<_>>()
+            }
+        } else { 
+            Vec::new() 
+        }.into_iter()
+    }).collect();
     
     Ok(Abteilung3 {
         eintraege: abt3_eintraege,
-        veraenderungen: Vec::new(),
-        loeschungen: Vec::new(),
+        veraenderungen: abt3_veraenderungen,
+        loeschungen: abt3_loeschungen,
     })
 }
 
