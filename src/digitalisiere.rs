@@ -328,15 +328,13 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(pdf_bytes: &[u8], seitenzahlen: &
 }
 
 // Konvertiert alle Seiten zu PNG Dateien (für Schrifterkennung)
-pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], titelblatt: &Titelblatt) -> Result<(), Fehler> {
+pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], max_sz: u32, titelblatt: &Titelblatt) -> Result<(), Fehler> {
     
     use std::path::Path;
     
     let temp_ordner = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
-    
-    let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
-    
+        
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
 
@@ -362,6 +360,8 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
         let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", formatiere_seitenzahl(*sz, max_sz)));
         
         if !pdftoppm_output_path.exists() {
+            println!("{} existiert NICHT!", pdftoppm_output_path.display());
+
             // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
             // writes result to /tmp/test-01.png
             let _ = Command::new("pdftoppm")
@@ -376,12 +376,16 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
             .arg(&format!("{}", temp_pdf_pfad.display()))     
             .arg(&format!("{}", temp_ordner.clone().join(format!("page")).display()))     
             .status();
+        } else {
+            println!("{} existiert!", pdftoppm_output_path.display());
         }
                 
         let pdftoppm_clean_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", formatiere_seitenzahl(*sz, max_sz)));
                 
         if !pdftoppm_clean_output_path.exists() {
-                
+            
+            println!("{} existiert NICHT!", pdftoppm_clean_output_path.display());
+
             // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
             // writes result to /tmp/page-clean-01.png
             let _ = Command::new("pdftoppm")
@@ -396,13 +400,15 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], tit
             .arg(&format!("{}", temp_clean_pdf_pfad.display()))     
             .arg(&format!("{}", temp_ordner.clone().join(format!("page-clean")).display()))     
             .status();
+        } else {
+            println!("{} existiert!", pdftoppm_clean_output_path.display());
         }
     });
     
     Ok(())
 }
 
-pub fn ocr_seite(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32) -> Result<(), Fehler> {
+pub fn ocr_seite(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32) -> Result<String, Fehler> {
         
     let temp_ordner = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
@@ -427,8 +433,8 @@ pub fn ocr_seite(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32) 
         .status();
     }
     
-    
-    Ok(())
+    std::fs::read_to_string(tesseract_output_path.clone())
+        .map_err(|e| Fehler::Io(format!("{}", tesseract_output_path.display()), e))
 }
 
 
@@ -475,7 +481,12 @@ pub enum SeitenTyp {
 }
 
 // Bestimmt den Seitentyp anhand des OCR-Textes der gesamten Seite
-pub fn klassifiziere_seitentyp(titelblatt: &Titelblatt, seitenzahl: u32, max_sz: u32) -> Result<SeitenTyp, Fehler> {
+pub fn klassifiziere_seitentyp(
+    titelblatt: &Titelblatt, 
+    seitenzahl: u32, 
+    max_sz: u32, 
+    ocr_text: Option<&String>
+) -> Result<SeitenTyp, Fehler> {
     
     // Um die Seite zu erkennen, müssen wir erst den Typ der Seite erkennen 
     //
@@ -490,11 +501,17 @@ pub fn klassifiziere_seitentyp(titelblatt: &Titelblatt, seitenzahl: u32, max_sz:
         .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
     
     let is_landscape_page = w > h;
+            
+    let ocr_text = match ocr_text {
+        Some(s) => s.clone(),
+        None => {            
+            let tesseract_output_path = temp_ordner.clone().join(format!("tesseract-{:02}.txt", seitenzahl));
+            fs::read_to_string(tesseract_output_path.clone())
+                .map_err(|e| Fehler::Io(format!("{}", tesseract_output_path.display()), e))?
+        }
+    };
     
-    let tesseract_output_path = temp_ordner.clone().join(format!("tesseract-{:02}.txt", seitenzahl));
-    let ocr_text = fs::read_to_string(tesseract_output_path.clone())
-        .map_err(|e| Fehler::Io(format!("{}", tesseract_output_path.display()), e))?;
-        
+    
     if 
         ocr_text.contains("Dritte Abteilung") || 
         ocr_text.contains("Abteilung 3") || 
@@ -2116,7 +2133,7 @@ pub struct BvEintragRecht {
     pub bisherige_lfd_nr: Option<usize>,
     pub text: String,
     #[serde(default)]
-    pub automatisch_geroetet: bool,
+    pub automatisch_geroetet: Option<bool>,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
     #[serde(default)]
@@ -2134,7 +2151,7 @@ pub struct BvEintragFlurstueck {
     pub bezeichnung: Option<String>,
     pub groesse: FlurstueckGroesse,
     #[serde(default)]
-    pub automatisch_geroetet: bool,
+    pub automatisch_geroetet: Option<bool>,
     #[serde(default)]
     pub manuell_geroetet: Option<bool>,
     #[serde(default)]
@@ -2151,7 +2168,7 @@ impl BvEintragFlurstueck {
             gemarkung: None,
             bezeichnung: None,
             groesse: FlurstueckGroesse::Metrisch { m2: None },
-            automatisch_geroetet: false,
+            automatisch_geroetet: None,
             manuell_geroetet: None,
             position_in_pdf: None,
         }
@@ -2165,7 +2182,7 @@ impl BvEintragRecht {
             zu_nr: String::new(),
             bisherige_lfd_nr: None,
             text: String::new(),
-            automatisch_geroetet: false,
+            automatisch_geroetet: None,
             manuell_geroetet: None,
             position_in_pdf: None,
         }
@@ -2220,10 +2237,10 @@ impl BvEintrag {
     pub fn ist_geroetet(&self) -> bool {
         match self {
             BvEintrag::Flurstueck(flst) => {
-                flst.manuell_geroetet.unwrap_or(flst.automatisch_geroetet)
+                flst.manuell_geroetet.unwrap_or(flst.automatisch_geroetet.unwrap_or(false))
             },
             BvEintrag::Recht(recht) => {
-                recht.manuell_geroetet.unwrap_or(recht.automatisch_geroetet)
+                recht.manuell_geroetet.unwrap_or(recht.automatisch_geroetet.unwrap_or(false))
             }
         }
     }
@@ -2298,7 +2315,15 @@ impl BvEintrag {
         }
     }
     
-    pub fn get_automatisch_geroetet(&self) -> bool {
+    
+    pub fn unset_automatisch_geroetet(&mut self) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.automatisch_geroetet = None; },
+            BvEintrag::Recht(recht) => { recht.automatisch_geroetet = None; },
+        }
+    }
+    
+    pub fn get_automatisch_geroetet(&self) -> Option<bool> {
         match self {
             BvEintrag::Flurstueck(flst) => { flst.automatisch_geroetet },
             BvEintrag::Recht(recht) => { recht.automatisch_geroetet },
@@ -2307,8 +2332,8 @@ impl BvEintrag {
     
     pub fn set_automatisch_geroetet(&mut self, val: bool) {
         match self {
-            BvEintrag::Flurstueck(flst) => { flst.automatisch_geroetet = val; },
-            BvEintrag::Recht(recht) => { recht.automatisch_geroetet = val; },
+            BvEintrag::Flurstueck(flst) => { flst.automatisch_geroetet = Some(val); },
+            BvEintrag::Recht(recht) => { recht.automatisch_geroetet = Some(val); },
         }
     }
     
@@ -2529,7 +2554,7 @@ pub fn analysiere_bv(
                         gemarkung,
                         bezeichnung,
                         groesse,
-                        automatisch_geroetet: false,
+                        automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: Some(position_in_pdf),
                     })
@@ -2635,7 +2660,7 @@ pub fn analysiere_bv(
                         gemarkung,
                         bezeichnung,
                         groesse,
-                        automatisch_geroetet: false,
+                        automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: Some(position_in_pdf),
                     }))
@@ -2729,7 +2754,7 @@ pub fn analysiere_bv(
                         gemarkung,
                         bezeichnung,
                         groesse,
-                        automatisch_geroetet: false,
+                        automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: Some(position_in_pdf),
                     })
@@ -2799,7 +2824,7 @@ pub fn analysiere_bv(
                         gemarkung,
                         bezeichnung,
                         groesse,
-                        automatisch_geroetet: false,
+                        automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: Some(position_in_pdf),
                     }))
@@ -2878,7 +2903,7 @@ pub fn analysiere_bv(
                         gemarkung,
                         bezeichnung,
                         groesse,
-                        automatisch_geroetet: false,
+                        automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: Some(position_in_pdf),
                     })
@@ -2946,7 +2971,7 @@ pub fn analysiere_bv(
                         gemarkung,
                         bezeichnung,
                         groesse,
-                        automatisch_geroetet: false,
+                        automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: Some(position_in_pdf),
                     }))
@@ -2959,7 +2984,7 @@ pub fn analysiere_bv(
     })
     .filter(|bv| !bv.ist_leer())
     .collect::<Vec<_>>();
-
+    
     // lfd. Nrn. korrigieren
     let bv_mit_0 = bv_eintraege.iter().enumerate().filter_map(|(i, bv)| {
         if bv.get_lfd_nr() == 0 { Some(i) } else { None }
@@ -3083,52 +3108,6 @@ pub fn analysiere_bv(
         if let Some(bv) = bv_eintraege.get_mut(idx) {
             bv.set_lfd_nr(lfd_neu);
         }
-    }
-    
-    // Automatisch BV Einträge röten
-    for bv in bv_eintraege.iter_mut() {
-        let ist_geroetet = {
-            if let Some(position_in_pdf) = bv.get_position_in_pdf() {
-                
-                use image::Pixel;
-                use image::GenericImageView;
-
-                let bv_rect = position_in_pdf.get_rect();
-                
-                let temp_ordner = std::env::temp_dir()
-                .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
-                
-                let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-                let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(position_in_pdf.seite, max_seitenzahl)));
-                
-                match image::open(&pdftoppm_output_path).ok()
-                .and_then(|o| {
-                    
-                    let (im_width, im_height) = o.dimensions();
-                    let (page_width, page_height) = pdftotext_layout.seiten.get(&position_in_pdf.seite).map(|o| (o.breite_mm, o.hoehe_mm))?;
-                    let im_width = im_width as f32;
-                    let im_height = im_height as f32;
-                    
-                    Some(o.crop_imm(
-                        (bv_rect.min_x / page_width * im_width).round() as u32, 
-                        (bv_rect.min_y / page_height * im_height).round() as u32, 
-                        ((bv_rect.max_x - bv_rect.min_x).abs() / page_width * im_width).round() as u32, 
-                        ((bv_rect.max_y - bv_rect.min_y).abs() / page_height * im_height).round() as u32, 
-                    ).to_rgb8())
-                }) {
-                    Some(cropped) => cropped.pixels().any(|px| {                        
-                        px.channels().get(0).copied().unwrap_or(0) > 200 && 
-                        px.channels().get(1).copied().unwrap_or(0) < 120 &&
-                        px.channels().get(2).copied().unwrap_or(0) < 120
-                    }),
-                    None => false,
-                }   
-            } else {
-                false
-            }
-        };
-        
-        bv.set_automatisch_geroetet(ist_geroetet);
     }
     
     let bv_bestand_und_zuschreibungen = seiten
@@ -3258,6 +3237,77 @@ pub fn analysiere_bv(
         zuschreibungen: bv_bestand_und_zuschreibungen,
         abschreibungen: bv_abschreibungen,
     })
+}
+
+
+pub fn bv_eintraege_roetungen_loeschen(bv_eintraege: &mut [BvEintrag]) {
+    for bv in bv_eintraege.iter_mut() {
+        bv.unset_automatisch_geroetet();
+    }
+}
+
+pub fn bv_eintraege_roeten(
+    bv_eintraege: &mut [BvEintrag], 
+    titelblatt: &Titelblatt, 
+    max_seitenzahl: u32, 
+    pdftotext_layout: &PdfToTextLayout
+) {    
+    // Automatisch BV Einträge röten
+    bv_eintraege
+    .par_iter_mut()
+    .for_each(|bv| {
+        
+        // Cache nutzen !!!
+        if bv.get_automatisch_geroetet().is_some() {
+            return;
+        }
+        
+        println!("automatisch röten!");
+        
+        let ist_geroetet = {
+            if let Some(position_in_pdf) = bv.get_position_in_pdf() {
+                
+                use image::Pixel;
+                use image::GenericImageView;
+
+                let bv_rect = position_in_pdf.get_rect();
+                
+                let temp_ordner = std::env::temp_dir()
+                .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
+                
+                let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
+                let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(position_in_pdf.seite, max_seitenzahl)));
+                
+                match image::open(&pdftoppm_output_path).ok()
+                .and_then(|o| {
+                    
+                    let (im_width, im_height) = o.dimensions();
+                    let (page_width, page_height) = pdftotext_layout.seiten.get(&position_in_pdf.seite).map(|o| (o.breite_mm, o.hoehe_mm))?;
+                    let im_width = im_width as f32;
+                    let im_height = im_height as f32;
+                    
+                    Some(o.crop_imm(
+                        (bv_rect.min_x / page_width * im_width).round() as u32, 
+                        (bv_rect.min_y / page_height * im_height).round() as u32, 
+                        ((bv_rect.max_x - bv_rect.min_x).abs() / page_width * im_width).round() as u32, 
+                        ((bv_rect.max_y - bv_rect.min_y).abs() / page_height * im_height).round() as u32, 
+                    ).to_rgb8())
+                }) {
+                    Some(cropped) => cropped.pixels().any(|px| {                        
+                        px.channels().get(0).copied().unwrap_or(0) > 200 && 
+                        px.channels().get(1).copied().unwrap_or(0) < 120 &&
+                        px.channels().get(2).copied().unwrap_or(0) < 120
+                    }),
+                    None => false,
+                }   
+            } else {
+                false
+            }
+        };
+        
+        bv.set_automatisch_geroetet(ist_geroetet);
+    });
+    
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -4036,6 +4086,12 @@ pub struct Abt3Veraenderung {
     pub position_in_pdf: Option<PositionInPdf>,
 }
 
+impl Abt3Veraenderung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Loeschung {
     pub lfd_nr: String,
@@ -4049,6 +4105,12 @@ pub struct Abt3Loeschung {
     pub manuell_geroetet: Option<bool>,
     #[serde(default)]
     pub position_in_pdf: Option<PositionInPdf>,
+}
+
+impl Abt3Loeschung {
+    pub fn ist_geroetet(&self) -> bool { 
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
 }
 
 pub fn analysiere_abt3(

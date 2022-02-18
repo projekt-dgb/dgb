@@ -4,7 +4,11 @@ use crate::kurztext::{self, SchuldenArt, RechteArt};
 use serde_derive::{Serialize, Deserialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub fn analysiere_grundbuch(grundbuch: &Grundbuch, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> GrundbuchAnalysiert {
+pub fn analysiere_grundbuch(
+    grundbuch: &Grundbuch, 
+    nb: &[Nebenbeteiligter], 
+    konfiguration: &Konfiguration
+) -> GrundbuchAnalysiert {
     
     let mut abt2_analysiert = Vec::new();
     

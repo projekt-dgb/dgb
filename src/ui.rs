@@ -1158,9 +1158,9 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                     />
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
-                        <button onclick='eintragNeu(\"bv:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                        <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                        <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                        <button onclick='eintragNeu(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                        <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                        <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
                     </div>
                 </div>",
                     bv_geroetet = bv_geroetet,
@@ -1194,16 +1194,16 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:zu-nr\", event)' 
                         oninput='editText(\"bv:{zeile_nr}:zu-nr\", event)'
                     />
-                    <textarea rows='5' cols='45' style='width: 320px;{bv_geroetet}'  value='{recht_text}' 
+                    <textarea rows='5' cols='45' style='width: 320px;{bv_geroetet}'
                         id='bv_{zeile_nr}_recht-text'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:recht-text\", event)'
                         oninput='editText(\"bv:{zeile_nr}:recht-text\", event)'
-                    ></textarea>
+                    >{recht_text}</textarea>
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
-                        <button onclick='eintragNeu(\"bv:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                        <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                        <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                        <button onclick='eintragNeu(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                        <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                        <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
                     </div>
                 </div>", 
                     bv_geroetet = bv_geroetet,
@@ -1240,25 +1240,33 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
     }
     
     let bv = bv_zuschreibungen.iter().enumerate().map(|(zeile_nr, bvz)| {
+        
+        let bv_geroetet = if bvz.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;' value='{bv_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{bv_nr}' 
                 id='bv-zuschreibung_{zeile_nr}_bv-nr'
                 onkeyup='inputOnKeyDown(\"bv-zuschreibung:{zeile_nr}:bv-nr\", event)' 
                 oninput='editText(\"bv-zuschreibung:{zeile_nr}:bv-nr\", event)'
             />
-            <textarea rows='5' cols='45' 
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='bv-zuschreibung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"bv-zuschreibung:{zeile_nr}:text\", event)'
                 oninput='editText(\"bv-zuschreibung:{zeile_nr}:text\", event)'
             >{text}</textarea>
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"bv-zuschreibung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"bv-zuschreibung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"bv-zuschreibung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"bv-zuschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"bv-zuschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"bv-zuschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             bv_nr = bvz.bv_nr,
             text = bvz.text,
@@ -1285,25 +1293,33 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
     }
     
     let bv = bv_abschreibungen.iter().enumerate().map(|(zeile_nr, bva)| {
+        
+        let bv_geroetet = if bva.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;' value='{bv_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{bv_nr}' 
                 id='bv-abschreibung_{zeile_nr}_bv-nr'
                 onkeyup='inputOnKeyDown(\"bv-abschreibung:{zeile_nr}:bv-nr\", event)' 
                 oninput='editText(\"bv-abschreibung:{zeile_nr}:bv-nr\", event)'
             />
-            <textarea rows='5' cols='45' 
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='bv-abschreibung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"bv-abschreibung:{zeile_nr}:text\", event)'
                 oninput='editText(\"bv-abschreibung:{zeile_nr}:text\", event)'
             >{text}</textarea>
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"bv-abschreibung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"bv-abschreibung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"bv-abschreibung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"bv-abschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"bv-abschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"bv-abschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             bv_nr = bva.bv_nr,
             text = bva.text,
@@ -1368,9 +1384,9 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt1:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt1:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt1:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt1:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
             
         </div>", 
@@ -1404,16 +1420,23 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
     }
     
     let abt1_veraenderungen = abt1_veraenderungen.iter().enumerate().map(|(zeile_nr, abt1_a)| {
+        
+        let bv_geroetet = if abt1_a.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
-            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt1-veraenderung_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt1-veraenderung:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt1-veraenderung:{zeile_nr}:lfd-nr\", event)'
             />
             
-            <textarea rows='5' cols='45' 
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt1-veraenderung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt1-veraenderung:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt1-veraenderung:{zeile_nr}:text\", event)'
@@ -1421,11 +1444,12 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt1-veraenderung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt1-veraenderung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt1-veraenderung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt1-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt1_a.lfd_nr,
             text = abt1_a.text,
@@ -1452,14 +1476,21 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
     }
 
     let abt1_loeschungen = abt1_loeschungen.iter().enumerate().map(|(zeile_nr, abt1_l)| {
+        
+        let bv_geroetet = if abt1_l.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt1-loeschung_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt1-loeschung:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt1-loeschung:{zeile_nr}:lfd-nr\", event)'
             />
-            <textarea rows='5' cols='45' 
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt1-loeschung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt1-loeschung:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt1-loeschung:{zeile_nr}:text\", event)'
@@ -1467,11 +1498,12 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt1-loeschung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt1-loeschung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt1-loeschung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt1-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt1_l.lfd_nr,
             text = abt1_l.text,
@@ -1508,26 +1540,30 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
         
         format!("
         <div class='__application-abt2-eintrag' style='display:flex;margin-top:5px;'>
+            
             <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt2_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:lfd-nr\", event)'
                 oninput='editText(\"abt2:{zeile_nr}:lfd-nr\", event)'
             />
+            
             <input type='text' style='width: 90px;{bv_geroetet}' value='{bv_nr}' 
                 id='abt2_{zeile_nr}_bv-nr'
                 onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:bv-nr\", event)'
                 oninput='editText(\"abt2:{zeile_nr}:bv-nr\", event)'
             />
+            
             <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt2_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt2:{zeile_nr}:text\", event)'
             >{recht}</textarea>
+            
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt2:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt2:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt2:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt2:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt2:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt2:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
             bv_geroetet = bv_geroetet,
@@ -1558,16 +1594,24 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
     }
     
     let abt2_veraenderungen = abt2_veraenderungen.iter().enumerate().map(|(zeile_nr, abt2_a)| {
+        
+        let bv_geroetet = if abt2_a.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
-            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt2-veraenderung_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt2-veraenderung:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt2-veraenderung:{zeile_nr}:lfd-nr\", event)'
             />
             
-            <textarea rows='5' cols='45' 
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt2-veraenderung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt2-veraenderung:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt2-veraenderung:{zeile_nr}:text\", event)'
@@ -1575,11 +1619,12 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt2-veraenderung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt2-veraenderung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt2-veraenderung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt2-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt2-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt2-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt2_a.lfd_nr,
             text = abt2_a.text,
@@ -1606,14 +1651,21 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
     }
 
     let abt2_loeschungen = abt2_loeschungen.iter().enumerate().map(|(zeile_nr, abt2_l)| {
+    
+        let bv_geroetet = if abt2_l.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt2-loeschung_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt2-loeschung:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt2-loeschung:{zeile_nr}:lfd-nr\", event)'
             />
-            <textarea rows='5' cols='45' 
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt2-loeschung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt2-loeschung:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt2-loeschung:{zeile_nr}:text\", event)'
@@ -1621,11 +1673,12 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt2-loeschung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt2-loeschung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt2-loeschung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt2-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt2-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt2-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt2_l.lfd_nr,
             text = abt2_l.text,
@@ -1662,6 +1715,7 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
         
         format!("
         <div class='__application-abt2-eintrag' style='display:flex;margin-top:5px;'>
+            
             <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt3_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:lfd-nr\", event)' 
@@ -1682,11 +1736,12 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
                 onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt3:{zeile_nr}:text\", event)'
             >{recht}</textarea>
+            
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt3:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt3:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt3:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt3:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt3:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt3:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>",
             bv_geroetet = bv_geroetet,
@@ -1719,16 +1774,29 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
     }
     
     let abt3_veraenderungen = abt3_veraenderungen.iter().enumerate().map(|(zeile_nr, abt3_a)| {
+        
+        let bv_geroetet = if abt3_a.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
-        <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+        <div class='__application-abt3-eintrag' style='display:flex;'>
             
-            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt3-veraenderung_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt3-veraenderung:{zeile_nr}:lfd-nr\", event)'
             />
             
-            <textarea rows='5' cols='45' 
+            <input type='text' style='width: 120px;{bv_geroetet}' value='{betrag}' 
+                id='abt3-veraenderung_{zeile_nr}_betrag'
+                onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:betrag\", event)' 
+                oninput='editText(\"abt3-veraenderung:{zeile_nr}:betrag\", event)' 
+            />
+            
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt3-veraenderung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt3-veraenderung:{zeile_nr}:text\", event)'
@@ -1736,12 +1804,14 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt3-veraenderung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt3-veraenderung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt3-veraenderung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt3-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt3-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt3-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
-        </div>", 
+        </div>",
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
+            betrag = abt3_a.betrag,
             lfd_nr = abt3_a.lfd_nr,
             text = abt3_a.text,
         )
@@ -1752,6 +1822,7 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
         
         <div class='__application-table-header'>
             <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 120px;'>Betrag</p>
             <p style='width: 160px;'>Text</p>
         </div>
         
@@ -1767,14 +1838,28 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
     }
 
     let abt3_loeschungen = abt3_loeschungen.iter().enumerate().map(|(zeile_nr, abt3_l)| {
+            
+        let bv_geroetet = if abt3_l.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;' value='{lfd_nr}' 
+            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
                 id='abt3-loeschung_{zeile_nr}_lfd-nr'
                 onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt3-loeschung:{zeile_nr}:lfd-nr\", event)'
             />
-            <textarea rows='5' cols='45' 
+                        
+            <input type='text' style='width: 120px;{bv_geroetet}' value='{betrag}' 
+                id='abt3-loeschung_{zeile_nr}_betrag'
+                onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:betrag\", event)' 
+                oninput='editText(\"abt3-loeschung:{zeile_nr}:betrag\", event)' 
+            />
+            
+            <textarea rows='5' cols='45' style='{bv_geroetet}'
                 id='abt3-loeschung_{zeile_nr}_text'
                 onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:text\", event)'
                 oninput='editText(\"abt3-loeschung:{zeile_nr}:text\", event)'
@@ -1782,12 +1867,14 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
-                <button onclick='eintragNeu(\"abt3-loeschung:{zeile_nr}\")' class='btn btn_neu' >neu</button>
-                <button onclick='eintragRoeten(\"abt3-loeschung:{zeile_nr}\")' class='btn btn_roeten'>röten</button>
-                <button onclick='eintragLoeschen(\"abt3-loeschung:{zeile_nr}\")' class='btn btn_loeschen'>löschen</button>
+                <button onclick='eintragNeu(\"abt3-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt3-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt3-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
+            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
+            betrag = abt3_l.betrag,
             lfd_nr = abt3_l.lfd_nr,
             text = abt3_l.text,
         )
@@ -1798,6 +1885,7 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
         
         <div class='__application-table-header'>
             <p style='width: 90px;'>lfd. Nr.</p>
+            <p style='width: 120px;'>Betrag</p>
             <p style='width: 160px;'>Text</p>
         </div>
         
@@ -1856,7 +1944,13 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     
     let columns = match file.geladen.get(&open_file.1) {
         Some(page) =>  {
-            page.typ
+            
+            let seitentyp = match file.klassifikation_neu.get(&(open_file.1 as usize)) {
+                Some(s) => *s,
+                None => page.typ,
+            };
+                                                    
+            seitentyp
             .get_columns(file.anpassungen_seite.get(&(open_file.1 as usize)))
             .into_iter()
             .map(|col| {
