@@ -130,11 +130,13 @@
   margin-bottom: 2px;
   font-family: sans-serif;
   border: 1px solid grey;
+  font-size: 1.2em;
 }
 
 #__application-main textarea {
   font-family: sans-serif;
   border: 1px solid grey;
+  font-size: 1.2em;
 }
 
 #__application-main #__application-main-container > #__application-abteilung-3 {

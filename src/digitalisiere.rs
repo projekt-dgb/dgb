@@ -466,10 +466,10 @@ pub enum SeitenTyp {
     #[serde(rename = "abt2-vert")]
 	Abt2Vert,
 
-    #[serde(rename = "abt3-horz-veraenderungen")]
-    Abt3HorzVeraenderungen,
-    #[serde(rename = "abt3-horz-loeschungen")]
-	Abt3HorzLoeschungen,
+    #[serde(rename = "abt3-horz-veraenderungen-loeschungen")]
+    Abt3HorzVeraenderungenLoeschungen,
+    #[serde(rename = "abt3-vert-veraenderungen-loeschungen")]
+    Abt3VertVeraenderungenLoeschungen,
     #[serde(rename = "abt3-horz")]
 	Abt3Horz,
     #[serde(rename = "abt3-vert-veraenderungen")]
@@ -514,6 +514,7 @@ pub fn klassifiziere_seitentyp(
     
     if 
         ocr_text.contains("Dritte Abteilung") || 
+        ocr_text.contains("Dritte Abteilu ng") || 
         ocr_text.contains("Abteilung 3") || 
         ocr_text.contains("Hypothek") ||
         ocr_text.contains("Grundschuld") ||
@@ -524,10 +525,8 @@ pub fn klassifiziere_seitentyp(
         ocr_text.contains("Abteilung III   ")
     {
         if is_landscape_page {
-            if ocr_text.contains("Veränderungen") {
-                Ok(SeitenTyp::Abt3HorzVeraenderungen)
-            } else if ocr_text.contains("Löschungen") {
-                Ok(SeitenTyp::Abt3HorzLoeschungen)
+            if ocr_text.contains("Veränderungen") || ocr_text.contains("Löschungen") {
+                Ok(SeitenTyp::Abt3HorzVeraenderungenLoeschungen)
             } else {
                 Ok(SeitenTyp::Abt3Horz)
             }
@@ -1283,11 +1282,143 @@ impl SeitenTyp {
                     line_break_after_px: 25.0, // 10.0,
                 },
             ],  
-            SeitenTyp::Abt3HorzVeraenderungen => vec![
-                // TODO
+            SeitenTyp::Abt3HorzVeraenderungenLoeschungen => vec![
+                
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt3_horz_veraenderungen_loeschungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_x).unwrap_or(55.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_x).unwrap_or(95.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_horz_veraenderungen_loeschungen-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.min_x).unwrap_or(105.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.max_x).unwrap_or(200.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Veränderungen"
+                Column {
+                    id: "abt3_horz_veraenderungen_loeschungen-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.min_x).unwrap_or(202.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.max_x).unwrap_or(490.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt3_horz_veraenderungen_loeschungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_x).unwrap_or(495.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_x).unwrap_or(535.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_horz_veraenderungen_loeschungen-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.min_x).unwrap_or(542.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.max_x).unwrap_or(640.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Löschungen"
+                Column {
+                    id: "abt3_horz_veraenderungen_loeschungen-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.min_x).unwrap_or(645.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.max_x).unwrap_or(765.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text")).map(|m| m.max_y).unwrap_or(565.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
             ],
-            SeitenTyp::Abt3HorzLoeschungen => vec![
-                // TODO
+            SeitenTyp::Abt3VertVeraenderungenLoeschungen => vec![
+                
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt3_vert_veraenderungen_loeschungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_x).unwrap_or(37.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_x).unwrap_or(75.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_y).unwrap_or(783.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_vert_veraenderungen_loeschungen-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.min_x).unwrap_or(80.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.max_x).unwrap_or(142.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.max_y).unwrap_or(783.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Veränderungen"
+                Column {
+                    id: "abt3_vert_veraenderungen_loeschungen-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.min_x).unwrap_or(147.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.max_x).unwrap_or(388.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.max_y).unwrap_or(783.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                
+                // "lfd. Nr. der Spalte 1"
+                Column {
+                    id: "abt3_vert_veraenderungen_loeschungen-lfd_nr",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_x).unwrap_or(390.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_x).unwrap_or(415.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr")).map(|m| m.max_y).unwrap_or(783.0),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Betrag"
+                Column {
+                    id: "abt3_vert_veraenderungen_loeschungen-betrag",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.min_x).unwrap_or(420.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.max_x).unwrap_or(485.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag")).map(|m| m.max_y).unwrap_or(783.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                
+                // "Löschungen"
+                Column {
+                    id: "abt3_vert_veraenderungen_loeschungen-text",
+                    min_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.min_x).unwrap_or(492.0),
+                    max_x: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.max_x).unwrap_or(565.0),
+                    min_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.min_y).unwrap_or(127.0),
+                    max_y: anpassungen_seite.and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text")).map(|m| m.max_y).unwrap_or(783.0),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
             ],
 
             SeitenTyp::Abt3VertVeraenderungen => vec![
@@ -1991,6 +2122,16 @@ pub fn clean_pdf(pdf_bytes: &[u8], titelblatt: &Titelblatt) -> Result<Vec<u8>, F
     
     use lopdf::Object;
     use std::collections::BTreeSet;
+    use std::path::Path;
+    
+    let target = std::env::temp_dir()
+    .join(&format!("{gemarkung}/{blatt}/temp-clean.pdf", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt))
+    .display().to_string();
+    
+    if Path::new(&target).exists() {
+        return std::fs::read(target.clone())
+        .map_err(|e| Fehler::Io(target.clone(), e));
+    }
     
     // Dekomprimierung mit LZW funktioniert nicht, erst 
     // mit podofouncompress alle PDF-Streams dekomprimieren!
@@ -2053,6 +2194,8 @@ pub fn clean_pdf(pdf_bytes: &[u8], titelblatt: &Titelblatt) -> Result<Vec<u8>, F
     pdf.save_to(&mut bytes)
     .map_err(|e| Fehler::Io(String::new(), e))?;
     
+    let _ = std::fs::write(target, &bytes);
+
     Ok(bytes)
 }
 
@@ -4119,6 +4262,9 @@ pub fn analysiere_abt3(
     bestandsverzeichnis: &Bestandsverzeichnis
 ) -> Result<Abteilung3, Fehler> {
     
+    use crate::SeitenTyp::Abt3HorzVeraenderungenLoeschungen;
+    use crate::SeitenTyp::Abt3VertVeraenderungenLoeschungen;
+
     let mut last_lfd_nr = 1;
     
     let default_texte = Vec::new();
@@ -4240,7 +4386,8 @@ pub fn analysiere_abt3(
     let abt3_veraenderungen = seiten
     .iter()
     .filter(|(num, s)| {
-        s.typ == SeitenTyp::Abt3HorzVeraenderungen || 
+        s.typ == SeitenTyp::Abt3HorzVeraenderungenLoeschungen || 
+        s.typ == SeitenTyp::Abt3VertVeraenderungenLoeschungen || 
         s.typ == SeitenTyp::Abt3VertVeraenderungen
     }).flat_map(|(seitenzahl, s)| {
         if s.typ == SeitenTyp::Abt3VertVeraenderungen {
@@ -4323,10 +4470,17 @@ pub fn analysiere_abt3(
     let abt3_loeschungen = seiten
     .iter()
     .filter(|(num, s)| {
-        s.typ == SeitenTyp::Abt3HorzLoeschungen || 
+        s.typ == SeitenTyp::Abt3HorzVeraenderungenLoeschungen || 
+        s.typ == SeitenTyp::Abt3VertVeraenderungenLoeschungen || 
         s.typ == SeitenTyp::Abt3VertLoeschungen
     }).flat_map(|(seitenzahl, s)| {
         if s.typ == SeitenTyp::Abt3VertLoeschungen {
+            
+            let column_shift = match s.typ {
+                Abt3HorzVeraenderungenLoeschungen |
+                Abt3VertVeraenderungenLoeschungen => 3,
+                _ => 0,
+            };
             
             let zeilen_auf_seite = anpassungen_seite
             .get(&(*seitenzahl as usize))
@@ -4337,19 +4491,19 @@ pub fn analysiere_abt3(
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                     
                     let lfd_nr = s.texte
-                    .get(0)
+                    .get(0 + column_shift)
                     .and_then(|zeilen| zeilen.get(i))
                     .map(|t| t.text.trim().to_string())
                     .unwrap_or_default();
                     
                     let betrag = s.texte
-                    .get(1)
+                    .get(1 + column_shift)
                     .and_then(|zeilen| zeilen.get(i))
                     .map(|t| t.text.trim().to_string())
                     .unwrap_or_default();
                     
                     let text = s.texte
-                    .get(2)
+                    .get(2 + column_shift)
                     .and_then(|zeilen| zeilen.get(i))
                     .map(|t| t.text.trim().to_string())
                     .unwrap_or_default();
@@ -4365,23 +4519,29 @@ pub fn analysiere_abt3(
                 }).collect::<Vec<_>>()
             } else {
                 let mut texte = s.texte.clone();
-                texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+                
+                texte
+                .get_mut(2 + column_shift)
+                .unwrap()
+                .retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
 
-                texte.get(2).unwrap_or(&default_texte).iter().enumerate().map(|(text_num, text)| {
+                texte
+                .get(2 + column_shift)
+                .unwrap_or(&default_texte).iter().enumerate().map(|(text_num, text)| {
                     
                     let text_start_y = text.start_y;
                     let text_end_y = text.end_y;
 
                     // TODO: auch texte "1-3"
                     let lfd_nr = get_erster_text_bei_ca(
-                        &texte.get(0).unwrap_or(&default_texte), 
+                        &texte.get(0 + column_shift).unwrap_or(&default_texte), 
                         text_num,
                         text_start_y,
                         text_end_y,
                     ).map(|s| s.text.trim().to_string()).unwrap_or_default();
                     
                     let betrag = get_erster_text_bei_ca(
-                        &texte.get(1).unwrap_or(&default_texte), 
+                        &texte.get(1 + column_shift).unwrap_or(&default_texte), 
                         text_num,
                         text_start_y,
                         text_end_y,

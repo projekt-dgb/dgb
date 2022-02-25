@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::fs;
 use std::sync::Mutex;
+use std::collections::BTreeSet;
 
 use urlencoding::encode;
 use web_view::*;
@@ -134,6 +135,10 @@ pub struct PdfFile {
     geladen: BTreeMap<u32, SeiteParsed>,
     analysiert: Grundbuch,
     pdftotext_layout: PdfToTextLayout,
+    
+    /// Seitennummern von Seiten, die versucht wurden, geladen zu werden
+    #[serde(default)]
+    seiten_versucht_geladen: BTreeSet<u32>,
     #[serde(default)]
     seiten_ocr_text: BTreeMap<u32, String>,
     #[serde(default)]
@@ -175,7 +180,7 @@ impl PdfFile {
     pub fn ist_geladen(&self) -> bool {
         self.seitenzahlen
         .iter()
-        .all(|sz| self.geladen.contains_key(sz) || self.klassifikation_neu.contains_key(&(*sz as usize)))
+        .all(|sz| self.geladen.contains_key(sz) || self.seiten_versucht_geladen.contains(sz))
     }
     
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
@@ -415,7 +420,8 @@ pub enum Cmd {
     ResizeColumn {
         direction: String,
         column_id: String,
-        number: f32,
+        x: f32,
+        y: f32,
     },
     #[serde(rename = "toggle_checkbox")]
     ToggleCheckBox { checkbox_id: String },
@@ -533,6 +539,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 		            analysiert: Grundbuch::default(),
 		            nebenbeteiligte_dateipfade: Vec::new(),
 		            anpassungen_seite: BTreeMap::new(),
+		            seiten_versucht_geladen: BTreeSet::new(),
 		        };
 		                        
                 if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
@@ -1681,8 +1688,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "abt2-horz" => Abt2Horz,
                 "abt2-vert-veraenderungen" => Abt2VertVeraenderungen,
                 "abt2-vert" => Abt2Vert,
-                "abt3-horz-veraenderungen" => Abt3HorzVeraenderungen,
-                "abt3-horz-loeschungen" => Abt3HorzLoeschungen,
+                "abt3-horz-veraenderungen-loeschungen" => Abt3HorzVeraenderungenLoeschungen,
+                "abt3-vert-veraenderungen-loeschungen" => Abt3VertVeraenderungenLoeschungen,
                 "abt3-horz" => Abt3Horz,
                 "abt3-vert-veraenderungen" => Abt3VertVeraenderungen,
                 "abt3-vert-loeschungen" => Abt3VertLoeschungen,
@@ -1901,6 +1908,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::ZeileNeu { file, page, y } => {
             
+            println!("ZeileNeu: file: {}, page: {}, y: {}", file, page, y);
+
             if data.loaded_files.is_empty() {
                 return;
             }
@@ -1914,6 +1923,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 .entry(*page)
                 .or_insert_with(|| AnpassungSeite::default());
 
+            println!("ap: {:#?}", ap);
+
             let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
                 Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
                 None => return,
@@ -1926,8 +1937,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if *y > img_ui_height || *y < 0.0 {
                 return;
             }
-            
+                        
             ap.zeilen.push(y / img_ui_height * page_height);
+            
+            println!("ap.zeilen: {:#?}", ap.zeilen);
+
             ap.zeilen.sort_by(|a, b| ((a * 1000.0) as usize).cmp(&((b * 1000.0) as usize)));
             ap.zeilen.dedup();
 
@@ -1981,9 +1995,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::ResizeColumn {
             direction,
             column_id,
-            number,
+            x, y,
         } => {
-                   
+            
+            println!("resize column: {:?} {:?} {:?}", direction, x, y);
+            
             if data.loaded_files.is_empty() {
                 return;
             }
@@ -2003,7 +2019,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            let current_column = match open_page.typ.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
+            let seitentyp = match open_file.klassifikation_neu.get(&page) {
+                Some(s) => *s,
+                None => open_page.typ,
+            };
+            
+            let current_column = match seitentyp.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
                 Some(s) => s.clone(),
                 None => return,
             };
@@ -2031,15 +2052,27 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 });
                 
                 match direction.as_str() {
-                    "n" => { rect_to_modify.min_y = number / img_ui_height * page_height; },
-                    "s" => { rect_to_modify.max_y = number / img_ui_height * page_height; },
-                    "e" => { rect_to_modify.min_x = number / img_ui_width * page_width; },
-                    "w" => { rect_to_modify.max_x = number / img_ui_width * page_width; },
+                    "nw" => { 
+                        rect_to_modify.min_y = y / img_ui_height * page_height; 
+                        rect_to_modify.min_x = x / img_ui_width * page_width; 
+                    },
+                    "ne" => { 
+                        rect_to_modify.min_y = y / img_ui_height * page_height; 
+                        rect_to_modify.max_x = x / img_ui_width * page_width; 
+                    },
+                    "se" => { 
+                        rect_to_modify.max_y = y / img_ui_height * page_height; 
+                        rect_to_modify.max_x = x / img_ui_width * page_width; 
+                    },
+                    "sw" => { 
+                        rect_to_modify.max_y = y / img_ui_height * page_height; 
+                        rect_to_modify.min_x = x / img_ui_width * page_width; 
+                    },
                     _ => return,
                 };
             }
             
-            let new_column = match open_page.typ.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
+            let new_column = match seitentyp.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
                 Some(s) => s.clone(),
                 None => return,
             };
@@ -2324,6 +2357,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             });
             
             webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
         },
@@ -2538,6 +2572,8 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                     
             for sz in seitenzahlen_zu_laden {
                 
+                pdf.seiten_versucht_geladen.insert(sz);
+                
                 let pdftotext_layout = match digitalisiere::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { 
                     Ok(o) => o, 
                     Err(_) => continue, 
@@ -2694,12 +2730,10 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
     
     for sz in seitenzahlen_zu_laden {
         
-        println!("konvertiere seite {} ...", sz);
+        pdf.seiten_versucht_geladen.insert(sz);
 
         let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], max_sz, &pdf.titelblatt)?;
-            
-        println!("ocr seite {} ...", sz);
-       
+                   
         let ocr_text_cached = pdf.seiten_ocr_text.get(&sz).cloned();
         let mut ocr_text_final = None;
         
@@ -2729,9 +2763,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         };
         
         pdf.klassifikation_neu.insert(sz as usize, seitentyp);
-        
-        println!("seitentyp: {:?}", seitentyp);
-                
+                        
         let spalten = match digitalisiere::formularspalten_ausschneiden(
             &pdf.titelblatt, 
             sz, 
@@ -2743,9 +2775,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             Ok(o) => o, 
             Err(e) => continue, 
         };
-        
-        println!("seite hat {} spalten", spalten.len());
-        
+                
         let _ = digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten)?;
 
         let textbloecke = digitalisiere::textbloecke_aus_spalten(
@@ -2756,9 +2786,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             &pdf.pdftotext_layout,
             pdf.anpassungen_seite.get(&(sz as usize)),
         )?;
-  
-        println!("{} textbloecke", textbloecke.len());
-    
+      
         pdf.geladen.insert(sz, SeiteParsed {
             typ: seitentyp,
             texte: textbloecke.clone(),

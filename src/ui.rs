@@ -456,11 +456,8 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                     Abteilung 2 (Hochformat)
                 </div>
-                <div class='kontextmenü-eintrag' data-seite-neu='abt3-horz-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
-                    Abteilung 3 Veränderungen (Querformat)
-                </div>
-                <div class='kontextmenü-eintrag' data-seite-neu='abt3-horz-loeschungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
-                    Abteilung 3 Löschungen (Querformat)
+                <div class='kontextmenü-eintrag' data-seite-neu='abt3-horz-veraenderungen-loeschungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                    Abteilung 3 Veränderungen / Löschungen (Querformat)
                 </div>
                 <div class='kontextmenü-eintrag' data-seite-neu='abt3-horz' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                     Abteilung 3 (Querformat)
@@ -470,6 +467,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>
                 <div class='kontextmenü-eintrag' data-seite-neu='abt3-vert-loeschungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                     Abteilung 3 Löschungen (Hochformat)
+                </div>
+                <div class='kontextmenü-eintrag' data-seite-neu='abt3-vert-veraenderungen-loeschungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                    Abteilung 3 Veränderungen / Löschungen (Hochformat)
                 </div>
                 <div class='kontextmenü-eintrag' data-seite-neu='abt3-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                     Abteilung 3 (Hochformat)
@@ -785,8 +785,8 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
             | SeitenTyp::Abt2Vert => {
                 "rgb(255,255,167)" // gelb
             },
-              SeitenTyp::Abt3HorzVeraenderungen
-            | SeitenTyp::Abt3HorzLoeschungen
+              SeitenTyp::Abt3HorzVeraenderungenLoeschungen
+            |  SeitenTyp::Abt3VertVeraenderungenLoeschungen
             | SeitenTyp::Abt3Horz
             | SeitenTyp::Abt3VertVeraenderungen
             | SeitenTyp::Abt3VertLoeschungen
@@ -1976,15 +1976,17 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                     '>
                         <div style='
                             position:absolute;
-                            width:100%;
+                            width:15px;
                             height:15px;
                             background:none;
                             top:-7.5px;
-                            left:0px;
-                            cursor:n-resize;
+                            left:-7.5px;
+                            cursor:nw-resize;
                             z-index:1;
                             pointer-events: initial;
-                        ' data-columnId = '{id}' data-direction='n' 
+                        '   
+                            data-columnId = '{id}' 
+                            data-direction='nw' 
                             onmousedown='resizeColumnOnMouseDown(event);' 
                             onmouseup='resizeColumnOnMouseUp(event);'
                             onmouseout='resizeColumnOnMouseUp(event);'
@@ -1992,49 +1994,53 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                         
                         <div style='
                             position:absolute;
-                            width:100%;
+                            width:15px;
                             height:15px;
                             background:none;
-                            bottom:-7.5px;
-                            left:0px;
-                            cursor:s-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' data-columnId = '{id}' data-direction='s' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:100%;
-                            background:none;
-                            top:0px;
-                            left:-7.5px;
-                            cursor:e-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' data-columnId = '{id}' data-direction='e' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:100%;
-                            background:none;
-                            top:0px;
+                            top:-7.5px;
                             right:-7.5px;
-                            cursor:w-resize;
+                            cursor:ne-resize;
                             z-index:1;
                             pointer-events: initial;
                         ' 
                             data-columnId = '{id}' 
-                            data-direction='w' 
+                            data-direction='ne' 
+                            onmousedown='resizeColumnOnMouseDown(event);' 
+                            onmouseup='resizeColumnOnMouseUp(event);'
+                            onmouseout='resizeColumnOnMouseUp(event);'
+                            onmousemove='resizeColumn(event);'></div>
+                        
+                        <div style='
+                            position:absolute;
+                            width:15px;
+                            height:15px;
+                            background:none;
+                            bottom:-7.5px;
+                            right:-7.5px;
+                            cursor:se-resize;
+                            z-index:1;
+                            pointer-events: initial;
+                        ' 
+                        data-columnId = '{id}' 
+                        data-direction='se' 
+                            onmousedown='resizeColumnOnMouseDown(event);' 
+                            onmouseup='resizeColumnOnMouseUp(event);'
+                            onmouseout='resizeColumnOnMouseUp(event);'
+                            onmousemove='resizeColumn(event);'></div>
+                        
+                        <div style='
+                            position:absolute;
+                            width:15px;
+                            height:15px;
+                            background:none;
+                            bottom:-7.5px;
+                            left:-7.5px;
+                            cursor:sw-resize;
+                            z-index:1;
+                            pointer-events: initial;
+                        ' 
+                            data-columnId = '{id}' 
+                            data-direction='sw' 
                             onmousedown='resizeColumnOnMouseDown(event);'
                             onmouseup='resizeColumnOnMouseUp(event);'
                             onmouseout='resizeColumnOnMouseUp(event);'

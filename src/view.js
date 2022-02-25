@@ -67,7 +67,7 @@ let rpc = {
   bv_eintrag_typ_aendern: function(path, value) { rpc.invoke({ cmd: 'bv_eintrag_typ_aendern', path: path, value: value }); },
 
   klassifiziere_seite_neu: function(seite, klassifikation_neu) { rpc.invoke({ cmd: 'klassifiziere_seite_neu', seite: seite, klassifikation_neu: klassifikation_neu }); },
-  resize_column: function(direction, columnId, number) { rpc.invoke({ cmd: 'resize_column', direction: direction, column_id: columnId, number: number }); },
+  resize_column: function(direction, columnId, x, y) { rpc.invoke({ cmd: 'resize_column', direction: direction, column_id: columnId, x: x, y: y }); },
   toggle_checkbox: function(checkbox_id) { rpc.invoke({ cmd: 'toggle_checkbox', checkbox_id: checkbox_id }); },
   reload_grundbuch: function() { rpc.invoke({ cmd: 'reload_grundbuch' }); },
   zeile_neu: function(file, page, y) { rpc.invoke({ cmd: 'zeile_neu', file: file, page: page, y: y }); },
@@ -889,28 +889,71 @@ function copyTextToClipboard(text) {
   });
 }
 
-var last_mouse_down_x = null;
-var last_mouse_down_y = null;
-var dx = null;
-var dy = null;
-
 function resizeColumnOnMouseDown(event) {
-    last_mouse_down_x = event.clientX;
-    last_mouse_down_y = event.clientY;
     
-    let target_rect = event.target.getBoundingClientRect();
-    let target_center_x = target_rect.x + (target_rect.width / 2.0);
-    let target_center_y = target_rect.y + (target_rect.height / 2.0);
+    if (!event.which) {
+        return;
+    }
     
-    dx = event.clientX - target_center_x;
-    dy = event.clientY - target_center_y;
+    if (!(event.which == 1)) {
+        return;
+    }
+    
+    event.target.style.width = '100px';
+    event.target.style.height = '100px';
+
+    var direction = event.target.getAttribute("data-direction");
+    if (!direction) {
+        return;
+    }
+    
+    if (direction == 'nw') {
+        event.target.style.top = '-50px';
+        event.target.style.left = '-50px';
+    } else if (direction == 'ne') {
+        event.target.style.top = '-50px';
+        event.target.style.right = '-50px';
+    } else if (direction == 'se') {
+        event.target.style.bottom = '-50px';
+        event.target.style.right = '-50px';
+    } else if (direction == 'sw') {
+        event.target.style.bottom = '-50px';
+        event.target.style.left = '-50px';
+    }
 }
 
 function resizeColumnOnMouseUp(event) {
-    last_mouse_down_x = null;
-    last_mouse_down_y = null;
-    dx = null;
-    dy = null;
+
+    if (!event.which) {
+        return;
+    }
+    
+    if (!(event.which == 1)) {
+        return;
+    }
+    
+    event.target.style.width = '15px';
+    event.target.style.height = '15px';
+
+    var direction = event.target.getAttribute("data-direction");
+    if (!direction) {
+        return;
+    }
+    
+    if (direction == 'nw') {
+        event.target.style.top = '-7.5px';
+        event.target.style.left = '-7.5px';
+    } else if (direction == 'ne') {
+        event.target.style.top = '-7.5px';
+        event.target.style.right = '-7.5px';
+    } else if (direction == 'se') {
+        event.target.style.bottom = '-7.5px';
+        event.target.style.right = '-7.5px';
+    } else if (direction == 'sw') {
+        event.target.style.bottom = '-7.5px';
+        event.target.style.left = '-7.5px';
+    }
+    
 }
 
 function resizeColumn(event) {    
@@ -936,27 +979,12 @@ function resizeColumn(event) {
     let parent = document.getElementById("__application_page_img_inner");
     if (!parent)
         return;
-
-    let ddx = 0.0;
-    if (dx) {
-        ddx = dx;        
-    }
-    
-    let ddy = 0.0;
-    if (dy) {
-        ddy = dy;        
-    }
     
     let bounds = parent.getBoundingClientRect();
-    let x = event.clientX - bounds.left - ddx;
-    let y = event.clientY - bounds.top - ddy;
-    
-    let number = x;
-    if ((direction === "n") || (direction === "s")) {
-        number = y;
-    }
-    
-    rpc.resize_column(direction, columnId, number);
+    let x = event.clientX - bounds.left;
+    let y = event.clientY - bounds.top;
+
+    rpc.resize_column(direction, columnId, x, y);
     
     return;
 }
