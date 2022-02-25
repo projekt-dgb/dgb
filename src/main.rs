@@ -440,6 +440,9 @@ pub enum Cmd {
     #[serde(rename = "bv_eintrag_typ_aendern")]
     BvEintragTypAendern { path: String, value: String },
     
+    #[serde(rename = "copy_text_to_clipboard")]
+    CopyTextToClipboard { text: String },
+    
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
     SetActiveRibbonTab { new_tab: usize },
@@ -1859,6 +1862,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("copyTextToClipboard(`{}`)", text));
             webview.eval(&format!("resetOcrSelection()"));
         },
+        Cmd::CopyTextToClipboard { text } => {
+            webview.eval(&format!("copyTextToClipboard(`{}`)", text));
+        },
         Cmd::ReloadGrundbuch => {
             
             use tinyfiledialogs::{YesNo, MessageBoxIcon};
@@ -3165,7 +3171,7 @@ fn main() {
     let app_html = include_str!("dist/app.html").to_string().replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
     let url = "data:text/html,".to_string() + &encode(&app_html);
     let resizable = true;
-    let debug = false;
+    let debug = true;
     
     let (_, launched_successful) = run(
         APP_TITLE, 

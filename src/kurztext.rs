@@ -531,7 +531,7 @@ impl RechteArtPyWrapper {
     #[classattr] fn Erbbaurecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Erbbaurecht }}
     #[classattr] fn Erwerbsvormerkung() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Erwerbsvormerkung }}
     #[classattr] fn Fensterrecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fensterrecht }}
-//     #[classattr] fn Fensterverbot() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fensterverbot }}
+    #[classattr] fn Fensterverbot() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fensterverbot }}
     #[classattr] fn Fischereirecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Fischereirecht }}
     #[classattr] fn Garagenrecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Garagenrecht }}
     #[classattr] fn Gartenbenutzungsrecht() -> RechteArtPyWrapper { RechteArtPyWrapper { inner: RechteArt::Gartenbenutzungsrecht }}

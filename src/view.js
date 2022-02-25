@@ -66,7 +66,8 @@ let rpc = {
   edit_rechtsinhaber_auslesen_abt3_script: function(neu) { rpc.invoke({ cmd: 'edit_rechtsinhaber_auslesen_abt3_script', neu: neu }); },
   rechtsinhaber_auslesen_abt3_script_testen: function(arg) { rpc.invoke({ cmd: 'rechtsinhaber_auslesen_abt3_script_testen', text: arg }); },
   bv_eintrag_typ_aendern: function(path, value) { rpc.invoke({ cmd: 'bv_eintrag_typ_aendern', path: path, value: value }); },
-
+  copy_text_to_clipboard: function(text) { rpc.invoke({ cmd: 'copy_text_to_clipboard', text: text }); },
+  
   klassifiziere_seite_neu: function(seite, klassifikation_neu) { rpc.invoke({ cmd: 'klassifiziere_seite_neu', seite: seite, klassifikation_neu: klassifikation_neu }); },
   resize_column: function(direction, columnId, x, y) { rpc.invoke({ cmd: 'resize_column', direction: direction, column_id: columnId, x: x, y: y }); },
   toggle_checkbox: function(checkbox_id) { rpc.invoke({ cmd: 'toggle_checkbox', checkbox_id: checkbox_id }); },
@@ -1135,6 +1136,12 @@ function replacePdfImageZeilen(s) {
 
 function bvEintragTypAendern(path, value) {
     rpc.bv_eintrag_typ_aendern(path, value);
+}
+
+function copyToClipboardOnSelectChange(event) {
+    if (event.target.value) {
+    	rpc.copy_text_to_clipboard("" + event.target.value);
+    }
 }
 
 // Init

@@ -169,7 +169,8 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             Klassifizierung RechteArt (Abteilung 2)
                         </p>                        
                     </div>
-                    
+                    <div>{rechteart_select}</div>
+
                     <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
                         <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_rechteart_abt2(saetze: [String], re: Mapping[String, Regex]) -> RechteArt:</p>
                         <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechteArtScript(event);'>{konfig_rechteart_script}</div>
@@ -264,8 +265,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     <div>
                         <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
                             Klassifizierung SchuldenArt (Abteilung 3)
-                        </p>                        
+                        </p>
                     </div>
+                    <div>{schuldenart_select}</div>
                     
                     <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
                         <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_schuldenart_abt3(saetze: [String], re: Mapping[String, Regex]) -> SchuldenArt:</p>
@@ -348,6 +350,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 .collect::<Vec<_>>()
                 .join("\r\n")
             },
+            
+            rechteart_select = render_rechteart_select(),
+            schuldenart_select = render_schuldenart_select(),
             
             konfig_rangvermerk_abt2_script = 
             rpc_data.konfiguration.rangvermerk_auslesen_abt2_script.iter()
@@ -522,6 +527,129 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     normalize_for_js(pc)
 }
 
+
+pub fn render_schuldenart_select() -> String {
+    format!("
+        <select onchange='copyToClipboardOnSelectChange(event);'>
+            <option value='Grundschuld'>Grundschuld</option>
+            <option value='Hypothek'>Hypothek</option>
+            <option value='Rentenschuld'>Rentenschuld</option>
+            <option value='Aufbauhypothek'>Aufbauhypothek</option>
+            <option value='Sicherungshypothek'>Sicherungshypothek</option>
+            <option value='Widerspruch'>Widerspruch</option>
+            <option value='Arresthypothek'>Arresthypothek</option>
+            <option value='SicherungshypothekGem128ZVG'>SicherungshypothekGem128ZVG</option>
+            <option value='Hoechstbetragshypothek'>Hoechstbetragshypothek</option>
+            <option value='Sicherungsgrundschuld'>Sicherungsgrundschuld</option>
+            <option value='Zwangssicherungshypothek'>Zwangssicherungshypothek</option>
+            <option value='NichtDefiniert'>NichtDefiniert</option>
+        </select>
+    ")
+}
+
+pub fn render_rechteart_select() -> String {
+    format!("
+        <select onchange='copyToClipboardOnSelectChange(event);'>
+            <option value='Abwasserleitungsrecht'>Abwasserleitungsrecht</option>
+            <option value='Auflassungsvormerkung'>Auflassungsvormerkung</option>
+            <option value='Ausbeutungsrecht'>Ausbeutungsrecht</option>
+            <option value='AusschlussDerAufhebungDerGemeinschaftGem1010BGB'>AusschlussDerAufhebungDerGemeinschaftGem1010BGB</option>
+            <option value='Baubeschraenkung'>Baubeschraenkung</option>
+            <option value='Bebauungsverbot'>Bebauungsverbot</option>
+            <option value='Benutzungsrecht'>Benutzungsrecht</option>
+            <option value='BenutzungsregelungGem1010BGB'>BenutzungsregelungGem1010BGB</option>
+            <option value='Bepflanzungsverbot'>Bepflanzungsverbot</option>
+            <option value='Bergschadenverzicht'>Bergschadenverzicht</option>
+            <option value='Betretungsrecht'>Betretungsrecht</option>
+            <option value='Bewässerungsrecht'>Bewässerungsrecht</option>
+            <option value='BpD'>BpD</option>
+            <option value='BesitzrechtNachEGBGB'>BesitzrechtNachEGBGB</option>
+            <option value='BohrUndSchuerfrecht'>BohrUndSchuerfrecht</option>
+            <option value='Brunnenrecht'>Brunnenrecht</option>
+            <option value='Denkmalschutz'>Denkmalschutz</option>
+            <option value='DinglichesNutzungsrecht'>DinglichesNutzungsrecht</option>
+            <option value='DuldungVonEinwirkungenDurchBaumwurf'>DuldungVonEinwirkungenDurchBaumwurf</option>
+            <option value='DuldungVonFernmeldeanlagen'>DuldungVonFernmeldeanlagen</option>
+            <option value='Durchleitungsrecht'>Durchleitungsrecht</option>
+            <option value='EinsitzInsitzrecht'>EinsitzInsitzrecht</option>
+            <option value='Entwasserungsrecht'>Entwasserungsrecht</option>
+            <option value='Erbbaurecht'>Erbbaurecht</option>
+            <option value='Erwerbsvormerkung'>Erwerbsvormerkung</option>
+            <option value='Fensterrecht'>Fensterrecht</option>
+            <option value='Fensterverbot'>Fensterverbot</option>
+            <option value='Fischereirecht'>Fischereirecht</option>
+            <option value='Garagenrecht'>Garagenrecht</option>
+            <option value='Gartenbenutzungsrecht'>Gartenbenutzungsrecht</option>
+            <option value='GasleitungGasreglerstationFerngasltg'>GasleitungGasreglerstationFerngasltg</option>
+            <option value='GehWegeFahrOderLeitungsrecht'>GehWegeFahrOderLeitungsrecht</option>
+            <option value='Gewerbebetriebsbeschrankung'>Gewerbebetriebsbeschrankung</option>
+            <option value='GewerblichesBenutzungsrecht'>GewerblichesBenutzungsrecht</option>
+            <option value='Grenzbebauungsrecht'>Grenzbebauungsrecht</option>
+            <option value='Grunddienstbarkeit'>Grunddienstbarkeit</option>
+            <option value='Hochspannungsleitungsrecht'>Hochspannungsleitungsrecht</option>
+            <option value='Immissionsduldungsverpflichtung'>Immissionsduldungsverpflichtung</option>
+            <option value='Insolvenzvermerk'>Insolvenzvermerk</option>
+            <option value='Kabelrecht'>Kabelrecht</option>
+            <option value='Kanalrecht'>Kanalrecht</option>
+            <option value='Kiesabbauberechtigung'>Kiesabbauberechtigung</option>
+            <option value='Kraftfahrzeugabstellrecht'>Kraftfahrzeugabstellrecht</option>
+            <option value='LeibgedingAltenteilsrechtAuszugsrecht'>LeibgedingAltenteilsrechtAuszugsrecht</option>
+            <option value='LeitungsOderAnlagenrecht'>LeitungsOderAnlagenrecht</option>
+            <option value='Mauerrecht'>Mauerrecht</option>
+            <option value='Mitbenutzungsrecht'>Mitbenutzungsrecht</option>
+            <option value='Mobilfunkstationsrecht'>Mobilfunkstationsrecht</option>
+            <option value='Muehlenrecht'>Muehlenrecht</option>
+            <option value='Mulltonnenabstellrecht'>Mulltonnenabstellrecht</option>
+            <option value='Nacherbenvermerk'>Nacherbenvermerk</option>
+            <option value='Niessbrauchrecht'>Niessbrauchrecht</option>
+            <option value='Nutzungsbeschrankung'>Nutzungsbeschrankung</option>
+            <option value='Pfandung'>Pfandung</option>
+            <option value='Photovoltaikanlagenrecht'>Photovoltaikanlagenrecht</option>
+            <option value='Pumpenrecht'>Pumpenrecht</option>
+            <option value='Reallast'>Reallast</option>
+            <option value='RegelungUeberDieHöheDerNotwegrenteGemaess912Bgb'>RegelungUeberDieHöheDerNotwegrenteGemaess912Bgb</option>
+            <option value='RegelungUeberDieHöheDerUeberbaurenteGemaess912Bgb'>RegelungUeberDieHöheDerUeberbaurenteGemaess912Bgb</option>
+            <option value='Rueckauflassungsvormerkung'>Rueckauflassungsvormerkung</option>
+            <option value='Ruckerwerbsvormerkung'>Ruckerwerbsvormerkung</option>
+            <option value='Sanierungsvermerk'>Sanierungsvermerk</option>
+            <option value='Schachtrecht'>Schachtrecht</option>
+            <option value='SonstigeDabagrechteart'>SonstigeDabagrechteart</option>
+            <option value='SonstigeRechte'>SonstigeRechte</option>
+            <option value='Tankstellenrecht'>Tankstellenrecht</option>
+            <option value='Testamentsvollstreckervermerk'>Testamentsvollstreckervermerk</option>
+            <option value='Transformatorenrecht'>Transformatorenrecht</option>
+            <option value='Ueberbaurecht'>Ueberbaurecht</option>
+            <option value='UebernahmeVonAbstandsflachen'>UebernahmeVonAbstandsflachen</option>
+            <option value='Umlegungsvermerk'>Umlegungsvermerk</option>
+            <option value='Umspannanlagenrecht'>Umspannanlagenrecht</option>
+            <option value='Untererbbaurecht'>Untererbbaurecht</option>
+            <option value='VerausserungsBelastungsverbot'>VerausserungsBelastungsverbot</option>
+            <option value='Verfuegungsverbot'>Verfuegungsverbot</option>
+            <option value='VerwaltungsUndBenutzungsregelung'>VerwaltungsUndBenutzungsregelung</option>
+            <option value='VerwaltungsregelungGem1010Bgb'>VerwaltungsregelungGem1010Bgb</option>
+            <option value='VerzichtAufNotwegerente'>VerzichtAufNotwegerente</option>
+            <option value='VerzichtAufUeberbaurente'>VerzichtAufUeberbaurente</option>
+            <option value='Viehtrankerecht'>Viehtrankerecht</option>
+            <option value='Viehtreibrecht'>Viehtreibrecht</option>
+            <option value='Vorkaufsrecht'>Vorkaufsrecht</option>
+            <option value='Wasseraufnahmeverpflichtung'>Wasseraufnahmeverpflichtung</option>
+            <option value='Wasserentnahmerecht'>Wasserentnahmerecht</option>
+            <option value='Weiderecht'>Weiderecht</option>
+            <option value='Widerspruch'>Widerspruch</option>
+            <option value='Windkraftanlagenrecht'>Windkraftanlagenrecht</option>
+            <option value='Wohnrecht'>Wohnrecht</option>
+            <option value='WohnungsOderMitbenutzungsrecht'>WohnungsOderMitbenutzungsrecht</option>
+            <option value='Wohnungsbelegungsrecht'>Wohnungsbelegungsrecht</option>
+            <option value='WohnungsrechtNach1093Bgb'>WohnungsrechtNach1093Bgb</option>
+            <option value='Zaunerrichtungsverbot'>Zaunerrichtungsverbot</option>
+            <option value='Zaunrecht'>Zaunrecht</option>
+            <option value='Zustimmungsvorbehalt'>Zustimmungsvorbehalt</option>
+            <option value='Zwangsversteigerungsvermerk'>Zwangsversteigerungsvermerk</option>
+            <option value='Zwangsverwaltungsvermerk'>Zwangsverwaltungsvermerk</option>
+        </select>
+    ")
+}
+
 pub fn render_ribbon(rpc_data: &RpcData) -> String {
 
     static ICON_EINSTELLUNGEN: &[u8] = include_bytes!("./img/icons8-settings-48.png");
@@ -688,7 +816,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
 pub fn render_main(rpc_data: &mut RpcData) -> String {
 
     if rpc_data.loaded_files.is_empty() {
-        return format!("<div style='width:100%;height:1000px;background:red;user-select: text;-webkit-user-select: text;'></div>");
+        return String::new();
     }
 
     normalize_for_js(format!("
