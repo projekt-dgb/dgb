@@ -1607,11 +1607,18 @@ input[type="file"] {
   max-height:1000px;
 }
 
+img {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 #__application-main #__application-file-list > div {
   font-size: 12px;
   font-family: monospace;
   padding: 5px 10px;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #__application-main #__application-file-list > div.active {
@@ -1634,10 +1641,14 @@ input[type="file"] {
   display: block;
   background: white;
   overflow-y: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #__application-main #__application-page-list h5 {
     margin: 10px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #__application-main #__application-page-list .__application-page {
@@ -1681,6 +1692,13 @@ input[type="file"] {
     background: white;
     overflow-y: scroll;
     overflow-x: auto;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#__application-analyse-grundbuch {
+    user-select: initial;
+    -webkit-user-select: initial;
 }
 
 #__application-main #__application-main-container:hover {
@@ -1690,6 +1708,7 @@ input[type="file"] {
 #__application-main #__application-main-container > * {
   display: block;
   overflow: hidden;
+  
 }
 
 #__application-main #__application-main-container > * > h4 {
@@ -1738,16 +1757,22 @@ input[type="file"] {
   flex-grow:1;
   overflow: scroll;
   max-height:400px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #__application-main #__application-pdf-page-image > div {
     margin: 0px auto;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #__application-main #__application-pdf-page-image img {
     width: 1200px;
     height: intrinsic;
     box-shadow: 0px 0px 20px black;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .kontextmenü-eintrag {
@@ -1870,6 +1895,7 @@ let rpc = {
 
   edit_abkuerzungen_script: function(arg) { rpc.invoke({ cmd : 'edit_abkuerzungen_script', script: arg });},
   edit_text_saubern_script: function(arg) { rpc.invoke({ cmd : 'edit_text_saubern_script', script: arg });},
+  edit_flurstuecke_auslesen_script: function(arg) { rpc.invoke({ cmd : 'edit_flurstuecke_auslesen_script', script: arg });},
 
   edit_text_kuerzen_abt2_script: function(arg) { rpc.invoke({ cmd : 'edit_text_kuerzen_abt2_script', script: arg });},
   kurztext_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_abt2_script_testen', text: arg }); },  
@@ -2364,6 +2390,19 @@ function editTextSaubernScript(e) {
     
     if (innerText) {
         rpc.edit_text_saubern_script(innerText);        
+    }
+
+}
+
+function editFlurstueckeAuslesenScript(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_flurstuecke_auslesen_script(innerText);        
     }
 
 }
@@ -2950,26 +2989,18 @@ function bvEintragTypAendern(path, value) {
 // Init
 window.onload = function() { rpc.init(); };
 
+/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
 });
+*/
 </script>
     </head>
  
     <!-- Body filled by JS / Rust -->
     <body>
     
-      <!-- 
-        "__application-ribbon-content"
-        "__application-file-list"
-        "__application-page-list"
-        "__application-bestandsverzeichnis"
-
-        "__application-abteilung-1"
-        "__application-abteilung-2"
-        "__application-abteilung-3"
-        "__application-pdf-page-image"
-      -->
+      <!-- REPLACED_ON_STARTUP -->
   
     </body>
 </html>

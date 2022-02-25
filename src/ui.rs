@@ -153,6 +153,18 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <div style='padding:5px 0px;'>
                 
                     <div>
+                        <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Flurstücke aus Spalte 1 auslesen</p>                        
+                    </div>
+                    
+                    <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
+                        <p style='color:#4a4e6a;user-select:none;'>def flurstuecke_auslesen(spalte_1: String, text: String, re: Mapping[String, Regex]) -> [Spalte1Eintrag]:</p>
+                        <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editFlurstueckeAuslesenScript(event);'>{konfig_flurstuecke_auslesen_script}</div>
+                    </div>
+                </div>     
+                
+                <div style='padding:5px 0px;'>
+                
+                    <div>
                         <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
                             Klassifizierung RechteArt (Abteilung 2)
                         </p>                        
@@ -395,6 +407,14 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             
             konfig_text_saubern_script = 
                 rpc_data.konfiguration.text_saubern_script.iter()
+                .map(|l| l.replace(" ", "\u{00a0}"))
+                .map(|l| l.replace("\\", "&bsol;"))
+                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                .collect::<Vec<String>>()
+            .join("\r\n"),
+            
+            konfig_flurstuecke_auslesen_script = 
+                rpc_data.konfiguration.flurstuecke_auslesen_script.iter()
                 .map(|l| l.replace(" ", "\u{00a0}"))
                 .map(|l| l.replace("\\", "&bsol;"))
                 .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
@@ -662,11 +682,11 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
 }
 
 pub fn render_main(rpc_data: &mut RpcData) -> String {
-    
+
     if rpc_data.loaded_files.is_empty() {
-        return String::new();
+        return format!("<div style='width:100%;height:1000px;background:red;user-select: text;-webkit-user-select: text;'></div>");
     }
-        
+
     normalize_for_js(format!("
         <div id='__application-file-list'>{file_list}</div>
         <div id='__application-page-list'>{page_list}</div>

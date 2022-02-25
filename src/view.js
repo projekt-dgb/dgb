@@ -46,6 +46,7 @@ let rpc = {
 
   edit_abkuerzungen_script: function(arg) { rpc.invoke({ cmd : 'edit_abkuerzungen_script', script: arg });},
   edit_text_saubern_script: function(arg) { rpc.invoke({ cmd : 'edit_text_saubern_script', script: arg });},
+  edit_flurstuecke_auslesen_script: function(arg) { rpc.invoke({ cmd : 'edit_flurstuecke_auslesen_script', script: arg });},
 
   edit_text_kuerzen_abt2_script: function(arg) { rpc.invoke({ cmd : 'edit_text_kuerzen_abt2_script', script: arg });},
   kurztext_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_abt2_script_testen', text: arg }); },  
@@ -540,6 +541,19 @@ function editTextSaubernScript(e) {
     
     if (innerText) {
         rpc.edit_text_saubern_script(innerText);        
+    }
+
+}
+
+function editFlurstueckeAuslesenScript(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_flurstuecke_auslesen_script(innerText);        
     }
 
 }
@@ -1126,6 +1140,8 @@ function bvEintragTypAendern(path, value) {
 // Init
 window.onload = function() { rpc.init(); };
 
+/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
 });
+*/

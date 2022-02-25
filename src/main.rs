@@ -112,6 +112,7 @@ impl Default for RpcData {
                 spalten_ausblenden: false,
                 vorschau_ohne_geroetet: false,
                 regex: BTreeMap::new(),
+                flurstuecke_auslesen_script: Vec::new(),
                 abkuerzungen_script: Vec::new(),
                 text_saubern_script: Vec::new(),
                 text_kuerzen_abt2_script: Vec::new(),
@@ -168,6 +169,7 @@ impl Rect {
 }
 
 impl PdfFile {
+
     pub fn speichern(&self) {
         let file_name = format!("{}_{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt);
         let default_parent = Path::new("/");
@@ -248,6 +250,8 @@ pub struct Konfiguration {
     pub abkuerzungen_script: Vec<String>,
     #[serde(default)]
     pub text_saubern_script: Vec<String>,
+    #[serde(default)]
+    pub flurstuecke_auslesen_script: Vec<String>,
     #[serde(default)]
     pub text_kuerzen_abt2_script: Vec<String>,
     #[serde(default)]
@@ -337,6 +341,8 @@ pub enum Cmd {
     EditAbkuerzungenScript { script: String },
     #[serde(rename = "edit_text_saubern_script")]
     EditTextSaubernScript { script: String },
+    #[serde(rename = "edit_flurstuecke_auslesen_script")]
+    EditFlurstueckeAuslesenScript { script: String },
     
     #[serde(rename = "edit_text_kuerzen_abt2_script")]
     EditTextKuerzenAbt2Script { script: String },
@@ -559,9 +565,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         data.loaded_nb_paths.dedup();
                     }
                 }
-                
-                crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf_parsed.analysiert.bestandsverzeichnis);
-                
+                                
                 let json = match serde_json::to_string_pretty(&pdf_parsed) { Ok(o) => o, Err(_) => continue, };
                 let _ = std::fs::write(&cache_output_path, json.as_bytes());
                 data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
@@ -599,8 +603,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => { return; },
             };
             
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf_parsed.analysiert.bestandsverzeichnis);
-
             data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
             
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
@@ -989,9 +991,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 _ => { return; }
             }
-                        
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
-            
+                                    
             let default_parent = Path::new("/");
             let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
             let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
@@ -1118,8 +1118,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 _ => return,
             }
             
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
-
             let next_focus = match *section {
                 "bv" => format!("bv_{}_lfd-nr", row + 1),
                 "bv-zuschreibung" => format!("bv-zuschreibung_{}_bv-nr", row + 1),
@@ -1383,8 +1381,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
                 _ => return,
             };
-            
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
 
             // speichern
             let default_parent = Path::new("/");
@@ -1460,6 +1456,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::EditTextSaubernScript { script } => {
             data.konfiguration.text_saubern_script = script.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
+            data.konfiguration.speichern();
+        },
+        Cmd::EditFlurstueckeAuslesenScript { script } => {
+            data.konfiguration.flurstuecke_auslesen_script = script.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
             data.konfiguration.speichern();
         },
         Cmd::EditRechteArtScript { neu } => {
@@ -2322,14 +2322,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::SetOpenFile { new_file } => {
             data.open_page = Some((new_file.clone(), 2));
             
-            match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
-                Some(open_file) => {
-                    crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
-                },
-                None => { },
-            };
-            
-            
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get(&file)) { 
                 Some(s) => s,
                 None => return,
@@ -2366,13 +2358,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Some(p) = data.open_page.as_mut() { 
                 p.1 = *active_page;
             }
-            
-            match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
-                Some(open_file) => {
-                    crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut open_file.analysiert.bestandsverzeichnis);
-                },
-                None => { },
-            };
             
             
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get(&file)) { 
@@ -2558,8 +2543,6 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                 .filter(|sz| !pdf.geladen.contains_key(sz))
                 .copied()
                 .collect::<Vec<_>>();
-
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf.analysiert.bestandsverzeichnis);
                         
             let json = match serde_json::to_string_pretty(&pdf) { 
                 Ok(o) => o, 
@@ -2659,8 +2642,6 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                 &pdf.pdftotext_layout,
             );
 
-            crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut pdf.analysiert.bestandsverzeichnis);
-
             let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
             let _ = std::fs::write(&target_output_path, json.as_bytes());
         });
@@ -2674,16 +2655,14 @@ fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
     let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     
-    let mut gb = Grundbuch {
+    let gb = Grundbuch {
         titelblatt: pdf.titelblatt.clone(),
         bestandsverzeichnis,
         abt1,
         abt2,
         abt3,
     };
-    
-    crate::analysiere::roete_bestandsverzeichnis_automatisch(&mut gb.bestandsverzeichnis);
-    
+        
     Some(gb)
 }
 
@@ -2866,7 +2845,7 @@ pub fn python_exec_kuerze_text_abt3<'py>(
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
 
-    let mut module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
+    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
     module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
     module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
     module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
@@ -2926,7 +2905,7 @@ pub fn python_exec_kuerze_text_abt2<'py>(
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
 
-    let mut module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
+    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
     module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
     module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
     module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
@@ -3017,7 +2996,7 @@ fn python_exec_kurztext_inner<'py, T>(
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
 
-    let mut module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
+    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
     module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
     module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
     module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
@@ -3151,10 +3130,19 @@ fn main() {
     
     let num = num_cpus::get();
     let max_threads = (num as f32 / 2.0).ceil().max(2.0) as usize;
-    let max_threads = if num > 1 {
-         max_threads.min(num.saturating_sub(1)).saturating_sub(1)
-    } else {
-        1
+    let max_threads = match num {
+        0 | 1 | 2 | 3 => 1,
+        4 | 5 => 2,
+        6 | 7 => 3,
+        8 => 4,
+        12 => 8,
+        16 => 10,
+        24 => 14,
+        48 => 32,
+        64 => 48,
+        128 => 64,
+        256 => 128,
+        _ => 4,
     };
     
     let _ = env::set_var("RAYON_NUM_THREADS", format!("{}", max_threads));
@@ -3170,19 +3158,27 @@ fn main() {
     
     let _ = Konfiguration::neu_laden();
     
-    let app_html = include_str!("dist/app.html");
+    let mut userdata = RpcData::default();
+    
+    let initial_screen = ui::render_entire_screen(&mut userdata);
+    
+    let app_html = include_str!("dist/app.html").to_string().replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
     let url = "data:text/html,".to_string() + &encode(&app_html);
-    let size = (1300, 900);
     let resizable = true;
-    let debug = true;
-
-    let init_cb = |_webview| { };
-
-    let userdata = RpcData::default();
-
-    let (_, launched_successful) = run(APP_TITLE, &url, Some(size), resizable, debug, init_cb, |webview, arg, data: &mut RpcData| {
-        webview_cb(webview, arg, data);
-    }, userdata);
+    let debug = false;
+    
+    let (_, launched_successful) = run(
+        APP_TITLE, 
+        &url, 
+        Some((9999, 9999)), // = maximized
+        resizable, 
+        debug, 
+        |webview| { webview.dispatch(|webview, _| { 
+            webview.eval(&format!("replaceEntireScreen(`{}`)", initial_screen)); }); 
+        }, 
+        |webview, arg, data: &mut RpcData| { webview_cb(webview, arg, data); }, 
+        userdata
+    );
 
     if !launched_successful {
         println!("failed to launch {}", env!("CARGO_PKG_NAME"));

@@ -2104,19 +2104,6 @@ const OPERATIONS_TO_CLEAN: &[&str;10] = &[
     OP_PATH_PAINT_END,
 ];
 
-use std::io::prelude::*;
-use std::io;
-use flate2::read::ZlibDecoder;
-
-// Uncompresses a Deflate Encoded vector of bytes and returns a string or error
-// Here &[u8] implements Read
-fn decode_reader(bytes: &[u8]) -> io::Result<String> {
-   let mut deflater = ZlibDecoder::new(&bytes[..]);
-   let mut s = String::new();
-   deflater.read_to_string(&mut s)?;
-   Ok(s)
-}
-
 // Löscht alle gemalten Linien aus dem PDF heraus
 pub fn clean_pdf(pdf_bytes: &[u8], titelblatt: &Titelblatt) -> Result<Vec<u8>, Fehler> {
     
@@ -2418,14 +2405,14 @@ impl BvEintrag {
     
     pub fn set_zu_nr(&mut self, val: String) {
         match self {
-            BvEintrag::Flurstueck(flst) => { },
+            BvEintrag::Flurstueck(_) => { },
             BvEintrag::Recht(recht) => { recht.zu_nr = val; },
         }
     }
     
     pub fn set_recht_text(&mut self, val: String) {
         match self {
-            BvEintrag::Flurstueck(flst) => { },
+            BvEintrag::Flurstueck(_) => { },
             BvEintrag::Recht(recht) => { recht.text = val; },
         }
     }
@@ -2433,28 +2420,28 @@ impl BvEintrag {
     pub fn set_gemarkung(&mut self, val: Option<String>) {
         match self {
             BvEintrag::Flurstueck(flst) => { flst.gemarkung = val; },
-            BvEintrag::Recht(recht) => { },
+            BvEintrag::Recht(_) => { },
         }
     }
     
     pub fn set_flur(&mut self, val: usize) {
         match self {
             BvEintrag::Flurstueck(flst) => { flst.flur = val; },
-            BvEintrag::Recht(recht) => { },
+            BvEintrag::Recht(_) => { },
         }
     }
     
     pub fn set_flurstueck(&mut self, val: String) {
         match self {
             BvEintrag::Flurstueck(flst) => { flst.flurstueck = val; },
-            BvEintrag::Recht(recht) => { },
+            BvEintrag::Recht(_) => { },
         }
     }
     
     pub fn set_groesse(&mut self, val: FlurstueckGroesse) {
         match self {
             BvEintrag::Flurstueck(flst) => { flst.groesse = val; },
-            BvEintrag::Recht(recht) => { },
+            BvEintrag::Recht(_) => { },
         }
     }
     

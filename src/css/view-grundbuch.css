@@ -18,11 +18,18 @@
   max-height:1000px;
 }
 
+img {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 #__application-main #__application-file-list > div {
   font-size: 12px;
   font-family: monospace;
   padding: 5px 10px;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #__application-main #__application-file-list > div.active {
@@ -45,10 +52,14 @@
   display: block;
   background: white;
   overflow-y: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #__application-main #__application-page-list h5 {
     margin: 10px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #__application-main #__application-page-list .__application-page {
@@ -92,6 +103,13 @@
     background: white;
     overflow-y: scroll;
     overflow-x: auto;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#__application-analyse-grundbuch {
+    user-select: initial;
+    -webkit-user-select: initial;
 }
 
 #__application-main #__application-main-container:hover {
@@ -101,6 +119,7 @@
 #__application-main #__application-main-container > * {
   display: block;
   overflow: hidden;
+  
 }
 
 #__application-main #__application-main-container > * > h4 {
@@ -149,16 +168,22 @@
   flex-grow:1;
   overflow: scroll;
   max-height:400px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #__application-main #__application-pdf-page-image > div {
     margin: 0px auto;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #__application-main #__application-pdf-page-image img {
     width: 1200px;
     height: intrinsic;
     box-shadow: 0px 0px 20px black;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .kontextmenü-eintrag {
