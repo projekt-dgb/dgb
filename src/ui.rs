@@ -507,12 +507,16 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     };
     
     let pc = format!("<div style='
-        background:{};
+        background:{application_popover_color};
         width: 100%;
         height: 100%;
         min-height: 100%;
         z-index:1001;
-        pointer-events:all;' onmousedown='closePopOver()'>{}</div>", application_popover_color, pc
+        {overflow}
+        pointer-events:all;' onmousedown='closePopOver()'>{pc}</div>", 
+        overflow = if rpc_data.configuration_active { "overflow:scroll;" } else { "" }, 
+        application_popover_color = application_popover_color,
+        pc = pc,
     );
     
     normalize_for_js(pc)
