@@ -3668,6 +3668,20 @@ pub struct Nebenbeteiligter {
     pub extra: NebenbeteiligterExtra,
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NebenbeteiligterExport {
+    // ONr., falls bereits vergeben
+    pub ordnungsnummer: Option<usize>,
+    // Typ des NB, wichtig für ONr.
+    pub typ: Option<NebenbeteiligterTyp>,
+    // Recht, in dem der NB zum ersten Mal vorkommt
+    pub recht: String,
+    // Name des NB
+    pub name: String,
+    #[serde(default)]
+    pub extra: NebenbeteiligterExtra,
+}
+
 // Extra Informationen, wird 1:1 in LEFIS übernommen
 #[derive(Default, Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct NebenbeteiligterExtra {

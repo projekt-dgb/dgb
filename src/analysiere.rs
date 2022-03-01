@@ -132,7 +132,7 @@ pub fn analysiere_grundbuch<'py>(
     konfiguration: &Konfiguration
 ) -> GrundbuchAnalysiert {
     
-    let mut abt2_analysiert = Vec::new();
+    let mut abt2_analysiert = Vec::<Abt2Analysiert>::new();
     
     for eintrag in grundbuch.abt2.eintraege.iter() {
         
@@ -190,19 +190,34 @@ pub fn analysiere_grundbuch<'py>(
             }
         };
         
-        let rechtsinhaber = match kt.rechtsinhaber.clone() {
-            Some(s) => s,
-            None => {
-                fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
-                String::new()
-            }
-        };
-        
-        let rechteart = match kt.rechteart.clone() {
+        let mut rechteart = match kt.rechteart.clone() {
             Some(s) => s,
             None => {
                 fehler.push(format!("Konnte Rechteart nicht auslesen"));
                 RechteArt::SonstigeDabagrechteart
+            }
+        };
+        
+        let rechtsinhaber = match kt.rechtsinhaber.clone() {
+            Some(s) => s,
+            None => match rechteart.clone() {
+                | RechteArt::VerausserungsBelastungsverbot
+                | RechteArt::Auflassungsvormerkung
+                => String::new(),
+                RechteArt::SpeziellVormerkung { rechteverweis } => {
+                    if let Some(recht) = abt2_analysiert.iter().find(|r| r.lfd_nr == rechteverweis).cloned() {
+                        rechteart = recht.rechteart.clone();
+                        recht.rechtsinhaber.clone()
+                    } else {
+                        fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
+                        String::new()
+                    }
+                },
+                
+                _ => {
+                    fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
+                    String::new()
+                }
             }
         };
 

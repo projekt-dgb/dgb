@@ -10,9 +10,9 @@ use urlencoding::encode;
 use web_view::*;
 use serde_derive::{Serialize, Deserialize};
 use crate::digitalisiere::{
-    SeiteParsed, Nebenbeteiligter, NebenbeteiligterExtra,
-    NebenbeteiligterTyp, Titelblatt, SeitenTyp,
-    Grundbuch, Fehler,
+    SeiteParsed, Nebenbeteiligter, NebenbeteiligterExport,
+    NebenbeteiligterExtra, NebenbeteiligterTyp, 
+    Titelblatt, SeitenTyp, Grundbuch, Fehler,
     Anrede, PdfToTextLayout,
     BvEintrag, BvZuschreibung, BvAbschreibung, 
     Abt1Eintrag, Abt1Veraenderung, Abt1Loeschung,
@@ -205,30 +205,32 @@ impl PdfFile {
         self.ist_geladen() && !any_abt2 && !any_abt3
     }
 
-    pub fn get_nebenbeteiligte(&self, konfiguration: &Konfiguration) -> Vec<Nebenbeteiligter> {
+    pub fn get_nebenbeteiligte(&self, konfiguration: &Konfiguration) -> Vec<NebenbeteiligterExport> {
         let mut v = Vec::new();
         
         let analysiert = crate::analysiere::analysiere_grundbuch(&self.analysiert, &[], konfiguration);
         
         for abt2 in &analysiert.abt2 {
             if !abt2.rechtsinhaber.is_empty() {
-                v.push(Nebenbeteiligter {
+                v.push(NebenbeteiligterExport {
                     ordnungsnummer: None,
+                    recht: format!("{} Blatt {}, Abt. 2/{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt, abt2.lfd_nr),
                     typ: NebenbeteiligterTyp::from_str(&abt2.rechtsinhaber),
                     name: abt2.rechtsinhaber.clone(),
                     extra: NebenbeteiligterExtra::default(),
-                })
+                });
             }
         }
         
         for abt3 in &analysiert.abt3 {
             if !abt3.rechtsinhaber.is_empty() {
-                v.push(Nebenbeteiligter {
+                v.push(NebenbeteiligterExport {
                     ordnungsnummer: None,
+                    recht: format!("{} Blatt {}, Abt. 3/{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt, abt3.lfd_nr),
                     typ: NebenbeteiligterTyp::from_str(&abt3.rechtsinhaber),
                     name: abt3.rechtsinhaber.clone(),
                     extra: NebenbeteiligterExtra::default(),
-                })
+                });
             }
         }
         
@@ -2427,40 +2429,41 @@ fn parse_nb(fs: &str) -> Vec<Nebenbeteiligter> {
                         b.typ = Some(typ);
                     }
                 },
-                2 => {
+                2 => { },
+                3 => {
                     b.name = s.trim().to_string();
                 },
-                3 => {
+                4 => {
                     if let Some(anrede) = Anrede::from_str(s.trim()) {
                         b.extra.anrede = Some(anrede);
                     }
                 },
-                4 => {
+                5 => {
                     if !s.trim().is_empty() {
                         b.extra.titel = Some(s.trim().to_string());                            
                     }
                 },
-                5 => {
+                6 => {
                     if !s.trim().is_empty() {
                         b.extra.vorname = Some(s.trim().to_string());                            
                     }
                 },
-                6 => {
+                7 => {
                     if !s.trim().is_empty() {
                         b.extra.nachname_oder_firma = Some(s.trim().to_string());                            
                     }
                 },
-                7 => {
+                8 => {
                     if !s.trim().is_empty() {
                         b.extra.geburtsname = Some(s.trim().to_string());                            
                     }
                 },
-                8 => {
+                9 => {
                     if let Some(datum) = NebenbeteiligterExtra::geburtsdatum_from_str(s.trim()) {
                         b.extra.geburtsdatum = Some(datum);                            
                     }
                 },
-                9 => {
+                10 => {
                     if !s.trim().is_empty() {
                         b.extra.wohnort = Some(s.trim().to_string());                            
                     }
@@ -2495,13 +2498,23 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
         }
     }
 
+    let mut nb_keyed = BTreeMap::new();
+    for n in nb {
+        nb_keyed.insert(n.name.clone(), n);
+    }
+    
+    let mut nb = nb_keyed
+        .into_iter()
+        .map(|(k, v)| v)
+        .collect::<Vec<_>>();
     nb.sort_by(|a, b| a.name.cmp(&b.name));
     nb.dedup();
     
     let tsv = nb.iter()
-        .map(|nb| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
+        .map(|nb| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
             nb.ordnungsnummer.map(|s| s.to_string()).unwrap_or_default(), 
             nb.typ.map(|s| s.get_str()).unwrap_or_default(), 
+            nb.recht,
             nb.name,
             nb.extra.anrede.map(|s| s.to_string()).unwrap_or_default(),
             nb.extra.titel.clone().unwrap_or_default(),
@@ -2513,7 +2526,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
         ))
         .collect::<Vec<_>>()
         .join("\r\n");
-    let tsv = format!("ORDNUNGSNUMMER\tTYP\tNAME (GRUNDBUCH)\tANREDE\tTITEL\tVORNAME\tNACHNAME_ODER_FIRMA\tGEBURTSNAME\tGEBURTSDATUM\tWOHNORT\r\n{}", tsv);
+    let tsv = format!("ORDNUNGSNUMMER\tTYP\tRECHT\tNAME (GRUNDBUCH)\tANREDE\tTITEL\tVORNAME\tNACHNAME_ODER_FIRMA\tGEBURTSNAME\tGEBURTSDATUM\tWOHNORT\r\n{}", tsv);
     tsv
 }
 
