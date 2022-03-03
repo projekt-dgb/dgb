@@ -330,6 +330,10 @@ pub enum Cmd {
     DeleteNebenbeteiligte,
     #[serde(rename = "export_lefis")]
     ExportLefis,
+    #[serde(rename = "export_alle_rechte")]
+    ExportAlleRechte,
+    #[serde(rename = "export_rangvermerke")]
+    ExportRangvermerke,
     #[serde(rename = "open_configuration")]
     OpenConfiguration,
     #[serde(rename = "open_info")]
@@ -1004,7 +1008,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Ok(json) = serde_json::to_string_pretty(&open_file) {
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false)));
         },
         Cmd::BvEintragTypAendern { path, value } => {
         
@@ -1071,7 +1075,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
         },
         Cmd::EintragNeu { path } => {
@@ -1164,7 +1168,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
             webview.eval(&format!("document.getElementById(`{}`).focus();", next_focus));
@@ -1409,7 +1413,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
             webview.eval(&format!("(function() {{ 
@@ -2186,7 +2190,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false)));
         },
         Cmd::ExportNebenbeteiligte => {
         
@@ -2214,6 +2218,58 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let _ = std::fs::write(&f, tsv.as_bytes());
             
+        },
+        Cmd::ExportRangvermerke => {
+            
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let tsv = get_rangvermerke_tsv(&data);
+
+            let file_dialog_result = tinyfiledialogs::save_file_dialog(
+                "Rangvermerke .TSV speichern unter", 
+                "~/", 
+            );
+            
+            let f = match file_dialog_result {
+                Some(f) => {
+                    if f.ends_with(".tsv") {
+                        f
+                    } else {
+                        format!("{}.tsv", f)
+                    }
+                },
+                None => return,
+            };
+            
+            let _ = std::fs::write(&f, tsv.as_bytes());
+        },
+        Cmd::ExportAlleRechte => {
+        
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let html = get_alle_rechte_html(&data);
+
+            let file_dialog_result = tinyfiledialogs::save_file_dialog(
+                "Rechte .HTML speichern unter", 
+                "~/", 
+            );
+            
+            let f = match file_dialog_result {
+                Some(f) => {
+                    if f.ends_with(".html") {
+                        f
+                    } else {
+                        format!("{}.html", f)
+                    }
+                },
+                None => return,
+            };
+            
+            let _ = std::fs::write(&f, html.as_bytes());
         },
         Cmd::ExportLefis => {
 
@@ -2386,7 +2442,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
             webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
@@ -2476,6 +2532,35 @@ fn parse_nb(fs: &str) -> Vec<Nebenbeteiligter> {
     }
     
     nb
+}
+
+fn get_alle_rechte_html(data: &RpcData) -> String {
+
+    let mut entries = Vec::new();
+    
+    for (f_name, f) in data.loaded_files.iter() {
+        entries.push(crate::ui::render_analyse_grundbuch(f, &data.loaded_nb, &data.konfiguration, true));
+    }
+    
+    entries.join("\r\n")
+}
+
+
+fn get_rangvermerke_tsv(data: &RpcData) -> String {
+
+    let mut entries = Vec::new();
+    
+    for (f_name, f) in data.loaded_files.iter() {
+        let analysiert = crate::analysiere::analysiere_grundbuch(&f.analysiert, &[], &data.konfiguration);
+        
+        for a2 in analysiert.abt2 {
+            if let Some(s) = a2.rangvermerk {
+                entries.push(format!("{} A2/{}\t{}\t{}", f_name, a2.lfd_nr, s, a2.text_original));
+            }
+        }
+    }
+    
+    format!("RECHT\tRVM\tTEXT\r\n{}", entries.join("\r\n"))
 }
 
 fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
@@ -3093,6 +3178,10 @@ impl CompiledRegex {
         })
     }
     
+    pub fn find_all_matches(&self, text: &str) -> Vec<String> {
+        self.re.find_iter(text).map(|m| m.as_str().to_string()).collect()
+    }
+    
     pub fn get_captures(&self, text: &str) -> Vec<String> {
         let cap = match self.re.captures_iter(text).next() {
             Some(c) => c,
@@ -3121,6 +3210,10 @@ impl CompiledRegex {
     #[pyo3(text_signature = "(text, index, /)")]
     pub fn find_in(&self, text: &str, index: usize) -> Option<String> {
         self.get_captures(text).get(index).cloned()
+    }
+    #[pyo3(text_signature = "(text, /)")]
+    pub fn find_all(&self, text: &str) -> Vec<String> {
+        self.find_all_matches(text)
     }
     #[pyo3(text_signature = "(text, text_neu, /)")]
     pub fn replace_all(&self, text: &str, text_neu: &str) -> String {

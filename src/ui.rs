@@ -760,6 +760,31 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                             </div>
                         </label>
                     </div>
+                    
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_rangvermerke(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                            </div>
+                            <div>
+                                <p>Rangvermerke</p>
+                                <p>in CSV</p>
+                            </div>
+                        </label>
+                    </div>   
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                            </div>
+                            <div>
+                                <p>Alle Rechte</p>
+                                <p>in CSV</p>
+                            </div>
+                        </label>
+                    </div> 
                 </div>
             </div>
             
@@ -1042,12 +1067,12 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
             
-            analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration),
+            analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false),
         ))
     }
 }
 
-pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> String {
+pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration, fuer_druck: bool) -> String {
     
     const PFEIL_PNG: &[u8] = include_bytes!("../src/img/icons8-arrow-48.png");
     const WARNUNG_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");
@@ -1061,23 +1086,26 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
     
     normalize_for_js(format!("
         <div style='margin:10px;'>
-            <h4>Analyse Abt. 2</h4>
+            {a2_header}
             {a2_analyse}
-            
-            <h4>Analyse Abt. 3</h4>
+            {a3_header}
             {a3_analyse}
         </div>
         ",
+        a2_header = if fuer_druck { "" } else { "<h4>Analyse Abt. 2</h4>" },
+        a3_header = if fuer_druck { "" } else { "<h4>Analyse Abt. 3</h4>" },
+
         a2_analyse = gb_analysiert.abt2.iter().map(|a2a| {
             format!("
-            <div class='__application-abt2-analysiert' style='margin:5px;padding:10px;border:1px solid #efefef;'>
-                <h5 style='margin-bottom: 10px;'>{lfd_nr}&nbsp;{rechteart}</h5>
+            <div class='__application-abt2-analysiert' style='margin:5px;padding:10px;border:1px solid #efefef;page-break-inside:avoid;'>
+                <h5 style='font-family:sans-serif;font-size:14px;margin: 0px;margin-bottom: 10px;'>{lfd_nr}&nbsp;{rechteart}</h5>
                 <div style='display:flex;flex-direction:row;'>
-                    <div style='min-width:380px;max-width:380px;margin-right:20px;'>
-                        <p>{text_kurz}</p>
+                    <div style='min-width:{max_width};max-width:{max_width};margin-right:20px;'>
+                        {text_original}
+                        <p style='font-family:sans-serif;'>{text_kurz}</p>
                     </div>
                     <div style='flex-grow:1;'>
-                        <p style='font-style:italic'>{rechtsinhaber}</p>
+                        <p style='font-family:sans-serif;font-style:italic'>{rechtsinhaber}</p>
                         {rangvermerk}
                         <div>{belastete_flurstuecke}</div>
                     </div>
@@ -1087,7 +1115,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     {warnungen}
                 </div>
                 </div>",
-                lfd_nr = format!("{}", a2a.lfd_nr),
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
+                text_original = if fuer_druck { format!("<p style='font-family:sans-serif;'>{}</p>", a2a.text_original) } else { String::new() }, 
+                max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a2a.text_kurz,
                 rechteart = format!("{:?}", a2a.rechteart).to_uppercase(),
                 rechtsinhaber = match a2a.nebenbeteiligter.ordnungsnummer.as_ref() { 
@@ -1095,9 +1125,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     None => a2a.rechtsinhaber.clone(),
                 },
                 rangvermerk = match a2a.rangvermerk.as_ref() {
-                    Some(s) => format!("<span style='display:flex;'>
+                    Some(s) => format!("<span style='display:flex;align-items:center;'>
                         <img src='{warnung}' style='width:12px;height:12px;'/>
-                        <p style='display:inline-block;margin-left:10px;'>{rang}</p>
+                        <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>{rang}</p>
                         </span>", 
                         warnung = warnung_str,
                         rang = s,
@@ -1109,9 +1139,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         use crate::digitalisiere::BvEintrag;
                         match belastet {
                             BvEintrag::Flurstueck(flst) => {
-                                format!("<span style='display:flex;'>
+                                format!("<span style='display:flex;align-items:center;'>
                                     <img src='{pfeil}' style='width:12px;height:12px;'/>
-                                    <p style='display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
+                                    <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
                                     </span>", 
                                     pfeil = pfeil_str,
                                     flur = flst.flur,
@@ -1120,9 +1150,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                                 ) 
                             },
                             BvEintrag::Recht(recht) => {
-                                format!("<span style='display:flex;'>
+                                format!("<span style='display:flex;align-items:center;'>
                                     <img src='{pfeil}' style='width:12px;height:12px;'/>
-                                    <p style='display:inline-block;margin-left:10px;'>Grundstücksgl. Recht (BV-Nr. {bv_nr})</p>
+                                    <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>Grundstücksgl. Recht (BV-Nr. {bv_nr})</p>
                                     </span>", 
                                     pfeil = pfeil_str,
                                     bv_nr = recht.lfd_nr,
@@ -1133,11 +1163,14 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     .collect::<Vec<String>>()
                     .join("\r\n"),
                 fehler = {
+                
                     let mut fehler = a2a.fehler.clone();
                     fehler.sort();
                     fehler.dedup();
                     
-                    fehler.iter().map(|w| {
+                    fehler
+                    .iter()
+                    .map(|w| {
                         format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
                             <img src='{fehler_icon}' style='width:12px;height:12px;'/>
                                 <p style='display:inline-block;margin-left:10px;color:rgb(129,8,8);'>{text}</p>
@@ -1145,14 +1178,20 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                             fehler_icon = fehler_str,
                             text = w,
                         )
-                    }).collect::<Vec<_>>().join("\r\n")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\r\n")
                 },
                 warnungen = {
+                
                     let mut warnungen = a2a.warnungen.clone();
                     warnungen.sort();
                     warnungen.dedup();
                     
-                    warnungen.iter().map(|w| {
+                    warnungen
+                    .iter()
+                    .filter(|w| if fuer_druck && w.as_str() == "Konnte keine Ordnungsnummer finden" { false } else { true })
+                    .map(|w| {
                     format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,255,167);'>
                             <img src='{warnung_icon}' style='width:12px;height:12px;'/>
                                 <p style='display:inline-block;margin-left:10px;'>{text}</p>
@@ -1160,7 +1199,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                             warnung_icon = warnung_str,
                             text = w,
                         )
-                    }).collect::<Vec<_>>().join("\r\n")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\r\n")
                 },
             )
         }).collect::<Vec<String>>().join("\r\n"),
@@ -1170,14 +1211,15 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
             let waehrung_str = a3a.betrag.waehrung.to_string();
             
             format!("
-            <div class='__application-abt2-analysiert' style='margin:5px;padding:10px;border:1px solid #efefef;'>
-                <h5 style='margin-bottom: 10px;'>{lfd_nr}&nbsp;{schuldenart}&nbsp;{betrag}</h5>
-                    <div style='display:flex;flex-direction:row;'>
-                        <div style='min-width:380px;max-width:380px;margin-right:20px;'>
-                            <p>{text_kurz}</p>
+            <div class='__application-abt2-analysiert' style='margin:5px;padding:10px;border:1px solid #efefef;page-break-inside:avoid;'>
+                <h5 style='font-family:sans-serif;margin: 0px;margin-bottom: 10px;'>{lfd_nr}&nbsp;{schuldenart}&nbsp;{betrag}</h5>
+                    <div style='font-family:sans-serif;display:flex;flex-direction:row;'>
+                        <div style='min-width:{max_width};max-width:{max_width};margin-right:20px;'>
+                            {text_original}
+                            <p style='font-family:sans-serif;'>{text_kurz}</p>
                         </div>
                         <div style='flex-grow:1;'>
-                            <p style='font-style:italic'>{rechtsinhaber}</p>
+                            <p style='font-family:sans-serif;font-style:italic'>{rechtsinhaber}</p>
                             <div>{belastete_flurstuecke}</div>
                         </div>
                     </div>
@@ -1186,7 +1228,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         {warnungen}
                     </div>
                 </div>",
-                lfd_nr = format!("{}", a3a.lfd_nr),
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
+                text_original = if fuer_druck { format!("<p style='font-family:sans-serif;'>{}</p>", a3a.text_original) } else { String::new() }, 
+                max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a3a.text_kurz,
                 betrag = format!("{} {}", crate::kurztext::formatiere_betrag(&a3a.betrag), waehrung_str),
                 schuldenart = format!("{:?}", a3a.schuldenart).to_uppercase(),
@@ -1199,9 +1243,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         use crate::digitalisiere::BvEintrag;
                         match belastet {
                             BvEintrag::Flurstueck(flst) => {
-                                format!("<span style='display:flex;'>
+                                format!("<span style='display:flex;align-items:center;'>
                                     <img src='{pfeil}' style='width:12px;height:12px;'/>
-                                    <p style='display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
+                                    <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>Fl. {flur}, Flst. {flurstueck} (BV-Nr. {bv_nr})</p>
                                     </span>", 
                                     pfeil = pfeil_str,
                                     flur = flst.flur,
@@ -1210,9 +1254,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                                 ) 
                             },
                             BvEintrag::Recht(recht) => {
-                                format!("<span style='display:flex;'>
+                                format!("<span style='display:flex;align-items:center;'>
                                     <img src='{pfeil}' style='width:12px;height:12px;'/>
-                                    <p style='display:inline-block;margin-left:10px;'>Grundstücksgl. Recht (BV-Nr. {bv_nr})</p>
+                                    <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>Grundstücksgl. Recht (BV-Nr. {bv_nr})</p>
                                     </span>", 
                                     pfeil = pfeil_str,
                                     bv_nr = recht.lfd_nr,
@@ -1242,7 +1286,10 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     warnungen.sort();
                     warnungen.dedup();
                     
-                    warnungen.iter().map(|w| {
+                    warnungen
+                    .iter()
+                    .filter(|w| if fuer_druck && w.as_str() == "Konnte keine Ordnungsnummer finden" { false } else { true })
+                    .map(|w| {
                     format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,255,167);'>
                             <img src='{warnung_icon}' style='width:12px;height:12px;'/>
                                 <p style='display:inline-block;margin-left:10px;'>{text}</p>
@@ -1250,7 +1297,9 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                             warnung_icon = warnung_str,
                             text = w,
                         )
-                    }).collect::<Vec<_>>().join("\r\n")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\r\n")
                 },
             )
         }).collect::<Vec<String>>().join("\r\n"),

@@ -288,25 +288,20 @@ fn get_eingetragen_am(saetze_clean: &Vec<String>) -> Option<String> {
 pub fn formatiere_betrag(b: &Betrag) -> String {
     
     let letzte_drei_stellen = b.wert % 1000;
-    let mut hunderttausender = b.wert / 1000;
+    let hunderttausender = b.wert / 1000;
     
-    let million_prefix = if b.wert > 1_000_000 {
+    if b.wert >= 1_000_000 {
         let millionen = hunderttausender / 1000;
-        hunderttausender = hunderttausender % 1000;
-        Some(millionen)
+        let hunderttausender = hunderttausender % 1000;
+        format!("{}.{:03}.{:03},{:02}", millionen, hunderttausender, letzte_drei_stellen, b.nachkomma)
+    } else if b.wert >= 100_000 {
+        let hunderttausender = hunderttausender % 1000;
+        format!("{:03}.{:03},{:02}", hunderttausender, letzte_drei_stellen, b.nachkomma)
+    } else if b.wert >= 1000 {
+        let hunderttausender = hunderttausender % 1000;
+        format!("{}.{:03},{:02}", hunderttausender, letzte_drei_stellen, b.nachkomma)
     } else {
-        None
-    };
-    
-    match million_prefix {
-        Some(s) => format!("{}.{:03}.{:03},{:02}", s, hunderttausender, letzte_drei_stellen, b.nachkomma),
-        None => {
-            if b.wert >= 100_000 {
-                format!("{:03}.{:03},{:02}", hunderttausender, letzte_drei_stellen, b.nachkomma)
-            } else {
-                format!("{}.{:03},{:02}", hunderttausender, letzte_drei_stellen, b.nachkomma)
-            }
-        },
+        format!("{},{:02}", letzte_drei_stellen, b.nachkomma)
     }
 }
 

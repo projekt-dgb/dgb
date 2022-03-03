@@ -101,27 +101,37 @@ impl Spalte1Eintrag {
             nur_lastend_an,
         }
     }
+    
+    fn __str__(&self) -> String {
+        format!("{:#?}", self)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[pyclass(name = "FlurFlurstueck")]
 #[repr(C)]
 pub struct FlurFlurstueck {
-    pub gemarkung: Option<String>,
     pub flur: usize,
     pub flurstueck: String,
+    pub gemarkung: Option<String>,
+    pub teilflaeche_qm: Option<usize>,
 }
 
 #[allow(non_snake_case)]
 #[pymethods]
 impl FlurFlurstueck {
     #[new]
-    #[args(gemarkung = "None")]
-    fn new(flur: usize, flurstueck: String, gemarkung: Option<String>) -> Self {
+    #[args(gemarkung = "None", teilflaeche_qm = "None")]
+    fn new(flur: usize, flurstueck: String, gemarkung: Option<String>, teilflaeche_qm: Option<usize>) -> Self {
         Self {
             gemarkung,
             flur,
             flurstueck,
+            teilflaeche_qm,
         }
     }
 }
@@ -235,6 +245,12 @@ pub fn analysiere_grundbuch<'py>(
                 }
             }
         };
+        
+        if rangvermerk.is_some() {
+            if !(kt.gekuerzt.contains("Rang") || kt.gekuerzt.contains("Gleichrang")) {
+                fehler.push(format!("Rangvermerk vorhanden, aber nicht in Kurztext vermerkt"));
+            }
+        }
         
         abt2_analysiert.push(Abt2Analysiert {
             lfd_nr: eintrag.lfd_nr,
