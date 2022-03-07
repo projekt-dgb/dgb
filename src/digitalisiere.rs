@@ -2345,6 +2345,13 @@ impl BvEintrag {
         }
     }
     
+    pub fn get_gemarkung(&self) -> Option<String> {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.gemarkung.clone(),
+            BvEintrag::Recht(_) => None,
+        }
+    }
+    
     pub fn ist_leer(&self) -> bool {
         match self {
             BvEintrag::Flurstueck(flst) => {

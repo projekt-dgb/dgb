@@ -332,6 +332,8 @@ pub enum Cmd {
     ExportLefis,
     #[serde(rename = "export_alle_rechte")]
     ExportAlleRechte,
+    #[serde(rename = "export_alle_fehler")]
+    ExportAlleFehler,    
     #[serde(rename = "export_rangvermerke")]
     ExportRangvermerke,
     #[serde(rename = "open_configuration")]
@@ -1008,7 +1010,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Ok(json) = serde_json::to_string_pretty(&open_file) {
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
         },
         Cmd::BvEintragTypAendern { path, value } => {
         
@@ -1075,7 +1077,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
         },
         Cmd::EintragNeu { path } => {
@@ -1168,7 +1170,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
             webview.eval(&format!("document.getElementById(`{}`).focus();", next_focus));
@@ -1413,7 +1415,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
             webview.eval(&format!("(function() {{ 
@@ -2190,7 +2192,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false)));
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
         },
         Cmd::ExportNebenbeteiligte => {
         
@@ -2251,7 +2253,37 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 return;
             }
             
-            let html = get_alle_rechte_html(&data);
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_rechte_html(&data)
+            );
+            
+            let file_dialog_result = tinyfiledialogs::save_file_dialog(
+                "Rechte .HTML speichern unter", 
+                "~/", 
+            );
+            
+            let f = match file_dialog_result {
+                Some(f) => {
+                    if f.ends_with(".html") {
+                        f
+                    } else {
+                        format!("{}.html", f)
+                    }
+                },
+                None => return,
+            };
+            
+            let _ = std::fs::write(&f, html.as_bytes());
+        },
+        Cmd::ExportAlleFehler => {
+        
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_fehler_html(&data)
+            );
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
@@ -2442,7 +2474,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file)));
             webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false))); 
+            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
@@ -2539,12 +2571,23 @@ fn get_alle_rechte_html(data: &RpcData) -> String {
     let mut entries = Vec::new();
     
     for (f_name, f) in data.loaded_files.iter() {
-        entries.push(crate::ui::render_analyse_grundbuch(f, &data.loaded_nb, &data.konfiguration, true));
+        entries.push(crate::ui::render_analyse_grundbuch(f, &data.loaded_nb, &data.konfiguration, true, false));
     }
     
     entries.join("\r\n")
 }
 
+
+fn get_alle_fehler_html(data: &RpcData) -> String {
+
+    let mut entries = Vec::new();
+    
+    for (f_name, f) in data.loaded_files.iter() {
+        entries.push(crate::ui::render_analyse_grundbuch(f, &data.loaded_nb, &data.konfiguration, true, true));
+    }
+    
+    entries.join("\r\n")
+}
 
 fn get_rangvermerke_tsv(data: &RpcData) -> String {
 
@@ -3245,16 +3288,15 @@ fn main() {
     let max_threads = match num {
         0 | 1 | 2 | 3 => 1,
         4 | 5 => 2,
-        6 | 7 => 3,
-        8 => 4,
-        12 => 8,
-        16 => 10,
-        24 => 14,
-        48 => 32,
-        64 => 48,
-        128 => 64,
-        256 => 128,
-        _ => 4,
+        6 | 7 | 8 => 3,
+        12 => 5,
+        16 => 7,
+        24 => 11,
+        48 => 23,
+        64 => 31,
+        128 => 62,
+        256 => 125,
+        _ => 3,
     };
     
     let _ = env::set_var("RAYON_NUM_THREADS", format!("{}", max_threads));

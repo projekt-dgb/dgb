@@ -5,6 +5,7 @@ use serde_derive::{Serialize, Deserialize};
 use std::collections::{BTreeMap, BTreeSet};
 use pyo3::{Python, pyclass, pymethods};
 use crate::get_or_insert_regex;
+use std::fmt;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Waehrung { 
@@ -102,6 +103,15 @@ impl Spalte1Eintrag {
         }
     }
     
+    fn get_lfd_nr(&self) -> usize{
+        self.lfd_nr
+    }
+    
+    fn append_nur_lastend_an(&mut self, mut nur_lastend_an: Vec<FlurFlurstueck>) {
+        self.voll_belastet = false;
+        self.nur_lastend_an.append(&mut nur_lastend_an);
+    }
+    
     fn __str__(&self) -> String {
         format!("{:#?}", self)
     }
@@ -119,6 +129,15 @@ pub struct FlurFlurstueck {
     pub flurstueck: String,
     pub gemarkung: Option<String>,
     pub teilflaeche_qm: Option<usize>,
+}
+
+impl fmt::Display for FlurFlurstueck {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(s) = self.gemarkung.as_ref() {
+            write!(f, "Gemarkung {}, ", s)?;
+        }
+        write!(f, "Flur {} Flst. {}", self.flur, self.flurstueck)
+    }
 }
 
 #[allow(non_snake_case)]
@@ -396,20 +415,191 @@ fn get_belastete_flurstuecke<'py>(
         fehler,
     )?;
     
-    let mut belastet_bv = Vec::new();
+    let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+    let blatt = grundbuch.titelblatt.blatt.clone();
+
+    let mut log = Vec::new();
     
-    // Spalte 1 Einträge => Bestandsverzeichnis Einträge
-    for s1 in spalte1_eintraege {
+    log.push(format!("<strong>Recht:</strong>"));
+    log.push(format!("<p>{text_sauber}</p>"));
+    log.push(format!("<p>Spalte 1: {bv_nr}</p>"));
+    
+    log.push(format!("<strong>Ausgewertet:</strong>"));
+    let s1_ohne_teilbelastung = spalte1_eintraege.iter()
+        .filter_map(|s| if s.nur_lastend_an.is_empty() { 
+            Some(format!("{}", s.lfd_nr)) 
+        } else { None })
+        .collect::<Vec<_>>();
         
-        /*
-        let bv_nr = ;
-        let gemarkung = ;
-        let flur = ;
-        let flurstueck = ;
-        */
-        
+    if !s1_ohne_teilbelastung.is_empty() {
+        log.push(format!("<p>&nbsp;&nbsp;{}</p>", s1_ohne_teilbelastung.join(", ")));
     }
     
+    let s1_mit_teilbelastung = spalte1_eintraege.iter()
+    .filter_map(|s| if s.nur_lastend_an.is_empty() { None } else {
+        Some(format!("<p>&nbsp;&nbsp;{}: nur lastend an {}</p>", s.lfd_nr, s.nur_lastend_an.iter().map(|nl| format!("{}", nl)).collect::<Vec<_>>().join(",<br/>")))
+    }).collect::<Vec<_>>();
+        
+    for s1 in s1_mit_teilbelastung {
+        log.push(s1);
+    }
+    
+    let mut belastet_bv = Vec::<BvEintrag>::new();
+    let mut global_filter = Vec::new();
+    
+    let mut bv_keep = BTreeMap::new();
+
+    // Spalte 1 Einträge => Bestandsverzeichnis Einträge
+    for s1 in spalte1_eintraege.iter() {
+        
+        // 0 = keine Einschränkung nach BV-Nr., später filtern
+        if s1.lfd_nr == 0 {
+            global_filter.push(s1.clone());
+            continue; 
+        }
+        
+        let mut alle_bv_eintraege = grundbuch.bestandsverzeichnis.eintraege.iter()
+            .filter(|bv| bv.get_lfd_nr() == s1.lfd_nr)
+            .cloned()
+            .collect::<Vec<BvEintrag>>();
+                
+        for nl in s1.nur_lastend_an.iter() {
+        
+            let gemarkung_filter = match nl.gemarkung.clone() {
+                Some(s) if s == grundbuch_von => None,
+                o => o,
+            };
+                        
+            // Filter nach Gemarkung / Flur / Flurstück
+            for (i, bv)  in belastet_bv.iter().enumerate() {
+                
+                // Flur = 0 = kein Filter nach Flur vorhanden
+                if nl.flur != 0 {
+                    if nl.flur != bv.get_flur() {
+                        continue; 
+                    }
+                }
+                
+                if bv.get_flurstueck() != nl.flurstueck {
+                    continue;
+                }
+                
+                let should_remove = match (bv.get_gemarkung(), gemarkung_filter.clone()) {
+                    (None, None) => false,
+                    (Some(s), None) => s != grundbuch_von,
+                    (None, Some(s)) => s != grundbuch_von,
+                    (Some(s1), Some(s2)) => s1 != s2,
+                    _ => true,
+                };
+                
+                if !should_remove  {
+                    bv_keep
+                    .entry(s1.lfd_nr)
+                    .or_insert_with(|| Vec::new())
+                    .push(i);
+                }
+            }
+        }
+                
+        alle_bv_eintraege.retain(|bv| *bv != BvEintrag::neu(0));        
+        belastet_bv.extend(alle_bv_eintraege.into_iter());
+    }
+    
+    for (i, bv) in belastet_bv.iter_mut().enumerate() {
+        
+        let should_keep = match bv_keep.get(&bv.get_lfd_nr()) {
+            Some(s) => s.contains(&i),
+            None => true,
+        };
+        
+        if !should_keep {
+            *bv = BvEintrag::neu(0);
+        }
+    }
+    
+    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));  
+    
+    log.push(format!("<strong>BV-Einträge (ungefiltert):</strong>"));
+    for bv in belastet_bv.iter() {
+        log.push(format!("<p>[{}]: {} Fl. {} Flst. {}</p>", bv.get_lfd_nr(), bv.get_gemarkung().unwrap_or(grundbuch_von.clone()), bv.get_flur(), bv.get_flurstueck()));
+    }
+    
+    let mut bv_keep = BTreeMap::new();
+    
+    log.push(format!("<strong>&nbsp;&nbsp;Global Filter</strong>"));
+
+    // Nur lastend an Flur X, Flurstück Y (-> keine BV-Nr.!)
+    for s1 in global_filter {
+        
+        for nl in s1.nur_lastend_an.iter() {
+        
+            let gemarkung_filter = match nl.gemarkung.clone() {
+                Some(s) if s == grundbuch_von => None,
+                o => o,
+            };
+            let flur = nl.flur;
+            let flurstueck = &nl.flurstueck;
+
+            // Filter nach Gemarkung / Flur / Flurstück
+            for (i, bv)  in belastet_bv.iter().enumerate() {
+                
+                // Flur = 0 = kein Filter nach Flur vorhanden
+                if nl.flur != 0 {
+                    if nl.flur != bv.get_flur() {
+                        continue; 
+                    }
+                }
+                
+                
+                if bv.get_flurstueck() != nl.flurstueck {
+                    continue;
+                }
+                
+                let should_remove = match (bv.get_gemarkung(), gemarkung_filter.clone()) {
+                    (None, None) => false,
+                    (Some(s), None) => s != grundbuch_von,
+                    (None, Some(s)) => s != grundbuch_von,
+                    (Some(s1), Some(s2)) => s1 != s2,
+                    _ => true,
+                };
+                
+                if !should_remove  {
+                    bv_keep
+                    .entry(s1.lfd_nr)
+                    .or_insert_with(|| Vec::new())
+                    .push(i);
+                }
+            }
+        }
+    }
+        
+    for (i, bv) in belastet_bv.iter_mut().enumerate() {
+        
+        let should_keep = match bv_keep.get(&0) {
+            Some(s) => s.contains(&i),
+            None => true,
+        };
+        
+        if !should_keep {
+            *bv = BvEintrag::neu(0);
+        }
+    }
+    
+    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));        
+    
+    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
+    
+    if belastet_bv.is_empty() {
+        let regex_matches = konfiguration.regex.iter().filter_map(|(k, v)| {
+            if get_or_insert_regex(&regex_values, v).ok()?.matches(text_sauber) { Some(k.clone()) } else { None } 
+        })
+        .collect::<Vec<_>>();
+        fehler.push(format!("Konnte keine Flurstücke zuordnen!"));
+        log.push(format!("<strong>Regex:</strong>"));
+        log.push(format!("<p>{}</p>", regex_matches.join(", ")));
+        fehler.push(format!("<div style='flex-direction:row;max-width:600px;'>{}</div>", log.join("\r\n")));
+    }
+        
     Ok(belastet_bv)
 }
 
