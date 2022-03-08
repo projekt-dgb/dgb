@@ -2494,13 +2494,13 @@ impl BvEintrag {
 pub enum FlurstueckGroesse {
     #[serde(rename = "m")]
     Metrisch { 
-        m2: Option<usize>
+        m2: Option<u64>
     },
     #[serde(rename = "ha")]
     Hektar { 
-        ha: Option<usize>, 
-        a: Option<usize>, 
-        m2: Option<usize>,
+        ha: Option<u64>, 
+        a: Option<u64>, 
+        m2: Option<u64>,
     }
 }
 

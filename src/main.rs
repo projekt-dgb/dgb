@@ -2321,6 +2321,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Err(_) => return,
             };
             
+            let json = json.lines().collect::<Vec<_>>().join("\r\n");
+            
             // Benutzer warnen, falls Datei noch Fehler enthält
             let mut fehler = analysiert.iter().flat_map(|l| {
                 l.rechte.abt2.iter().filter_map(|f| {
