@@ -23,7 +23,7 @@ impl Waehrung {
         match self {
             Waehrung::Euro => "€",
             Waehrung::DMark => "DM",
-            Waehrung::MarkDDR => "DDR-Mark",
+            Waehrung::MarkDDR => "M",
             Waehrung::Goldmark => "Goldmark",
             Waehrung::Reichsmark => "Reichsmark",
             Waehrung::Rentenmark => "Rentenmark",

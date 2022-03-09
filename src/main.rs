@@ -740,7 +740,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     bv_eintrag.set_flurstueck(new_value.clone());
                 },
                 ("bv", "groesse") => {
-                    let new_value = match new_value.parse::<usize>().ok() {
+                    let new_value = match new_value.parse::<u64>().ok() {
                         Some(s) => Some(s),
                         None => None,
                     };

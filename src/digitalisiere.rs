@@ -2660,7 +2660,7 @@ pub fn analysiere_bv(
                     .and_then(|t| {
                         position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
-                        numeric_chars.parse::<usize>().ok()
+                        numeric_chars.parse::<u64>().ok()
                     });
                     
                     let a = s.texte
@@ -2669,7 +2669,7 @@ pub fn analysiere_bv(
                     .and_then(|t| {
                         position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
-                        numeric_chars.parse::<usize>().ok()
+                        numeric_chars.parse::<u64>().ok()
                     });
                 
                     let m2 = s.texte
@@ -2678,7 +2678,7 @@ pub fn analysiere_bv(
                     .and_then(|t| {
                         position_in_pdf.expand(&t);
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
-                        numeric_chars.parse::<usize>().ok()
+                        numeric_chars.parse::<u64>().ok()
                     });
                     
                     let groesse = FlurstueckGroesse::Hektar { ha, a, m2 };
@@ -2776,16 +2776,16 @@ pub fn analysiere_bv(
                     
                     let groesse = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                         let ha = get_erster_text_bei_ca(&s.texte.get(6).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<u64>().ok() });
                         let a = get_erster_text_bei_ca(&s.texte.get(7).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<u64>().ok() });
                         let m2 = get_erster_text_bei_ca(&s.texte.get(8).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<u64>().ok() });
                         
                         FlurstueckGroesse::Hektar { ha, a, m2 }
                     } else {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<u64>().ok() });
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
@@ -2878,7 +2878,7 @@ pub fn analysiere_bv(
                     .and_then(|t| {
                         position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
-                        numeric_chars.parse::<usize>().ok()
+                        numeric_chars.parse::<u64>().ok()
                     });
                     
                     let groesse = FlurstueckGroesse::Metrisch { m2 };
@@ -2949,7 +2949,7 @@ pub fn analysiere_bv(
                     
                     let groesse = {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<usize>().ok() });
+                        .and_then(|t| { position_in_pdf.expand(&t); t.text.parse::<u64>().ok() });
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
@@ -3027,7 +3027,7 @@ pub fn analysiere_bv(
                     .and_then(|t| {
                         position_in_pdf.expand(&t); 
                         let numeric_chars = String::from_iter(t.text.chars().filter(|c| c.is_numeric()));                            
-                        numeric_chars.parse::<usize>().ok()
+                        numeric_chars.parse::<u64>().ok()
                     });
                     
                     let groesse = FlurstueckGroesse::Metrisch { m2 };
@@ -3096,7 +3096,7 @@ pub fn analysiere_bv(
                     
                     let groesse = {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .and_then(|t| t.text.parse::<usize>().ok());
+                        .and_then(|t| t.text.parse::<u64>().ok());
                         FlurstueckGroesse::Metrisch { m2 }
                     };
                     
