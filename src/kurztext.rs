@@ -16,7 +16,7 @@ pub struct KurzTextAbt2 {
     pub eingetragen_am: Option<String>,
 }
 
-pub fn text_kuerzen_abt2(input: &str, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt2 {
+pub fn text_kuerzen_abt2(recht_id: &str, input: &str, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt2 {
     
     let (text_sauber, saetze_clean) = match text_saubern(input, konfiguration) {
         Ok(o) => o,
@@ -29,6 +29,7 @@ pub fn text_kuerzen_abt2(input: &str, fehler: &mut Vec<String>, konfiguration: &
     let rechtsinhaber = match Python::with_gil(|py| {
         crate::python_exec_kurztext_string(
             py,
+            recht_id,
             &text_sauber, 
             &saetze_clean, 
             &konfiguration.rechtsinhaber_auslesen_abt2_script, 
@@ -45,6 +46,7 @@ pub fn text_kuerzen_abt2(input: &str, fehler: &mut Vec<String>, konfiguration: &
     let rechteart = match Python::with_gil(|py| {
         let rechteart: Result<RechteArtPyWrapper, String> = crate::python_exec_kurztext(
             py,
+            recht_id,
             &text_sauber, 
             &saetze_clean, 
             &konfiguration.klassifiziere_rechteart, 
@@ -62,6 +64,7 @@ pub fn text_kuerzen_abt2(input: &str, fehler: &mut Vec<String>, konfiguration: &
     let rangvermerk = match Python::with_gil(|py| {
         crate::python_exec_kurztext_string(
             py,
+            recht_id,
             &text_sauber, 
             &saetze_clean, 
             &konfiguration.rangvermerk_auslesen_abt2_script, 
@@ -84,6 +87,7 @@ pub fn text_kuerzen_abt2(input: &str, fehler: &mut Vec<String>, konfiguration: &
     let gekuerzt = match Python::with_gil(|py| {
         crate::python_exec_kuerze_text_abt2(
             py,
+            recht_id,
             &text_sauber,
             rechtsinhaber.clone(),
             rangvermerk.clone(),
@@ -130,7 +134,13 @@ pub struct KurzTextAbt3 {
     pub eingetragen_am: Option<String>,
 }
 
-pub fn text_kuerzen_abt3(betrag: &str, input: &str, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt3 {
+pub fn text_kuerzen_abt3(
+    recht_id: &str, 
+    betrag: &str, 
+    input: &str, 
+    fehler: &mut Vec<String>, 
+    konfiguration: &Konfiguration
+) -> KurzTextAbt3 {
 
     let (text_sauber, saetze_clean) = match text_saubern(input, konfiguration) {
         Ok(o) => o,
@@ -143,6 +153,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, fehler: &mut Vec<String>, ko
     let rechtsinhaber = match Python::with_gil(|py| {
         crate::python_exec_kurztext_string(
             py,
+            recht_id,
             &text_sauber, 
             &saetze_clean, 
             &konfiguration.rechtsinhaber_auslesen_abt3_script, 
@@ -159,6 +170,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, fehler: &mut Vec<String>, ko
     let schuldenart = match Python::with_gil(|py| {
         let schuldenart: Result<SchuldenArtPyWrapper, String> = crate::python_exec_kurztext(
             py,
+            recht_id,
             &text_sauber, 
             &saetze_clean, 
             &konfiguration.klassifiziere_schuldenart, 
@@ -176,6 +188,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, fehler: &mut Vec<String>, ko
     let betrag = match Python::with_gil(|py| {
         let betrag: Result<PyBetrag, String> = crate::python_exec_kurztext(
             py,
+            recht_id,
             betrag, 
             &[betrag.to_string()], 
             &konfiguration.betrag_auslesen_script, 
@@ -193,6 +206,7 @@ pub fn text_kuerzen_abt3(betrag: &str, input: &str, fehler: &mut Vec<String>, ko
     let gekuerzt = match Python::with_gil(|py| {
         crate::python_exec_kuerze_text_abt3(
             py,
+            recht_id,
             &text_sauber,
             betrag.map(|b| format!("{} {}", formatiere_betrag(&b), b.waehrung.to_string())),
             schuldenart.map(|s| format!("{}", s.to_string())),

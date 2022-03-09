@@ -1501,7 +1501,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<String, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext_string(py, &text_sauber, &saetze_clean, &data.konfiguration.rangvermerk_auslesen_abt2_script, &data.konfiguration)
+                python_exec_kurztext_string(
+                    py, "RangvermerkAuslesenAbt2ScriptTest", 
+                    &text_sauber, &saetze_clean, 
+                    &data.konfiguration.rangvermerk_auslesen_abt2_script, 
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result: String = match result {
@@ -1514,7 +1519,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<String, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext_string(py, &text_sauber, &saetze_clean, &data.konfiguration.rechtsinhaber_auslesen_abt2_script, &data.konfiguration)
+                python_exec_kurztext_string(
+                    py, "RechtsinhaberAuslesenAbt2ScriptTest", 
+                    &text_sauber, &saetze_clean, 
+                    &data.konfiguration.rechtsinhaber_auslesen_abt2_script, 
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result: String = match result {
@@ -1527,7 +1537,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<String, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext_string(py, &text_sauber, &saetze_clean,  &data.konfiguration.rechtsinhaber_auslesen_abt3_script, &data.konfiguration)
+                python_exec_kurztext_string(py, 
+                    "RechtsinhaberAuslesenAbt3ScriptTest", 
+                    &text_sauber, &saetze_clean,  
+                    &data.konfiguration.rechtsinhaber_auslesen_abt3_script, 
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
@@ -1540,7 +1555,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<PyBetrag, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext(py, &text_sauber, &saetze_clean, &data.konfiguration.betrag_auslesen_script, &data.konfiguration)
+                python_exec_kurztext(py, 
+                    "BetragAuslesenScriptTest", 
+                    &text_sauber, &saetze_clean, &data.konfiguration.betrag_auslesen_script, 
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
@@ -1556,6 +1575,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
                 let rechteart: Result<RechteArtPyWrapper, String> = crate::python_exec_kurztext(
                     py,
+                    "KurzTextAbt2ScriptTest",
                     &text_sauber, 
                     &saetze_clean, 
                     &data.konfiguration.klassifiziere_schuldenart, 
@@ -1563,7 +1583,13 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 );
                 let rechteart = rechteart?.inner;
                 
-                python_exec_kurztext_string(py, &text_sauber, &saetze_clean, &data.konfiguration.text_kuerzen_abt2_script, &data.konfiguration)
+                python_exec_kurztext_string(
+                    py, "KurzTextAbt2ScriptTest",
+                    &text_sauber, 
+                    &saetze_clean, 
+                    &data.konfiguration.text_kuerzen_abt2_script, 
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
@@ -1580,6 +1606,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 let schuldenart: Result<SchuldenArtPyWrapper, String> = crate::python_exec_kurztext(
                     py,
+                    "KurzTextAbt3ScriptTest",
                     &text_sauber, 
                     &saetze_clean, 
                     &data.konfiguration.klassifiziere_schuldenart, 
@@ -1589,6 +1616,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 let betrag: Result<PyBetrag, String> = crate::python_exec_kurztext(
                     py,
+                    "KurzTextAbt3ScriptTest",
                     &format!("100.000,00 EUR"), 
                     &[format!("100.000,00 EUR")], 
                     &data.konfiguration.betrag_auslesen_script, 
@@ -1598,6 +1626,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 let rechtsinhaber: Result<String, String> = crate::python_exec_kurztext_string(
                     py,
+                    "KurzTextAbt3ScriptTest",
                     &text_sauber, 
                     &saetze_clean, 
                     &data.konfiguration.betrag_auslesen_script, 
@@ -1607,6 +1636,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
                 python_exec_kuerze_text_abt3(
                     py,
+                    "KurzTextAbt3ScriptTest",
                     &text_sauber,
                     Some(format!("{} {}", crate::kurztext::formatiere_betrag(&betrag), betrag.waehrung.to_string())),
                     Some(format!("{}", schuldenart.to_string())),
@@ -1628,7 +1658,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<RechteArtPyWrapper, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext(py, &text_sauber, &saetze_clean, &data.konfiguration.klassifiziere_rechteart, &data.konfiguration)
+                python_exec_kurztext(py, "RechteArtScriptTest", &text_sauber, &saetze_clean, &data.konfiguration.klassifiziere_rechteart, &data.konfiguration)
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
@@ -1642,7 +1672,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let start = std::time::Instant::now();
             let result: Result<SchuldenArtPyWrapper, String> = Python::with_gil(|py| {
                 let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext(py, &text_sauber, &saetze_clean, &data.konfiguration.klassifiziere_schuldenart, &data.konfiguration)
+                python_exec_kurztext(py, "SchuldenArtScriptTest", &text_sauber, &saetze_clean, &data.konfiguration.klassifiziere_schuldenart, &data.konfiguration)
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
@@ -2967,6 +2997,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
 
 pub fn python_exec_kuerze_text_abt3<'py>(
     py: Python<'py>,
+    recht_id: &str,
     text_sauber: &str, 
     betrag: Option<String>,
     schuldenart: Option<String>,
@@ -2989,7 +3020,7 @@ pub fn python_exec_kuerze_text_abt3<'py>(
         
     let script = script.replace("\t", "    ");
     let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, betrag, schuldenart, rechtsinhaber, re = args\r\n{}", script);
+    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, betrag, schuldenart, rechtsinhaber, re, recht_id = args\r\n{}", script);
     let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
@@ -3017,7 +3048,8 @@ pub fn python_exec_kuerze_text_abt3<'py>(
         betrag.unwrap_or_default().to_object(py), 
         schuldenart.unwrap_or_default().to_object(py), 
         rechteinhaber.unwrap_or_default().to_object(py), 
-        regex_list.to_object(py)
+        regex_list.to_object(py),
+        recht_id.to_string().to_object(py),
     ]);
     let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
     let extract = result.as_ref(py).extract::<String>().map_err(|e| format!("{}", e))?;
@@ -3028,6 +3060,7 @@ pub fn python_exec_kuerze_text_abt3<'py>(
 
 pub fn python_exec_kuerze_text_abt2<'py>(
     py: Python<'py>,
+    recht_id: &str,
     text_sauber: &str, 
     rechteinhaber: Option<String>,
     rangvermerk: Option<String>,
@@ -3049,7 +3082,7 @@ pub fn python_exec_kuerze_text_abt2<'py>(
         
     let script = script.replace("\t", "    ");
     let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, rechtsinhaber, rangvermerk, re = args\r\n{}", script);
+    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, rechtsinhaber, rangvermerk, re, recht_id = args\r\n{}", script);
     let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
@@ -3076,7 +3109,8 @@ pub fn python_exec_kuerze_text_abt2<'py>(
         saetze.to_object(py), 
         rechteinhaber.unwrap_or_default().to_object(py), 
         rangvermerk.unwrap_or_default().to_object(py), 
-        regex_list.to_object(py)
+        regex_list.to_object(py),
+        recht_id.to_string().to_object(py),
     ]);
     let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
     let extract = result.as_ref(py).extract::<String>().map_err(|e| format!("{}", e))?;
@@ -3085,14 +3119,16 @@ pub fn python_exec_kuerze_text_abt2<'py>(
 }
 
 pub fn python_exec_kurztext_string<'py>(
-     py: Python<'py>,
-    text_sauber: &str, 
+    py: Python<'py>,
+    recht_id: &str,
+    text_sauber: &str,
     saetze_clean: &[String],
     py_code_lines: &[String], 
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
     python_exec_kurztext_inner(
         py,
+        recht_id,
         text_sauber,
         saetze_clean,
         py_code_lines,
@@ -3103,6 +3139,7 @@ pub fn python_exec_kurztext_string<'py>(
 
 pub fn python_exec_kurztext<'py, T: PyClass + Clone>(
     py: Python<'py>,
+    recht_id: &str,
     text_sauber: &str, 
     saetze_clean: &[String],
     py_code_lines: &[String], 
@@ -3110,6 +3147,7 @@ pub fn python_exec_kurztext<'py, T: PyClass + Clone>(
 ) -> Result<T, String> {
     python_exec_kurztext_inner(
         py,
+        recht_id,
         text_sauber,
         saetze_clean,
         py_code_lines,
@@ -3120,6 +3158,7 @@ pub fn python_exec_kurztext<'py, T: PyClass + Clone>(
 
 fn python_exec_kurztext_inner<'py, T>(
     py: Python<'py>,
+    recht_id: &str,
     text_sauber: &str, 
     saetze_clean: &[String],
     py_code_lines: &[String], 
@@ -3140,7 +3179,7 @@ fn python_exec_kurztext_inner<'py, T>(
         
     let script = script.replace("\t", "    ");
     let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, re = args\r\n{}", script);
+    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, re, recht_id = args\r\n{}", script);
     let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
     
     let saetze = PyList::new(py, saetze_clean.into_iter());
@@ -3162,7 +3201,7 @@ fn python_exec_kurztext_inner<'py, T>(
         }
         dict
     };
-    let tuple = PyTuple::new(py, &[saetze.to_object(py), regex_list.to_object(py)]);
+    let tuple = PyTuple::new(py, &[saetze.to_object(py), regex_list.to_object(py), recht_id.to_string().to_object(py)]);
     let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
     let extract = (extract)(result.as_ref(py))?;
     Ok(extract)

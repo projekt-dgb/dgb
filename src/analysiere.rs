@@ -200,7 +200,12 @@ pub fn analysiere_grundbuch<'py>(
             }
         }
         
-        let kt = kurztext::text_kuerzen_abt2(&eintrag.text, &mut fehler, konfiguration);
+        let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+        let blatt = grundbuch.titelblatt.blatt.clone();
+        let lfd_nr = eintrag.lfd_nr;
+        let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
+        
+        let kt = kurztext::text_kuerzen_abt2(&recht_id, &eintrag.text, &mut fehler, konfiguration);
         
         let belastete_flurstuecke = match Python::with_gil(|py| {
             get_belastete_flurstuecke(
@@ -328,7 +333,12 @@ pub fn analysiere_grundbuch<'py>(
             }
         }
 
-        let kt = kurztext::text_kuerzen_abt3(&eintrag.betrag, &eintrag.text, &mut fehler, konfiguration);
+        let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+        let blatt = grundbuch.titelblatt.blatt.clone();
+        let lfd_nr = eintrag.lfd_nr;
+        let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
+        
+        let kt = kurztext::text_kuerzen_abt3(&recht_id, &eintrag.betrag, &eintrag.text, &mut fehler, konfiguration);
 
         let belastete_flurstuecke = match Python::with_gil(|py| {
             get_belastete_flurstuecke(
