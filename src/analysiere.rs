@@ -214,6 +214,7 @@ pub fn analysiere_grundbuch<'py>(
                 &kt.text_sauber, 
                 &grundbuch,
                 konfiguration,
+                &mut warnungen,
                 &mut fehler
             ) 
         }) {
@@ -235,9 +236,7 @@ pub fn analysiere_grundbuch<'py>(
         let rechtsinhaber = match kt.rechtsinhaber.clone() {
             Some(s) => s,
             None => match rechteart.clone() {
-                | RechteArt::VerausserungsBelastungsverbot
-                | RechteArt::Auflassungsvormerkung
-                => String::new(),
+                r if !r.benoetigt_rechteinhaber() => String::new(),
                 RechteArt::SpeziellVormerkung { rechteverweis } => {
                     if let Some(recht) = abt2_analysiert.iter().find(|r| r.lfd_nr == rechteverweis).cloned() {
                         rechteart = recht.rechteart.clone();
@@ -260,7 +259,9 @@ pub fn analysiere_grundbuch<'py>(
         let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
             Some(s) => s.clone(),
             None => {
-                warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
+                if rechteart.benoetigt_rechteinhaber() {
+                    warnungen.push(format!("Konnte keine Ordnungsnummer finden"));                
+                }
                 Nebenbeteiligter {
                     typ: None,
                     ordnungsnummer: None,
@@ -347,6 +348,7 @@ pub fn analysiere_grundbuch<'py>(
                 &kt.text_sauber, 
                 &grundbuch,
                 konfiguration,
+                &mut warnungen,
                 &mut fehler
             ) 
         }) {
@@ -413,6 +415,7 @@ fn get_belastete_flurstuecke<'py>(
 	text_sauber: &str, 
 	grundbuch: &Grundbuch,
 	konfiguration: &Konfiguration,
+	warnungen: &mut Vec<String>,
 	fehler: &mut Vec<String>,
 ) -> Result<Vec<BvEintrag>, String> {
 
@@ -609,8 +612,106 @@ fn get_belastete_flurstuecke<'py>(
         log.push(format!("<p>{}</p>", regex_matches.join(", ")));
         fehler.push(format!("<div style='flex-direction:row;max-width:600px;'>{}</div>", log.join("\r\n")));
     }
-        
+    
+    let belastet_bv = flurstuecke_fortfuehren(&belastet_bv, &grundbuch, warnungen, fehler);
+    let belastet_bv = belastet_bv
+        .into_iter()
+        .filter(|bv| !bv.ist_geroetet())
+        .collect::<Vec<BvEintrag>>();
+    
+    // deduplicate
+    let mut belastet_bv_map = BTreeMap::<String, BvEintrag>::new();
+    for bv in belastet_bv {
+        belastet_bv_map.insert(format!("{}", bv), bv);
+    }
+    
+    let belastet_bv = belastet_bv_map
+        .into_iter()
+        .map(|(k, v)| v)
+        .collect::<Vec<_>>();
+    
     Ok(belastet_bv)
+}
+
+// Flurstücke automatisch so weit wie möglich automatisch fortführen
+fn flurstuecke_fortfuehren(
+    bv_eintraege: &[BvEintrag], 
+    grundbuch: &Grundbuch,
+    warnungen: &mut Vec<String>,
+    fehler: &mut Vec<String>,
+) -> Vec<BvEintrag> {
+
+    let mut bv_belastet = bv_eintraege.to_vec();
+    let mut alle_fortgefuehrt = false;
+    while !alle_fortgefuehrt {
+        
+        alle_fortgefuehrt = true;
+
+        let mut bv_zerlegt_belastet = Vec::new();
+        
+        for (bv_idx, bv) in bv_belastet.clone().iter().enumerate() {
+            
+            let mut fortgeführt_als = grundbuch.bestandsverzeichnis.eintraege
+                .iter()
+                .filter(|b| {
+                    !b.ist_geroetet() &&
+                    b.get_gemarkung().unwrap_or(grundbuch.titelblatt.grundbuch_von.clone()) == bv.get_gemarkung().unwrap_or(grundbuch.titelblatt.grundbuch_von.clone()) &&
+                    b.get_flur() == bv.get_flur() && 
+                    b.get_flurstueck() == bv.get_flurstueck() &&
+                    b.get_lfd_nr() > bv.get_lfd_nr()
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            
+            fortgeführt_als.sort_by(|a, b| a.get_lfd_nr().cmp(&b.get_lfd_nr()));
+            fortgeführt_als.dedup();
+            
+            if fortgeführt_als.is_empty() {
+                continue;
+            }
+            
+            // BV-Änderungen benutzen:
+            
+            // "Flurstück X ist zerlegt in die Flurstücke Y und Z"
+            // => bv_zerlegt_belastet.insert();
+            
+            // "Nummer X als Y eingetragen"
+            
+            // "Aus lfd. Nr. X ein Flurstück verselbstständigt und als lfd. Nr. Y eingetragen"
+            // gucken, ob irgendein Fl. / Flst. doppelt eingetragen ist unter einer höheren lfd. Nr.
+            // wenn ja, höhere Nr. nehmen
+            
+            // Versuche, automatisch nach Flur / Flurstücksnummern zu matchen
+            // let mut nicht_fortgeführt = Vec::new();
+                
+            if fortgeführt_als.len() == 1 {
+                warnungen.push(format!("Flur {} Flst. {} wird automatisch fortgeführt von BV-Nr. {} auf BV-Nr. {}", 
+                    fortgeführt_als[0].get_flur(),
+                    fortgeführt_als[0].get_flurstueck(),
+                    bv.get_lfd_nr(),
+                    fortgeführt_als[0].get_lfd_nr(),
+                ));
+                alle_fortgefuehrt = false; // nochmal prüfen
+                bv_belastet[bv_idx] = fortgeführt_als[0].clone(); // Fortführung ausführen
+            } else if fortgeführt_als.len() == 2 {
+                // TODO: Zerlegung?
+                // if bv_analyse.contains(geteilt == )
+                fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}", 
+                    bv.get_lfd_nr(),
+                    fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
+                ));
+            } else {
+                fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}", 
+                    bv.get_lfd_nr(),
+                    fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
+                ));
+            }
+        }
+        
+        bv_belastet.append(&mut bv_zerlegt_belastet);
+    }
+    
+    bv_belastet
 }
 
 fn get_belastete_flurstuecke_python<'py>(

@@ -1859,7 +1859,7 @@ let rpc = {
   undo:  function() { rpc.invoke({ cmd : 'undo' }); },
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
-  export_rangvermerke: function() { rpc.invoke({ cmd : 'export_rangvermerke' }); },
+  export_pdf: function() { rpc.invoke({ cmd : 'export_pdf' }); },
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
 
@@ -1941,7 +1941,7 @@ let tab_functions = {
     import_nb: function(event) { rpc.import_nb() },
     delete_nb: function(event) { rpc.delete_nb() },
     export_lefis: function(event) { rpc.export_lefis() },
-    export_rangvermerke: function(event) { rpc.export_rangvermerke() },
+    export_pdf: function(event) { rpc.export_pdf() },
     export_alle_rechte: function(event) { rpc.export_alle_rechte() },
     export_alle_fehler: function(event) { rpc.export_alle_fehler() },
 

@@ -35,8 +35,6 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
         rpc_data.configuration_active ||
         rpc_data.info_active ||
         rpc_data.context_menu_active.is_some();
-    
-            
         
     if !should_render_popover {
         return normalize_for_js(format!("<div id='__application_popover' style='
@@ -661,7 +659,8 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_EXPORT_LEFIS: &[u8] = include_bytes!("./img/icons8-export-96.png");
     static ICON_DOWNLOAD: &[u8] = include_bytes!("./img/icons8-desktop-download-48.png");
     static ICON_DELETE: &[u8] = include_bytes!("./img/icons8-delete-trash-48.png");
-
+    static ICON_PDF: &[u8] = include_bytes!("./img/icons8-pdf-48.png");
+    
     let ribbon_body = format!("
         <div class='__application-ribbon-body'>
             <div class='__application-ribbon-section 1'>
@@ -763,13 +762,13 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     
                     
                     <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_rangvermerke(event)' class='__application-ribbon-action-vertical-large'>
+                        <label onmouseup='tab_functions.export_pdf(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
                             </div>
                             <div>
-                                <p>Rangvermerke</p>
-                                <p>in CSV</p>
+                                <p>Export</p>
+                                <p>als PDF</p>
                             </div>
                         </label>
                     </div>   
@@ -843,6 +842,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         icon_info_base64 = base64::encode(ICON_INFO),
         icon_download_base64 = base64::encode(ICON_DOWNLOAD),
         icon_delete_base64 = base64::encode(ICON_DELETE),
+        icon_export_pdf = base64::encode(ICON_PDF),
 
         icon_export_csv = base64::encode(ICON_EXPORT_CSV),
         icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS),

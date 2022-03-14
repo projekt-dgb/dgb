@@ -32,6 +32,7 @@ pub mod ui;
 pub mod digitalisiere;
 pub mod analysiere;
 pub mod kurztext;
+pub mod pdf;
 
 #[derive(Debug, Clone)]
 pub struct RpcData {
@@ -334,8 +335,8 @@ pub enum Cmd {
     ExportAlleRechte,
     #[serde(rename = "export_alle_fehler")]
     ExportAlleFehler,    
-    #[serde(rename = "export_rangvermerke")]
-    ExportRangvermerke,
+    #[serde(rename = "export_pdf")]
+    ExportPdf,
     #[serde(rename = "open_configuration")]
     OpenConfiguration,
     #[serde(rename = "open_info")]
@@ -2041,9 +2042,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             column_id,
             x, y,
         } => {
-            
-            println!("resize column: {:?} {:?} {:?}", direction, x, y);
-            
+                        
             if data.loaded_files.is_empty() {
                 return;
             }
@@ -2251,31 +2250,41 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let _ = std::fs::write(&f, tsv.as_bytes());
             
         },
-        Cmd::ExportRangvermerke => {
+        Cmd::ExportPdf => {
             
             if data.loaded_files.is_empty() {
                 return;
             }
             
-            let tsv = get_rangvermerke_tsv(&data);
-
+            let (file_id, page) = match data.open_page.clone() {
+                Some((file, page)) => (file.clone(), page as usize),
+                None => return,
+            };
+            
+            let open_file = match data.loaded_files.get_mut(&file_id) { 
+                Some(s) => s,
+                None => return,
+            };
+            
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
-                "Rangvermerke .TSV speichern unter", 
+                "PDF speichern unter", 
                 "~/", 
             );
             
             let f = match file_dialog_result {
                 Some(f) => {
-                    if f.ends_with(".tsv") {
+                    if f.ends_with(".pdf") {
                         f
                     } else {
-                        format!("{}.tsv", f)
+                        format!("{}.pdf", f)
                     }
                 },
                 None => return,
             };
             
-            let _ = std::fs::write(&f, tsv.as_bytes());
+            let pdf = pdf::generate_grundbuch_pdf(&open_file.analysiert);
+            
+            let _ = std::fs::write(&f, &pdf);
         },
         Cmd::ExportAlleRechte => {
         
@@ -2659,7 +2668,9 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
     }
 
     let mut nb_keyed = BTreeMap::new();
+    let mut rechte = BTreeMap::new();
     for n in nb {
+        rechte.entry(n.name.clone()).or_insert_with(|| Vec::new()).push(n.recht.clone());
         nb_keyed.insert(n.name.clone(), n);
     }
     
@@ -2674,7 +2685,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
         .map(|nb| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
             nb.ordnungsnummer.map(|s| s.to_string()).unwrap_or_default(), 
             nb.typ.map(|s| s.get_str()).unwrap_or_default(), 
-            nb.recht,
+            rechte.get(&nb.name).cloned().unwrap_or_default().join("; "),
             nb.name,
             nb.extra.anrede.map(|s| s.to_string()).unwrap_or_default(),
             nb.extra.titel.clone().unwrap_or_default(),
@@ -2961,9 +2972,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             max_sz, 
             &pdf.pdftotext_layout,
         );
-        
-        println!("pdf neu analysiert! - ende seite {}", sz);
-                
+                        
         let json = match serde_json::to_string_pretty(&pdf) { 
             Ok(o) => o, 
             Err(_) => continue, 

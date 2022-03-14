@@ -791,3 +791,13 @@ pub enum RechteArt {
     Zwangsversteigerungsvermerk,                                          //     Zwangsversteigerungsvermerk
     Zwangsverwaltungsvermerk,                                             //     Zwangsverwaltungsvermerk
 }
+
+impl RechteArt {
+    pub fn benoetigt_rechteinhaber(&self) -> bool {
+        match self {
+            | RechteArt::VerausserungsBelastungsverbot
+            | RechteArt::Auflassungsvormerkung => false,
+            _ => true,
+        }
+    }
+}

@@ -2255,6 +2255,19 @@ pub enum BvEintrag {
     Recht(BvEintragRecht),
 }
 
+impl fmt::Display for BvEintrag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BvEintrag::Flurstueck(BvEintragFlurstueck { lfd_nr, bisherige_lfd_nr, gemarkung, flur, flurstueck, .. }) => {
+                write!(f, "{lfd_nr}: Gemarkung {gemarkung:?} Flur {flur} Flurstück {flurstueck} (bisher lfd. Nr. {bisherige_lfd_nr:?})")
+            },
+            BvEintrag::Recht(BvEintragRecht { lfd_nr, zu_nr, bisherige_lfd_nr, .. }) => {
+                write!(f, "Grundstücksgleiches Recht {lfd_nr} (zu Nr. {zu_nr}, bisher {bisherige_lfd_nr:?})")
+            },
+        }
+    }
+}
+
 // Eintrag für ein grundstücksgleiches Recht
 #[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct BvEintragRecht {
@@ -2379,6 +2392,20 @@ impl BvEintrag {
             BvEintrag::Recht(recht) => {
                 recht.manuell_geroetet.unwrap_or(recht.automatisch_geroetet.unwrap_or(false))
             }
+        }
+    }
+    
+    pub fn get_bezeichnung(&self) -> Option<String> {
+        match self {
+            BvEintrag::Flurstueck(flst) => flst.bezeichnung.clone(),
+            BvEintrag::Recht(recht) => None,
+        }
+    }
+    
+    pub fn get_groesse(&self) -> Option<FlurstueckGroesse> {
+        match self {
+            BvEintrag::Flurstueck(flst) => Some(flst.groesse.clone()),
+            BvEintrag::Recht(recht) => None,
         }
     }
     
@@ -2509,6 +2536,13 @@ impl FlurstueckGroesse {
         match self {
             FlurstueckGroesse::Metrisch { m2 } => m2.is_none(),
             FlurstueckGroesse::Hektar { ha, a, m2 } => m2.is_none() && ha.is_none() && a.is_none(),
+        }
+    }
+    
+    pub fn get_m2(&self) -> u64 {
+        match self {
+            FlurstueckGroesse::Metrisch { m2 } => m2.unwrap_or(0),
+            FlurstueckGroesse::Hektar { ha, a, m2 } => ha.unwrap_or(0) * 100_000 + a.unwrap_or(0) * 100 + m2.unwrap_or(0),
         }
     }
 }
