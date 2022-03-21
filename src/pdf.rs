@@ -1,11 +1,8 @@
 use printpdf::*;
 use std::fs::File;
 use std::io::Cursor;
-use crate::{Grundbuch, Abt2Eintrag};
+use crate::{Grundbuch, Abt2Eintrag, Abt3Eintrag};
 use crate::digitalisiere::BvEintrag;
-use qrcode::{QrCode, EcLevel};
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use std::io;
 use std::io::prelude::*;
 use std::collections::{BTreeSet, BTreeMap};
@@ -16,7 +13,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     let blatt =  grundbuch.titelblatt.blatt;
     
     let titel = format!("{grundbuch_von} Blatt {blatt} (Amtsgericht {})", grundbuch.titelblatt.amtsgericht);
-    let (doc, page1, layer1) = PdfDocument::new(&titel, Mm(297.0), Mm(210.0), "Titelblatt");
+    let (doc, page1, layer1) = PdfDocument::new(&titel, Mm(210.0), Mm(297.0), "Titelblatt");
 
     let gb = format!("Grundbuch von {grundbuch_von}");
     let blatt_nr = format!("Blatt {blatt}");
@@ -25,12 +22,13 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     let times_bold = doc.add_builtin_font(BuiltinFont::TimesBoldItalic).unwrap();
     let times = doc.add_builtin_font(BuiltinFont::TimesItalic).unwrap();
     let courier_bold = doc.add_builtin_font(BuiltinFont::CourierBold).unwrap();
-
+    let helvetica = doc.add_builtin_font(BuiltinFont::HelveticaBold).unwrap();
+    
     // text, font size, x from left edge, y from bottom edge, font
     let current_layer = doc.get_page(page1).get_layer(layer1);
-    let start = Mm(105.0);
+    let start = Mm(297.0 / 2.0);
     let rand_x = Mm(25.0);
-    current_layer.use_text(&gb, 22.0, Mm(24.0), start, &times_bold);
+    current_layer.use_text(&gb, 22.0, Mm(25.0), start, &times_bold);
     
     current_layer.add_shape(Line {
         points: vec![
@@ -43,54 +41,28 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         is_clipping_path: false,
     });
         
-    current_layer.use_text(&blatt_nr, 16.0, Mm(24.0), start - Mm(12.0), &times);
-    current_layer.use_text(&amtsgericht, 16.0, Mm(24.0), start - Mm(18.0), &times);
+    current_layer.use_text(&blatt_nr, 16.0, Mm(25.0), start - Mm(12.0), &times);
+    current_layer.use_text(&amtsgericht, 16.0, Mm(25.0), start - Mm(18.0), &times);
     
     // Leere Seite 2
-    let (_, _) = doc.add_page(Mm(297.0), Mm(210.0), "Formular");
+    let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
 
     // Bestandsverzeichnis
-    for bv in grundbuch.bestandsverzeichnis.eintraege.chunks(29) {
+    for bv in grundbuch.bestandsverzeichnis.eintraege.chunks(59) {
     
         use printpdf::SvgTransform;
         
         // Bestandsverzeichnis Einträge
-        let (current_page, formular_layer) = doc.add_page(Mm(297.0), Mm(210.0), "Formular");
+        let (current_page, formular_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
         let text_layer = doc.get_page(current_page).add_layer("Text");
         let rot_layer = doc.get_page(current_page).add_layer("Roetungen");
 
-        let csv = bv.iter().map(|b| {
-            let lfd_nr = format!("{}", b.get_lfd_nr());
-            let bisherige_lfd_nr = match b.get_bisherige_lfd_nr() {
-                Some(s) => format!("{}", s),
-                None => String::new(),
-            };
-            let rot = if b.ist_geroetet() { "R" } else { "" };
-            let flur = format!("{}", b.get_flur());
-            let flurstueck = format!("{}", b.get_flurstueck());
-            let gemarkung = b.get_gemarkung().clone().unwrap_or_default();
-            let gemarkung = if gemarkung == grundbuch_von { String::new() } else { gemarkung };
-            let groesse = b.get_groesse().map(|g| format!("{}", g.get_m2())).unwrap_or_default();
-            format!("{rot}\t{lfd_nr}\t{bisherige_lfd_nr}\t{flur}\t{flurstueck}\t{gemarkung}\t{groesse}")
-        }).collect::<Vec<_>>()
-        .join("\n");
-        
-        let images = string_to_qr_codes(&csv);
-        for (i, img) in images.into_iter().rev().enumerate() {
-            img.add_to_layer(doc.get_page(current_page).get_layer(formular_layer), ImageTransform {
-                translate_x: Some(Mm(297.0 - 28.0 - (i as f64 * 25.0))),
-                translate_y: Some(Mm(210.0 - 22.0)),
-                dpi: Some(105.0),
-                .. Default::default()
-            });
-        }
-
         let lfd_nr_spalte = Line {
             points: vec![
-                (Point::new(Mm(10.0), Mm(210.0 - 24.0)), false),
+                (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
                 (Point::new(Mm(10.0), Mm(10.0)), false),
                 (Point::new(Mm(25.0), Mm(10.0)), false),
-                (Point::new(Mm(25.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -100,10 +72,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let bisherige_lfd_nr_spalte = Line {
             points: vec![
-                (Point::new(Mm(25.0), Mm(210.0 - 24.0)), false),
+                (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
                 (Point::new(Mm(25.0), Mm(10.0)), false),
                 (Point::new(Mm(40.0), Mm(10.0)), false),
-                (Point::new(Mm(40.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -113,10 +85,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let gemarkung_spalte = Line {
             points: vec![
-                (Point::new(Mm(40.0), Mm(210.0 - 24.0)), false),
+                (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
                 (Point::new(Mm(40.0), Mm(10.0)), false),
-                (Point::new(Mm(90.0), Mm(10.0)), false),
-                (Point::new(Mm(90.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(80.0), Mm(10.0)), false),
+                (Point::new(Mm(80.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -126,10 +98,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let flur_spalte = Line {
             points: vec![
-                (Point::new(Mm(90.0), Mm(210.0 - 24.0)), false),
-                (Point::new(Mm(90.0), Mm(10.0)), false),
-                (Point::new(Mm(105.0), Mm(10.0)), false),
-                (Point::new(Mm(105.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(80.0), Mm(297.0 - 36.0)), false),
+                (Point::new(Mm(80.0), Mm(10.0)), false),
+                (Point::new(Mm(95.0), Mm(10.0)), false),
+                (Point::new(Mm(95.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -139,10 +111,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let flurstueck_spalte = Line {
             points: vec![
-                (Point::new(Mm(105.0), Mm(210.0 - 24.0)), false),
-                (Point::new(Mm(105.0), Mm(10.0)), false),
-                (Point::new(Mm(125.0), Mm(10.0)), false),
-                (Point::new(Mm(125.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(95.0), Mm(297.0 - 36.0)), false),
+                (Point::new(Mm(95.0), Mm(10.0)), false),
+                (Point::new(Mm(115.0), Mm(10.0)), false),
+                (Point::new(Mm(115.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -152,10 +124,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let wirtschaftsart_lage_spalte = Line {
             points: vec![
-                (Point::new(Mm(125.0), Mm(210.0 - 24.0)), false),
-                (Point::new(Mm(125.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 45.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 45.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(115.0), Mm(297.0 - 36.0)), false),
+                (Point::new(Mm(115.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 45.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -165,10 +137,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let ha_spalte = Line {
             points: vec![
-                (Point::new(Mm(297.0 - 45.0), Mm(210.0 - 24.0)), false),
-                (Point::new(Mm(297.0 - 45.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 30.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 30.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 36.0)), false),
+                (Point::new(Mm(210.0 - 45.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 30.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 30.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -178,10 +150,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let a_spalte = Line {
             points: vec![
-                (Point::new(Mm(297.0 - 30.0), Mm(210.0 - 24.0)), false),
-                (Point::new(Mm(297.0 - 30.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 20.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 20.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(210.0 - 30.0), Mm(297.0 - 36.0)), false),
+                (Point::new(Mm(210.0 - 30.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 20.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 20.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -191,10 +163,10 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         
         let m2_spalte = Line {
             points: vec![
-                (Point::new(Mm(297.0 - 20.0), Mm(210.0 - 24.0)), false),
-                (Point::new(Mm(297.0 - 20.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 10.0), Mm(10.0)), false),
-                (Point::new(Mm(297.0 - 10.0), Mm(210.0 - 24.0)), false)
+                (Point::new(Mm(210.0 - 20.0), Mm(297.0 - 36.0)), false),
+                (Point::new(Mm(210.0 - 20.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 36.0)), false)
             ],
             is_closed: true,
             has_fill: false,
@@ -202,7 +174,30 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
             is_clipping_path: false,
         };
         
-        let text_1 = &["Laufende", "Nummer", "der", "Grund-", "stücke"];
+        let text_1 = &[
+            ("Laufende", 13.0_f64, 297.0_f64 - 21.0), 
+            ("Nummer", 13.5, 297.0 - 23.5),
+            ("der", 15.5, 297.0 - 26.0), 
+            ("Grund-", 14.0, 297.0 - 28.5), 
+            ("stücke", 14.0, 297.0 - 31.0),
+        ];
+        
+        let text_1_header = Line {
+            points: vec![
+                (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+            ],
+            is_closed: true,
+            has_fill: false,
+            has_stroke: true,
+            is_clipping_path: false,
+        };
+        
+        doc.get_page(current_page).get_layer(formular_layer)
+        .add_shape(text_1_header);
+        
         let text_2 = &["Bisherige", "laufende", "Nummer", "der Grund-", "stücke"];
         let text_3 = &["Gemarkung", "(nur bei Abweichung vom", "Grundbuchbezirk angeben)"];
         let text_4 = &["Karte"];
@@ -215,11 +210,16 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         let text_11 = &["m²"];
         let text_12 = &["Bezeichnung der Grundstücke und der mit dem Eigentum verbundene Rechte"];
 
-        doc.get_page(current_page).get_layer(formular_layer)
-        .use_text(&format!("Grundbuch von {grundbuch_von}  -  Blatt {blatt}"), 12.0, Mm(10.0), Mm(210.0 - 10.0), &times);        
+        for (t, x, y) in text_1.iter() {
+            doc.get_page(current_page).get_layer(formular_layer)
+            .use_text(*t, 6.0, Mm(*x), Mm(*y), &helvetica);        
+        }
         
         doc.get_page(current_page).get_layer(formular_layer)
-        .use_text("Bestandsverzeichnis", 16.0, Mm(10.0), Mm(210.0 - 16.0), &times_bold);
+        .use_text(&format!("Grundbuch von {grundbuch_von}  -  Blatt {blatt}"), 12.0, Mm(10.0), Mm(297.0 - 10.0), &times);        
+        
+        doc.get_page(current_page).get_layer(formular_layer)
+        .use_text("Bestandsverzeichnis", 16.0, Mm(10.0), Mm(297.0 - 16.0), &times_bold);
         
         doc.get_page(current_page).get_layer(formular_layer)
         .add_shape(lfd_nr_spalte);
@@ -248,7 +248,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         doc.get_page(current_page).get_layer(formular_layer)
         .add_shape(m2_spalte);
         
-        let mut start = Mm(210.0 - 29.0);
+        let mut start = Mm(297.0 - 41.0);
         for b in bv {
             if b.ist_geroetet() {
                 text_layer.set_fill_color(Color::Cmyk(Cmyk {
@@ -271,11 +271,11 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
                 BvEintrag::Flurstueck(flst) => {
                     
                     text_layer
-                    .use_text(&format!("{}", flst.lfd_nr), 12.0, Mm(12.0), start, &courier_bold);
+                    .use_text(&format!("{}", flst.lfd_nr), 10.0, Mm(12.0), start, &courier_bold);
                     
                     if let Some(bisherig) = flst.bisherige_lfd_nr.as_ref() {
                         text_layer
-                        .use_text(&format!("{}", bisherig), 12.0, Mm(27.0), start, &courier_bold);                
+                        .use_text(&format!("{}", bisherig), 10.0, Mm(27.0), start, &courier_bold);                
                     }
 
                     let gemarkung = b.get_gemarkung().clone().unwrap_or_default();
@@ -283,27 +283,49 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
             
                     if let Some(gemarkung) = flst.gemarkung.as_ref() {
                         if *gemarkung != grundbuch_von {
-                            text_layer.use_text(gemarkung, 12.0, Mm(42.0), start, &courier_bold);  
+                            text_layer.use_text(gemarkung, 10.0, Mm(42.0), start, &courier_bold);  
                         }
                     }
                     
                     text_layer
-                    .use_text(&format!("{}", flst.flur), 12.0, Mm(92.0), start, &courier_bold);
+                    .use_text(&format!("{}", flst.flur), 10.0, Mm(82.0), start, &courier_bold);
                     
                     text_layer
-                    .use_text(&format!("{}", flst.flurstueck), 12.0, Mm(107.0), start, &courier_bold);
+                    .use_text(&format!("{}", flst.flurstueck), 10.0, Mm(97.0), start, &courier_bold);
                     
                     let m2 = flst.groesse.get_m2();
 
+                    let mut m2_chars = format!("{}", m2).chars().collect::<Vec<_>>();
+                    
+                    let mut m2_string = Vec::new();
+                    if let Some(l) = m2_chars.pop() { m2_string.push(l); }
+                    if let Some(l) = m2_chars.pop() { m2_string.push(l); }
+                    m2_string.reverse();
+                    let m2_string: String = m2_string.into_iter().collect();
+                    
+                    let mut a_string = Vec::new();
+                    if let Some(l) = m2_chars.pop() { a_string.push(l); }
+                    if let Some(l) = m2_chars.pop() { a_string.push(l); }
+                    a_string.reverse();
+                    let a_string: String = a_string.into_iter().collect();
+
+                    let ha_string: String = m2_chars.into_iter().collect();
+
                     text_layer
-                    .use_text(&format!("{}", m2), 12.0, Mm(297.0 - 43.0), start, &courier_bold);
+                    .use_text(&ha_string, 10.0, Mm(210.0 - 43.0), start, &courier_bold);
+                    
+                    text_layer
+                    .use_text(&a_string, 10.0, Mm(210.0 - 28.0), start, &courier_bold);
+                    
+                    text_layer
+                    .use_text(&m2_string, 10.0, Mm(210.0 - 18.0), start, &courier_bold);
                     
                     if b.ist_geroetet() {    
                         rot_layer
                         .add_shape(Line {
                             points: vec![
                                 (Point::new(Mm(12.0), start - Mm(1.0)), false),
-                                (Point::new(Mm(297.0 - 12.0), start - Mm(1.0)), false)
+                                (Point::new(Mm(210.0 - 12.0), start - Mm(1.0)), false)
                             ],
                             is_closed: false,
                             has_fill: false,
@@ -312,7 +334,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
                         });
                     }
                     
-                    start = start - Mm(6.0);   
+                    start = start - Mm(4.1);   
                 },
                 BvEintrag::Recht(hvm) => {
                 
@@ -343,9 +365,9 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     
     for abt2_eintrag in grundbuch.abt2.eintraege.iter() {
     
-        let extent_y_lfd_nr = 4.13;
-        let extent_y_text = wordbreak_text(&abt2_eintrag.text, 50).lines().count() as f64 * 4.13;
-        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12).lines().count() as f64 * 4.13;
+        let extent_y_lfd_nr = 3.43;
+        let extent_y_text = wordbreak_text(&abt2_eintrag.text, 50).lines().count() as f64 * 3.43;
+        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12).lines().count() as f64 * 3.43;
         let extent_y = extent_y_bv_nr
             .max(extent_y_text)
             .max(extent_y_lfd_nr);
@@ -356,7 +378,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         }
         
         abt2_seiten.last_mut().unwrap().push(abt2_eintrag.clone());
-        cursor -= extent_y;
+        cursor -= extent_y + 5.0;
     }
     
     for abt2_seite in abt2_seiten {
@@ -443,13 +465,13 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
             .add_shape(text_spalte);
             
             text_layer
-            .use_text(&format!("{}", abt2_eintrag.lfd_nr), 12.0, Mm(12.0), start, &courier_bold);
+            .use_text(&format!("{}", abt2_eintrag.lfd_nr), 10.0, Mm(12.0), start, &courier_bold);
         
             // write BV
             text_layer.begin_text_section();
-            text_layer.set_font(&courier_bold, 12.0);
+            text_layer.set_font(&courier_bold, 10.0);
             text_layer.set_text_cursor(Mm(27.0), start);
-            text_layer.set_line_height(12.0);
+            text_layer.set_line_height(10.0);
             for line in bv_break.lines() {
                 text_layer.write_text(line.clone(), &courier_bold);
                 text_layer.add_line_break();
@@ -458,18 +480,18 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     
             // write text
             text_layer.begin_text_section();
-            text_layer.set_font(&courier_bold, 12.0);
+            text_layer.set_font(&courier_bold, 10.0);
             text_layer.set_text_cursor(Mm(62.0),start);
-            text_layer.set_line_height(12.0);
+            text_layer.set_line_height(10.0);
             for line in text_break.lines() {
                 text_layer.write_text(line.clone(), &courier_bold);
                 text_layer.add_line_break();
             }
             text_layer.end_text_section();
             
-            let extent_y_lfd_nr = 4.13;
-            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12).lines().count() as f64 * 4.13;
-            let extent_y_text = wordbreak_text(&abt2_eintrag.text, 50).lines().count() as f64 * 4.13;
+            let extent_y_lfd_nr = 3.43;
+            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12).lines().count() as f64 * 3.43;
+            let extent_y_text = wordbreak_text(&abt2_eintrag.text, 50).lines().count() as f64 * 3.43;
             let extent_y = extent_y_bv_nr
                 .max(extent_y_text)
                 .max(extent_y_lfd_nr);
@@ -478,8 +500,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
                 rot_layer
                 .add_shape(Line {
                     points: vec![
-                        (Point::new(Mm(12.0), start + Mm(4.13)), false),
-                        (Point::new(Mm(210.0 - 12.0), start + Mm(4.13)), false),
+                        (Point::new(Mm(12.0), start + Mm(3.43)), false),
+                        (Point::new(Mm(210.0 - 12.0), start + Mm(3.43)), false),
                         (Point::new(Mm(12.0), start - Mm(extent_y)), false),
                         (Point::new(Mm(210.0) - Mm(12.0), start - Mm(extent_y)), false),
                     ],
@@ -490,7 +512,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
                 });
             }
             
-            start -= Mm(extent_y);
+            start -= Mm(extent_y + 5.0);
 
             if abt2_eintrag.ist_geroetet() {
                 text_layer.set_fill_color(Color::Cmyk(Cmyk {
@@ -511,8 +533,199 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
         }
     }
     
-    for abt3 in grundbuch.abt3.eintraege.chunks(29) {
+    let mut abt3_seiten: Vec<Vec<Abt3Eintrag>> = Vec::new();
+    let mut cursor = 297.0 - 29.0;
     
+    for abt3_eintrag in grundbuch.abt3.eintraege.iter() {
+    
+        let extent_y_lfd_nr = 3.43;
+        let extent_y_text = wordbreak_text(&abt3_eintrag.text, 50).lines().count() as f64 * 3.43;
+        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr), 7).lines().count() as f64 * 3.43;
+        let extent_y = extent_y_bv_nr
+            .max(extent_y_text)
+            .max(extent_y_lfd_nr);
+        
+        if cursor - extent_y < 12.0 || abt3_seiten.is_empty() {
+            abt3_seiten.push(Vec::new());
+            cursor = 297.0 - 29.0;
+        }
+        
+        abt3_seiten.last_mut().unwrap().push(abt3_eintrag.clone());
+        cursor -= extent_y + 5.0;
+    }
+    
+    for abt3_seite in abt3_seiten {
+        
+        let (current_page, formular_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+        let text_layer = doc.get_page(current_page).add_layer("Text");
+        let rot_layer = doc.get_page(current_page).add_layer("Roetungen");
+        let mut start = Mm(297.0 - 29.0);
+
+        for abt3_eintrag in abt3_seite {
+        
+            if abt3_eintrag.ist_geroetet() {
+                text_layer.set_fill_color(Color::Cmyk(Cmyk {
+                    c: 0.0,
+                    m: 0.7,
+                    y: 0.4,
+                    k: 0.0,
+                    icc_profile: None,
+                }));
+                rot_layer.set_outline_color(Color::Cmyk(Cmyk {
+                    c: 0.0,
+                    m: 0.7,
+                    y: 0.4,
+                    k: 0.0,
+                    icc_profile: None,
+                }));
+            }
+            
+            let lfd_nr_spalte = Line {
+                points: vec![
+                    (Point::new(Mm(10.0), Mm(297.0 - 24.0)), false),
+                    (Point::new(Mm(10.0), Mm(10.0)), false),
+                    (Point::new(Mm(25.0), Mm(10.0)), false),
+                    (Point::new(Mm(25.0), Mm(297.0 - 24.0)), false)
+                ],
+                is_closed: true,
+                has_fill: false,
+                has_stroke: true,
+                is_clipping_path: false,
+            };
+            
+            let bv_spalte = Line {
+                points: vec![
+                    (Point::new(Mm(25.0), Mm(297.0 - 24.0)), false),
+                    (Point::new(Mm(25.0), Mm(10.0)), false),
+                    (Point::new(Mm(45.0), Mm(10.0)), false),
+                    (Point::new(Mm(45.0), Mm(297.0 - 24.0)), false)
+                ],
+                is_closed: true,
+                has_fill: false,
+                has_stroke: true,
+                is_clipping_path: false,
+            };
+            
+            let betrag_spalte = Line {
+                points: vec![
+                    (Point::new(Mm(45.0), Mm(297.0 - 24.0)), false),
+                    (Point::new(Mm(45.0), Mm(10.0)), false),
+                    (Point::new(Mm(85.0), Mm(10.0)), false),
+                    (Point::new(Mm(85.0), Mm(297.0 - 24.0)), false)
+                ],
+                is_closed: true,
+                has_fill: false,
+                has_stroke: true,
+                is_clipping_path: false,
+            };
+            
+            let text_spalte = Line {
+                points: vec![
+                    (Point::new(Mm(85.0), Mm(297.0 - 24.0)), false),
+                    (Point::new(Mm(85.0), Mm(10.0)), false),
+                    (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
+                    (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 24.0)), false)
+                ],
+                is_closed: true,
+                has_fill: false,
+                has_stroke: true,
+                is_clipping_path: false,
+            };
+            
+            let bv_break = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr), 7);
+            let text_break = wordbreak_text(&abt3_eintrag.text, 50);
+            
+            doc.get_page(current_page).get_layer(formular_layer)
+            .use_text(&format!("Grundbuch von {grundbuch_von}  -  Blatt {blatt}"), 12.0, Mm(10.0), Mm(297.0 - 10.0), &times);        
+            
+            doc.get_page(current_page).get_layer(formular_layer)
+            .use_text("Abteilung 3 (Schulden)", 16.0, Mm(10.0), Mm(297.0 - 16.0), &times_bold);
+            
+            doc.get_page(current_page).get_layer(formular_layer)
+            .add_shape(lfd_nr_spalte);
+            
+            doc.get_page(current_page).get_layer(formular_layer)
+            .add_shape(bv_spalte);
+            
+            doc.get_page(current_page).get_layer(formular_layer)
+            .add_shape(betrag_spalte);
+            
+            doc.get_page(current_page).get_layer(formular_layer)
+            .add_shape(text_spalte);
+            
+            text_layer
+            .use_text(&format!("{}", abt3_eintrag.lfd_nr), 10.0, Mm(12.0), start, &courier_bold);
+        
+            // write BV
+            text_layer.begin_text_section();
+            text_layer.set_font(&courier_bold, 10.0);
+            text_layer.set_text_cursor(Mm(27.0), start);
+            text_layer.set_line_height(10.0);
+            for line in bv_break.lines() {
+                text_layer.write_text(line.clone(), &courier_bold);
+                text_layer.add_line_break();
+            }
+            text_layer.end_text_section();
+    
+            text_layer
+            .use_text(
+                &abt3_eintrag.betrag, 
+                10.0, Mm(47.0), start, &courier_bold
+            );
+        
+            // write text
+            text_layer.begin_text_section();
+            text_layer.set_font(&courier_bold, 10.0);
+            text_layer.set_text_cursor(Mm(87.0),start);
+            text_layer.set_line_height(10.0);
+            for line in text_break.lines() {
+                text_layer.write_text(line.clone(), &courier_bold);
+                text_layer.add_line_break();
+            }
+            text_layer.end_text_section();
+            
+            let extent_y_lfd_nr = 3.43;
+            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr), 7).lines().count() as f64 * 3.43;
+            let extent_y_text = wordbreak_text(&abt3_eintrag.text, 50).lines().count() as f64 * 3.43;
+            let extent_y = extent_y_bv_nr
+                .max(extent_y_text)
+                .max(extent_y_lfd_nr);
+                    
+            if abt3_eintrag.ist_geroetet() {
+                rot_layer
+                .add_shape(Line {
+                    points: vec![
+                        (Point::new(Mm(12.0), start + Mm(3.43)), false),
+                        (Point::new(Mm(210.0 - 12.0), start + Mm(3.43)), false),
+                        (Point::new(Mm(12.0), start - Mm(extent_y)), false),
+                        (Point::new(Mm(210.0) - Mm(12.0), start - Mm(extent_y)), false),
+                    ],
+                    is_closed: false,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                });
+            }
+            
+            start -= Mm(extent_y + 5.0);
+
+            if abt3_eintrag.ist_geroetet() {
+                text_layer.set_fill_color(Color::Cmyk(Cmyk {
+                    c: 0.0,
+                    m: 0.0,
+                    y: 0.0,
+                    k: 1.0,
+                    icc_profile: None,
+                }));
+                rot_layer.set_outline_color(Color::Cmyk(Cmyk {
+                    c: 0.0,
+                    m: 0.0,
+                    y: 0.0,
+                    k: 1.0,
+                    icc_profile: None,
+                }));
+            }
+        }
     }
     
     doc.save_to_bytes().unwrap_or_default()
@@ -548,40 +761,4 @@ fn wordbreak_text(s: &str, max_cols: usize) -> String {
     }
     
     output
-}
-
-fn string_to_qr_codes(s: &str) -> Vec<Image> {
-
-    let chunks = s.lines().collect::<Vec<_>>();
-    
-    chunks.chunks(5).map(|s| {
-        let mut s = s.to_vec().join("\n");
-        if s.len() < 180 { s.push_str(&"\n".repeat(180 - s.len())); }
-        let string = QrCode::with_error_correction_level(s, EcLevel::H).unwrap()
-            .render::<char>()
-            .quiet_zone(false)
-            .module_dimensions(2, 1)
-            .build();
-        
-        let img: Vec<u8> = string.lines().flat_map(|row| {
-            row.chars()
-            .enumerate()
-            .filter_map(|(i, c)| if i % 2 == 0 { None } else { Some(c) })
-            .map(|c| if c == '█' { 0 } else { 255 })
-            .collect::<Vec<_>>()
-        }).collect();
-
-        let img_height = (img.len() as f32).sqrt().round() as usize;        
-                
-        Image::from(ImageXObject {
-            width: Px(img_height),
-            height: Px(img_height),
-            color_space: ColorSpace::Greyscale,
-            bits_per_component: ColorBits::Bit8,
-            interpolate: false,
-            image_data: img,
-            image_filter: None,
-            clipping_bbox: None,
-        })        
-    }).collect()
 }

@@ -2256,35 +2256,20 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 return;
             }
             
-            let (file_id, page) = match data.open_page.clone() {
-                Some((file, page)) => (file.clone(), page as usize),
-                None => return,
-            };
-            
-            let open_file = match data.loaded_files.get_mut(&file_id) { 
-                Some(s) => s,
-                None => return,
-            };
-            
-            let file_dialog_result = tinyfiledialogs::save_file_dialog(
-                "PDF speichern unter", 
+            let file_dialog_result = tinyfiledialogs::select_folder_dialog(
+                "PDF Dateien speichern unter", 
                 "~/", 
             );
             
             let f = match file_dialog_result {
-                Some(f) => {
-                    if f.ends_with(".pdf") {
-                        f
-                    } else {
-                        format!("{}.pdf", f)
-                    }
-                },
+                Some(f) => f,
                 None => return,
             };
             
-            let pdf = pdf::generate_grundbuch_pdf(&open_file.analysiert);
-            
-            let _ = std::fs::write(&f, &pdf);
+            for file in data.loaded_files.values() {
+                let pdf = pdf::generate_grundbuch_pdf(&file.analysiert);
+                let _ = std::fs::write(&format!("{}/{}_{}.pdf", f, file.analysiert.titelblatt.grundbuch_von, file.analysiert.titelblatt.blatt), &pdf);
+            }
         },
         Cmd::ExportAlleRechte => {
         
