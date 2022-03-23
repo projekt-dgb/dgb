@@ -972,7 +972,7 @@
     " ",
     "if not(\"amt\" in inhaber.lower()):",
     "    if \"einen noch zu benennenden Dritten\" in inhaber:",
-    "        inhaber = \"einen noch zu benennenden Dritten\"",
+    "        inhaber = \"einen noch zu benennenden Dritten (\" + recht_id + \")\"",
     "    elif \"für \" in inhaber:",
     "        inhaber = inhaber.split(\"für \")[-1]",
     "        inhaber = inhaber.rstrip().lstrip()",
@@ -1016,7 +1016,7 @@
     "    inhaber = inhaber.replace(\", zu je 1/4 Anteil -\", \"\")",
     "if \" (gem. § 16 FlurbG)\" in inhaber:",
     "    inhaber = inhaber.replace(\" (gem. § 16 FlurbG)\", \"\")",
-    "",
+    " ",
     "inhaber = inhaber.rstrip().lstrip()",
     " ",
     "return inhaber"

@@ -13,7 +13,9 @@ let rpc = {
   export_pdf: function() { rpc.invoke({ cmd : 'export_pdf' }); },
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
-
+  export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
+  export_alle_teilbelastungen: function() { rpc.invoke({ cmd : 'export_alle_teilbelastungen' }); },
+    
   import_nb:  function() { rpc.invoke({ cmd : 'import_nb' }); },
   export_lefis:  function() { rpc.invoke({ cmd : 'export_lefis' }); },
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
@@ -91,11 +93,12 @@ let tab_functions = {
     export_nb: function(event) { rpc.export_nb() },
     import_nb: function(event) { rpc.import_nb() },
     delete_nb: function(event) { rpc.delete_nb() },
-    export_lefis: function(event) { rpc.export_lefis() },
-    export_pdf: function(event) { rpc.export_pdf() },
     export_alle_rechte: function(event) { rpc.export_alle_rechte() },
     export_alle_fehler: function(event) { rpc.export_alle_fehler() },
-
+    export_alle_teilbelastungen: function(event) { rpc.export_alle_teilbelastungen() },
+    export_alle_abt1: function(event) { rpc.export_alle_abt1() },
+    export_lefis: function(event) { rpc.export_lefis() },
+    export_pdf: function(event) { rpc.export_pdf() },
     open_configuration: function(event) { rpc.open_configuration() },
     open_info: function(event) { rpc.open_info() },
 };

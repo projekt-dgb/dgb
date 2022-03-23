@@ -55,6 +55,8 @@ pub struct Abt2Analysiert {
     pub spalte_2: String,
     // Flur, Flurstück
     pub belastete_flurstuecke: Vec<BvEintrag>,
+    #[serde(default)]
+    pub lastend_an: Vec<Spalte1Eintrag>,
     pub text_original: String,
     pub nebenbeteiligter: Nebenbeteiligter,
     pub warnungen: Vec<String>,
@@ -72,6 +74,8 @@ pub struct Abt3Analysiert {
     pub spalte_2: String,
     // Flur, Flurstück
     pub belastete_flurstuecke: Vec<BvEintrag>,
+    #[serde(default)]
+    pub lastend_an: Vec<Spalte1Eintrag>,
     pub text_original: String,
     pub nebenbeteiligter: Nebenbeteiligter,
     pub warnungen: Vec<String>,
@@ -206,7 +210,7 @@ pub fn analysiere_grundbuch<'py>(
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
         
         let kt = kurztext::text_kuerzen_abt2(&recht_id, &eintrag.text, &mut fehler, konfiguration);
-        
+        let mut lastend_an = Vec::new();
         let belastete_flurstuecke = match Python::with_gil(|py| {
             get_belastete_flurstuecke(
                 py,
@@ -214,6 +218,7 @@ pub fn analysiere_grundbuch<'py>(
                 &kt.text_sauber, 
                 &grundbuch,
                 konfiguration,
+                &mut lastend_an,
                 &mut warnungen,
                 &mut fehler
             ) 
@@ -285,6 +290,7 @@ pub fn analysiere_grundbuch<'py>(
             rangvermerk,
             spalte_2: eintrag.bv_nr.clone(),
             belastete_flurstuecke,
+            lastend_an,
             text_original: kt.text_sauber,
             nebenbeteiligter,
             warnungen,
@@ -340,7 +346,7 @@ pub fn analysiere_grundbuch<'py>(
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
         
         let kt = kurztext::text_kuerzen_abt3(&recht_id, &eintrag.betrag, &eintrag.text, &mut fehler, konfiguration);
-
+        let mut lastend_an = Vec::new();
         let belastete_flurstuecke = match Python::with_gil(|py| {
             get_belastete_flurstuecke(
                 py,
@@ -348,6 +354,7 @@ pub fn analysiere_grundbuch<'py>(
                 &kt.text_sauber, 
                 &grundbuch,
                 konfiguration,
+                &mut lastend_an,
                 &mut warnungen,
                 &mut fehler
             ) 
@@ -396,6 +403,7 @@ pub fn analysiere_grundbuch<'py>(
             betrag: kt.betrag,
             spalte_2: eintrag.bv_nr.clone(),
             belastete_flurstuecke,
+            lastend_an,
             text_original: kt.text_sauber,
             nebenbeteiligter,
             warnungen,
@@ -415,6 +423,7 @@ fn get_belastete_flurstuecke<'py>(
 	text_sauber: &str, 
 	grundbuch: &Grundbuch,
 	konfiguration: &Konfiguration,
+	eintraege: &mut Vec<Spalte1Eintrag>,
 	warnungen: &mut Vec<String>,
 	fehler: &mut Vec<String>,
 ) -> Result<Vec<BvEintrag>, String> {
@@ -427,6 +436,8 @@ fn get_belastete_flurstuecke<'py>(
         konfiguration,
         fehler,
     )?;
+    
+    eintraege.append(&mut spalte1_eintraege.clone());
     
     let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
     let blatt = grundbuch.titelblatt.blatt.clone();

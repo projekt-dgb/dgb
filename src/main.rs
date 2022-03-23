@@ -334,7 +334,11 @@ pub enum Cmd {
     #[serde(rename = "export_alle_rechte")]
     ExportAlleRechte,
     #[serde(rename = "export_alle_fehler")]
-    ExportAlleFehler,    
+    ExportAlleFehler,   
+    #[serde(rename = "export_alle_abt1")]
+    ExportAlleAbt1,
+    #[serde(rename = "export_alle_teilbelastungen")]
+    ExportAlleTeilbelastungen,    
     #[serde(rename = "export_pdf")]
     ExportPdf,
     #[serde(rename = "open_configuration")]
@@ -2327,6 +2331,62 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let _ = std::fs::write(&f, html.as_bytes());
         },
+        Cmd::ExportAlleAbt1 => {
+        
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_abt1_html(&data)
+            );
+
+            let file_dialog_result = tinyfiledialogs::save_file_dialog(
+                "Rechte .HTML speichern unter", 
+                "~/", 
+            );
+            
+            let f = match file_dialog_result {
+                Some(f) => {
+                    if f.ends_with(".html") {
+                        f
+                    } else {
+                        format!("{}.html", f)
+                    }
+                },
+                None => return,
+            };
+            
+            let _ = std::fs::write(&f, html.as_bytes());
+        },
+        Cmd::ExportAlleTeilbelastungen => {
+        
+            if data.loaded_files.is_empty() {
+                return;
+            }
+            
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_teilbelastungen_html(&data)
+            );
+
+            let file_dialog_result = tinyfiledialogs::save_file_dialog(
+                "Teilbelastungen .HTML speichern unter", 
+                "~/", 
+            );
+            
+            let f = match file_dialog_result {
+                Some(f) => {
+                    if f.ends_with(".html") {
+                        f
+                    } else {
+                        format!("{}.html", f)
+                    }
+                },
+                None => return,
+            };
+            
+            let _ = std::fs::write(&f, html.as_bytes());
+        },
         Cmd::ExportLefis => {
 
             if data.loaded_files.is_empty() {
@@ -2603,6 +2663,124 @@ fn get_alle_rechte_html(data: &RpcData) -> String {
     entries.join("\r\n")
 }
 
+
+fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
+    
+    let mut entries = String::new();
+    
+    for (f_name, f) in data.loaded_files.iter() {
+        
+        let gb_analysiert = crate::analysiere::analysiere_grundbuch(
+            &f.analysiert, 
+            &data.loaded_nb, 
+            &data.konfiguration
+        );
+    
+        let mut abt2_entries = String::new();
+        
+        for abt2 in gb_analysiert.abt2.iter() {
+            
+            let has_nur_lastend_an = abt2.lastend_an
+                .iter()
+                .any(|s1| !s1.nur_lastend_an.is_empty());
+            
+            if has_nur_lastend_an {
+                let blatt = &f.titelblatt.grundbuch_von;
+                let nr = &f.titelblatt.blatt;
+                let lfd_nr = &abt2.lfd_nr;
+                let text = &abt2.text_original;
+                abt2_entries.push_str(&format!("<div style='display:flex;flex-direction:column;margin:10px;padding:10px;border:1px solid #efefef;page-break-inside:avoid;'><strong>{blatt} Nr. {nr}, A2 / {lfd_nr}</strong><div style='display:flex;flex-direction:row;'><div style='margin-right:10px;'>{text}</div><div>"));
+            }
+            
+            for spalte_1 in abt2.lastend_an.iter() {
+                if !spalte_1.nur_lastend_an.is_empty() {
+                    abt2_entries.push_str(&format!("<div style='min-width: 350px;'>"));
+
+                    for e in spalte_1.nur_lastend_an.iter() {
+                        let flur = &e.flur;
+                        let flurstueck = &e.flurstueck;
+                        let gemarkung = &e.gemarkung.as_ref().unwrap_or(&f.titelblatt.grundbuch_von);
+                        abt2_entries.push_str(&format!("<p>Gemarkung {gemarkung}, Flur {flur}, Flurstück {flurstueck}</p>"));    
+                    }
+                    
+                    abt2_entries.push_str(&format!("</div>"));
+                }
+            }
+            
+            if has_nur_lastend_an {
+                abt2_entries.push_str(&format!("</div></div></div>"));
+            }
+        }
+        entries.push_str(&abt2_entries);
+
+        let mut abt3_entries = String::new();
+
+        for abt3 in gb_analysiert.abt3.iter() {
+        
+            let has_nur_lastend_an = abt3.lastend_an
+                .iter()
+                .any(|s1| !s1.nur_lastend_an.is_empty());
+            
+            if has_nur_lastend_an {
+                let blatt = &f.titelblatt.grundbuch_von;
+                let nr = &f.titelblatt.blatt;
+                let lfd_nr = &abt3.lfd_nr;
+                let text = &abt3.text_original;
+                abt3_entries.push_str(&format!("<div style='display:flex;flex-direction:column;margin:10px;padding:10px;border:1px solid #efefef;page-break-inside:avoid;'><strong>{blatt} Nr. {nr}, A3 / {lfd_nr}</strong><div style='display:flex;flex-direction:row;'><div style='margin-right:10px;'>{text}</div><div>"));
+            }
+            
+            for spalte_1 in abt3.lastend_an.iter() {
+                if !spalte_1.nur_lastend_an.is_empty() {
+                    abt3_entries.push_str(&format!("<div style='min-width: 350px;'>"));
+
+                    for e in spalte_1.nur_lastend_an.iter() {
+                        let flur = &e.flur;
+                        let flurstueck = &e.flurstueck;
+                        let gemarkung = &e.gemarkung.as_ref().unwrap_or(&f.titelblatt.grundbuch_von);
+                        abt3_entries.push_str(&format!("<p>Gemarkung {gemarkung}, Flur {flur}, Flurstück {flurstueck}</p>"));
+                        
+                    }
+                    
+                    abt3_entries.push_str(&format!("</div>"));
+
+                }
+            }
+            
+            if has_nur_lastend_an {
+                abt3_entries.push_str(&format!("</div></div></div>"));
+            }
+        }
+        
+        entries.push_str(&abt3_entries);
+    }
+    
+    entries
+}
+
+fn get_alle_abt1_html(data: &RpcData) -> String {
+
+    let mut entries = String::new();
+    
+    for (f_name, f) in data.loaded_files.iter() {
+        
+        let blatt = &f.titelblatt.grundbuch_von;
+        let nr = &f.titelblatt.blatt;                        
+        entries.push_str(&format!("<div><p>{blatt} Nr. {nr}</p>", ));
+                    
+        for abt1 in f.analysiert.abt1.eintraege.iter() {
+            if abt1.ist_geroetet() {
+                continue;
+            }
+            let lfd_nr = &abt1.lfd_nr;
+            let text = &abt1.eigentuemer;
+            entries.push_str(&format!("<div><p>{lfd_nr}</p><p>{text}</p></div>"));
+        }
+        
+        entries.push_str(&format!("</div>"));
+    }
+    
+    entries
+}
 
 fn get_alle_fehler_html(data: &RpcData) -> String {
 

@@ -748,30 +748,6 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
             
             <div class='__application-ribbon-section 4'>
                 <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_lefis}'>
-                            </div>
-                            <div>
-                                <p>Export</p>
-                                <p>(.lefis)</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_pdf(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
-                            </div>
-                            <div>
-                                <p>Export</p>
-                                <p>als PDF</p>
-                            </div>
-                        </label>
-                    </div>   
                     
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
@@ -797,10 +773,64 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                         </label>
                     </div> 
                     
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_alle_teilbelastungen(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                            </div>
+                            <div>
+                                <p>Alle Teilbelast.</p>
+                                <p>speichern unter</p>
+                            </div>
+                        </label>
+                    </div> 
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_alle_abt1(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                            </div>
+                            <div>
+                                <p>Alle Abt. 1</p>
+                                <p>speichern unter</p>
+                            </div>
+                        </label>
+                    </div> 
+                    
+                </div>
+            </div>            
+            
+            <div class='__application-ribbon-section 5'>
+                <div style='display:flex;flex-direction:row;'>
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_lefis}'>
+                            </div>
+                            <div>
+                                <p>Export</p>
+                                <p>(.lefis)</p>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_pdf(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
+                            </div>
+                            <div>
+                                <p>Export</p>
+                                <p>als PDF</p>
+                            </div>
+                        </label>
+                    </div>   
                 </div>
             </div>
             
-            <div class='__application-ribbon-section 5'>
+            
+            <div class='__application-ribbon-section 6'>
                 <div style='display:flex;flex-direction:row;'>
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.open_configuration(event);' class='__application-ribbon-action-vertical-large'>
