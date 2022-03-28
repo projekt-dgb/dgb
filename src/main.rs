@@ -357,6 +357,8 @@ pub enum Cmd {
     #[serde(rename = "edit_flurstuecke_auslesen_script")]
     EditFlurstueckeAuslesenScript { script: String },
     
+    #[serde(rename = "flurstueck_auslesen_script_testen")]
+    FlurstueckAuslesenScriptTesten { text: String, bv_nr: String },
     #[serde(rename = "edit_text_kuerzen_abt2_script")]
     EditTextKuerzenAbt2Script { script: String },
     #[serde(rename = "kurztext_abt2_script_testen")]
@@ -1502,6 +1504,49 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             data.konfiguration.betrag_auslesen_script = neu.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
             data.konfiguration.speichern();
         },   
+        Cmd::FlurstueckAuslesenScriptTesten { text, bv_nr } => {
+            
+            let start = std::time::Instant::now();
+            let mut debug_log = String::new();
+            let result: Result<String, String> = Python::with_gil(|py| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
+
+                let mut fehler = Vec::new();
+                let mut warnungen = Vec::new();
+                let mut spalte1_eintraege = Vec::new();
+                
+                let default_bv = Vec::new();
+                let open_file = data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file));
+            
+                let bv_eintraege = crate::analysiere::get_belastete_flurstuecke(
+                    py,
+                    bv_nr,
+                    &text_sauber,
+                    &Titelblatt {
+                        amtsgericht: "Amtsgericht".to_string(),
+                        grundbuch_von: "GrundbuchVon".to_string(),
+                        blatt: 0,
+                    },
+                    open_file
+                    .map(|of| &of.analysiert.bestandsverzeichnis.eintraege)
+                    .unwrap_or(&default_bv),
+                    &data.konfiguration,
+                    &mut debug_log,
+                    &mut spalte1_eintraege,
+                    &mut warnungen,
+                    &mut fehler,
+                )?;
+                
+                Ok(spalte1_eintraege.iter().map(|e| format!("{e:#?}")).collect::<Vec<_>>().join("\r\n"))
+            });
+            
+            let time = std::time::Instant::now() - start;
+            let result: String = match result {
+                Ok(o) => { format!("{}\r\nLOG:\r\n{}\r\nAusgabe berechnet in {:?}", o, debug_log, time) },
+                Err(e) => { format!("{}", e) },
+            };
+            webview.eval(&format!("replaceFlurstueckAuslesenTestOutput(`{}`);", result));
+        },
         Cmd::RangvermerkAuslesenAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
             let result: Result<String, String> = Python::with_gil(|py| {

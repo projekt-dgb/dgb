@@ -56,6 +56,8 @@ let rpc = {
 
   edit_text_kuerzen_abt2_script: function(arg) { rpc.invoke({ cmd : 'edit_text_kuerzen_abt2_script', script: arg });},
   kurztext_abt2_script_testen: function(arg) { rpc.invoke({ cmd: 'kurztext_abt2_script_testen', text: arg }); },  
+  flurstueck_auslesen_script_testen: function(arg, bv_nr) { rpc.invoke({ cmd: 'flurstueck_auslesen_script_testen', text: arg, bv_nr: bv_nr }); },  
+
   edit_rechteart_script: function(neu) { rpc.invoke({ cmd: 'edit_rechteart_script', neu: neu }); },
   rechteart_script_testen: function(arg) { rpc.invoke({ cmd: 'rechteart_script_testen', text: arg }); },
   edit_rechtsinhaber_auslesen_abt2_script: function(neu) { rpc.invoke({ cmd: 'edit_rechtsinhaber_auslesen_abt2_script', neu: neu }); },
@@ -583,6 +585,22 @@ function editTextKuerzenAbt2Script(e) {
 
 }
 
+function flurstueckAuslesenScriptTesten(e) {
+
+    let bv_input = document.getElementById("__application_konfiguration_flurstueck_auslesen_bv_nr");
+    
+    if (!bv_input)
+        return;
+    
+    if (!bv_input.value)
+        return;
+    
+    if (e.target.value) {
+        rpc.flurstueck_auslesen_script_testen(e.target.value, bv_input.value);        
+    }
+}
+
+
 function textKuerzenAbt2ScriptTesten(e) {
     if (e.target.value) {
         rpc.kurztext_abt2_script_testen(e.target.value);        
@@ -591,6 +609,12 @@ function textKuerzenAbt2ScriptTesten(e) {
 
 function replaceTextKuerzenAbt2TestOutput(s) {
     let test_input = document.getElementById("__application_konfiguration_text_kuerzen_abt2_test");
+    if (test_input)
+         test_input.value = s;
+}
+
+function replaceFlurstueckAuslesenTestOutput(s) {
+    let test_input = document.getElementById("__application_konfiguration_flurstueck_auslesen_test");
     if (test_input)
          test_input.value = s;
 }
@@ -1158,8 +1182,7 @@ function copyToClipboardOnSelectChange(event) {
 // Init
 window.onload = function() { rpc.init(); };
 
-/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
 });
-*/
+

@@ -158,6 +158,12 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                         <p style='color:#4a4e6a;user-select:none;'>def flurstuecke_auslesen(spalte_1: String, text: String, re: Mapping[String, Regex]) -> [Spalte1Eintrag]:</p>
                         <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editFlurstueckeAuslesenScript(event);'>{konfig_flurstuecke_auslesen_script}</div>
                     </div>
+                    
+                    <div style='display:flex;flex-direction:row;'>
+                        <input type='text' id='__application_konfiguration_flurstueck_auslesen_bv_nr' placeholder='BV-Nr. (Spalte 1) eingeben...' />
+                        <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='flurstueckAuslesenScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                        <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_flurstueck_auslesen_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
+                    </div>
                 </div>     
                 
                 <div style='padding:5px 0px;'>
