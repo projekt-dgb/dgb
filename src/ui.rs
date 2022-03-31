@@ -30,7 +30,7 @@ pub fn render_entire_screen(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_popover(rpc_data: &RpcData) -> String {
-        
+    
     let should_render_popover = 
         rpc_data.configuration_active ||
         rpc_data.info_active ||
@@ -888,7 +888,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
 }
 
 pub fn render_main(rpc_data: &mut RpcData) -> String {
-
+        
     if rpc_data.loaded_files.is_empty() {
         return String::new();
     }
@@ -909,6 +909,8 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_file_list(rpc_data: &RpcData) -> String {
+        
+    use crate::PdfFileIcon;
     
     const CLOSE_PNG: &[u8] = include_bytes!("../src/img/icons8-close-48.png");
     let close_str = format!("data:image/png;base64,{}", base64::encode(&CLOSE_PNG));
@@ -921,15 +923,37 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
     
     const FULL_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-ok-48.png");
     let full_check_str = format!("data:image/png;base64,{}", base64::encode(&FULL_CHECK_PNG));
-
+    
     normalize_for_js(rpc_data.loaded_files.keys().filter_map(|filename| {
         
         let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename);
         
         let datei = rpc_data.loaded_files.get(filename)?;
-        
-        let datei_hat_keine_fehler = datei.hat_keine_fehler(&rpc_data.loaded_nb, &rpc_data.konfiguration);
-        let datei_hat_alle_onr_zugewiesen = datei.alle_ordnungsnummern_zugewiesen(&rpc_data.loaded_nb, &rpc_data.konfiguration);
+
+        let check = match datei.icon {
+            None => format!("<div style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'></div>"),
+            Some(PdfFileIcon::HatFehler) => {
+                format!(
+                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    filename = filename, 
+                    check = warning_check_str
+                ) 
+            },
+            Some(PdfFileIcon::KeineOrdnungsnummernZugewiesen) => {
+                format!(
+                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    filename = filename, 
+                    check = half_check_str
+                ) 
+            },
+            Some(PdfFileIcon::AllesOkay) => {
+                format!(
+                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    filename = filename, 
+                    check = full_check_str
+                )
+            },
+        };
         
         Some(format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
             {check}
@@ -937,30 +961,7 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
             <div style='display:flex;flex-grow:1;' data-fileName='{filename}' ></div>
             {close_btn}
             </div>", 
-            check = if datei_hat_keine_fehler && datei_hat_alle_onr_zugewiesen {
-                format!(
-                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
-                    filename = filename, 
-                    check = full_check_str
-                )
-            } else if datei_hat_keine_fehler {
-                format!(
-                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
-                    filename = filename, 
-                    check = half_check_str
-                ) 
-            } else if datei.ist_geladen() { 
-                format!(
-                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
-                    filename = filename, 
-                    check = warning_check_str
-                ) 
-            } else {
-                format!(
-                    "<div style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'></div>", 
-                    filename = filename, 
-                )
-            },
+            check = check,
             file_active = if datei_ausgewaehlt { "active" } else { "" },
             filename = filename, 
             close_btn = if datei_ausgewaehlt { 
@@ -1044,7 +1045,7 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
 }
 
 pub fn render_main_container(rpc_data: &mut RpcData) -> String {
-    
+            
     let open_file = match rpc_data.open_page.as_mut().and_then(|of| rpc_data.loaded_files.get_mut(&of.0)) {
         Some(s) => s,
         None => return String::new(),
@@ -2173,12 +2174,13 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     
     if !pdftoppm_output_path.exists() {
         if let Ok(o) = std::fs::read(&file.datei) {
+            /*
             let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
                 &o, 
                 &[open_file.1], 
                 &file.titelblatt, 
                 !rpc_data.konfiguration.vorschau_ohne_geroetet
-            );
+            );*/
         }
     }
     
