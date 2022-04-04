@@ -1117,7 +1117,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             bestandsverzeichnis_abschreibungen = render_bestandsverzeichnis_abschreibungen(open_file),
             
             abt_1 = render_abt_1(open_file),
-            abt_1_grundlagen_eintragungen = render_abt_1_grundlage_eintragungen(open_file),
+            abt_1_grundlagen_eintragungen = render_abt_1_grundlagen_eintragungen(open_file),
             abt_1_zuschreibungen = render_abt_1_veraenderungen(open_file),
             abt_1_abschreibungen = render_abt_1_loeschungen(open_file),
             
@@ -1711,7 +1711,7 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
           {abt1}", abt1 = abt1))
 }
 
-pub fn render_abt_1_grundlage_eintragungen(open_file: &PdfFile) -> String {
+pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
     use crate::digitalisiere::Abt1GrundEintragung;
     
     let mut abt1_eintraege = open_file.analysiert.abt1.grundlagen_eintragungen.clone();
@@ -1729,7 +1729,7 @@ pub fn render_abt_1_grundlage_eintragungen(open_file: &PdfFile) -> String {
         } else { 
             "background:white;" 
         };
-        
+
         format!("
         <div class='__application-abt1-grundlage-eintragung' style='display:flex;margin-top:5px;'>
         

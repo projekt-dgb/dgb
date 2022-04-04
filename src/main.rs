@@ -1181,6 +1181,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
             webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
             webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
@@ -1276,6 +1277,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
             webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
             webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
@@ -1506,6 +1508,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "bv-abschreibung" => format!("bv-abschreibung_{}_bv-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
                 
                 "abt1" => format!("abt1_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
+                "abt1-grundlage-eintragung" => format!("abt1-grundlage-eintragung_{}_bv-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
                 "abt1-veraenderung" => format!("abt1-veraenderung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
                 "abt1-loeschung" => format!("abt1-loeschung_{}_lfd-nr", if eintrag_roeten { row + 1 } else { row.saturating_sub(1) }),
 
@@ -1534,6 +1537,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
             webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
             webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
@@ -2747,6 +2751,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
             webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
             webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
             webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
