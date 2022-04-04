@@ -130,7 +130,7 @@ setInterval(function(){
     if (!(document.getElementById("__application_page_img_inner"))) {
         rpc.check_pdf_image_sichtbar();
     }
-}, 50);
+}, 100);
 
 setInterval(function(){
     rpc.check_pdf_for_errors();
@@ -442,6 +442,22 @@ function openContextMenu(e) {
     }
     rpc.open_context_menu(e.clientX, e.clientY, Number(pn));
     return false;
+}
+
+function replaceIcon(id, data) {
+
+    let icon = document.getElementById("__application_file_icon-" + id);
+    
+    if (!icon) {
+        return;
+    }
+
+    let icon_html = "<img id='__application_file_icon-inner-" + id;
+    icon_html += "' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='";
+    icon_html += id;
+    icon_html += "' src='" + data + "'></img>";
+
+    icon.innerHTML = icon_html;
 }
 
 function replacePopOver(s) {

@@ -923,15 +923,6 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
     const CLOSE_PNG: &[u8] = include_bytes!("../src/img/icons8-close-48.png");
     let close_str = format!("data:image/png;base64,{}", base64::encode(&CLOSE_PNG));
     
-    const WARNING_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");
-    let warning_check_str = format!("data:image/png;base64,{}", base64::encode(&WARNING_CHECK_PNG));
-    
-    const HALF_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-in-progress-48.png");
-    let half_check_str = format!("data:image/png;base64,{}", base64::encode(&HALF_CHECK_PNG));
-    
-    const FULL_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-ok-48.png");
-    let full_check_str = format!("data:image/png;base64,{}", base64::encode(&FULL_CHECK_PNG));
-    
     normalize_for_js(rpc_data.loaded_files.keys().filter_map(|filename| {
         
         let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename);
@@ -939,28 +930,17 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
         let datei = rpc_data.loaded_files.get(filename)?;
 
         let check = match datei.icon {
-            None => format!("<div style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'></div>"),
-            Some(PdfFileIcon::HatFehler) => {
+            None => format!("<div id='__application_file_icon-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'></div>"),
+            Some(i) => {
                 format!(
-                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
+                    "<div id='__application_file_icon-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;'>
+                        <img id='__application_file_icon-inner-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'>
+                        </img>
+                    </div>", 
                     filename = filename, 
-                    check = warning_check_str
+                    check = i.get_base64()
                 ) 
-            },
-            Some(PdfFileIcon::KeineOrdnungsnummernZugewiesen) => {
-                format!(
-                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
-                    filename = filename, 
-                    check = half_check_str
-                ) 
-            },
-            Some(PdfFileIcon::AllesOkay) => {
-                format!(
-                    "<img style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'></img>", 
-                    filename = filename, 
-                    check = full_check_str
-                )
-            },
+            }
         };
         
         Some(format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>

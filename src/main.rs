@@ -154,7 +154,7 @@ pub struct PdfFile {
     nebenbeteiligte_dateipfade: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum PdfFileIcon {
     // Gelbes Warn-Icon
     HatFehler,
@@ -162,6 +162,20 @@ pub enum PdfFileIcon {
     KeineOrdnungsnummernZugewiesen,
     // Voll-grünes Icon
     AllesOkay,
+}
+
+static WARNING_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");    
+static HALF_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-in-progress-48.png");    
+static FULL_CHECK_PNG: &[u8] = include_bytes!("../src/img/icons8-ok-48.png");
+
+impl PdfFileIcon {
+    pub fn get_base64(&self) -> String {
+        match self {
+            PdfFileIcon::HatFehler => format!("data:image/png;base64,{}", base64::encode(&WARNING_CHECK_PNG)),
+            PdfFileIcon::KeineOrdnungsnummernZugewiesen => format!("data:image/png;base64,{}", base64::encode(&HALF_CHECK_PNG)),
+            PdfFileIcon::AllesOkay => format!("data:image/png;base64,{}", base64::encode(&FULL_CHECK_PNG)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -194,6 +208,8 @@ impl PdfFile {
     }
     
     pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
+        
+        println!("get_icon!");
         
         if !self.ist_geladen() {
             return None;
@@ -1574,21 +1590,36 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::CheckPdfForErrors => {
-            // TODO Montag!
-            /*
-            let pdf_to_check = data.loaded_files
-            .iter()
-            .filter_map(|(k, v)| {
-                let icon = v.get_icon(&data.loaded_nb, &data.konfiguration)?;
-                Some((k.clone(), icon))
-            })
-            .take(3)
-            .collect::<Vec<_>>();
             
-            for (k, v) in pdf_to_check {
-                // webview.eval(replaceIcon('');
+            let mut new_icons = BTreeMap::new();
+            let mut icon_count = 0;
+            
+            for (k, v) in data.loaded_files.iter() {
+                if icon_count > 3 {
+                    break;
+                }
+                
+                if v.ist_geladen() && v.icon.is_none() {
+                    let icon = match v.get_icon(&data.loaded_nb, &data.konfiguration) {
+                        Some(s) => s,
+                        None => { return; },
+                    };
+                    new_icons.insert(k.clone(), icon);
+                    icon_count += 1;
+                }
             }
-            */
+
+            for (k, v) in new_icons {
+                if let Some(s) = data.loaded_files.get_mut(&k.clone()) {
+                    s.icon = Some(v);
+                }
+            }
+                                    
+            for (k, v) in data.loaded_files.iter() {
+                if let Some(i) = v.icon.as_ref() {
+                    webview.eval(&format!("replaceIcon(`{}`, `{}`)", k, i.get_base64()));
+                }
+            }
         },
         Cmd::ToggleLefisAnalyse => {
             data.konfiguration.lefis_analyse_einblenden = !data.konfiguration.lefis_analyse_einblenden;
