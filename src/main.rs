@@ -13,7 +13,7 @@ use crate::digitalisiere::{
     SeiteParsed, Nebenbeteiligter, NebenbeteiligterExport,
     NebenbeteiligterExtra, NebenbeteiligterTyp, 
     Titelblatt, SeitenTyp, Grundbuch, Fehler,
-    Anrede, PdfToTextLayout,
+    Anrede, PdfToTextLayout, Abt1GrundEintragung,
     BvEintrag, BvZuschreibung, BvAbschreibung, 
     Abt1Eintrag, Abt1Veraenderung, Abt1Loeschung,
     Abt2Eintrag, Abt2Veraenderung, Abt2Loeschung,
@@ -110,6 +110,7 @@ impl Default for RpcData {
             loaded_nb_paths: Vec::new(),
             konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
                 zeilenumbrueche_in_ocr_text: false,
+                lefis_analyse_einblenden: false,
                 spalten_ausblenden: false,
                 vorschau_ohne_geroetet: false,
                 regex: BTreeMap::new(),
@@ -192,6 +193,23 @@ impl PdfFile {
         let _ = std::fs::write(&target_output_path, json.as_bytes());
     }
     
+    pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
+        
+        if !self.ist_geladen() {
+            return None;
+        }
+        
+        if !self.hat_keine_fehler(nb, konfiguration) {
+            return Some(PdfFileIcon::HatFehler);
+        }
+        
+        if !self.alle_ordnungsnummern_zugewiesen(nb, konfiguration) {
+            return Some(PdfFileIcon::KeineOrdnungsnummernZugewiesen);
+        }
+        
+        Some(PdfFileIcon::AllesOkay)
+    }
+    
     pub fn ist_geladen(&self) -> bool {
         self.seitenzahlen
         .iter()
@@ -255,6 +273,8 @@ impl PdfFile {
 pub struct Konfiguration {
     #[serde(default)]
     pub spalten_ausblenden: bool,
+    #[serde(default)]
+    pub lefis_analyse_einblenden: bool,
     #[serde(default)]
     pub zeilenumbrueche_in_ocr_text: bool,
     #[serde(default)]
@@ -361,7 +381,13 @@ pub enum Cmd {
     CloseFile { file_name: String },
     #[serde(rename = "klassifiziere_seite_neu")]
     KlassifiziereSeiteNeu { seite: usize, klassifikation_neu: String },
-
+    #[serde(rename = "check_pdf_image_sichtbar")]
+    CheckPdfImageSichtbar,
+    #[serde(rename = "toggle_lefis_analyse")]
+    ToggleLefisAnalyse,
+    #[serde(rename = "check_pdf_for_errors")]
+    CheckPdfForErrors,
+    
     #[serde(rename = "edit_abkuerzungen_script")]
     EditAbkuerzungenScript { script: String },
     #[serde(rename = "edit_text_saubern_script")]
@@ -624,19 +650,57 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
                 println!("ok...");
             }
-            
-            println!("digitalisiere dateien...");
-            
+                        
             digitalisiere_dateien(pdf_zu_laden);
         },
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO
             webview.eval(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
         },
+        Cmd::CheckPdfImageSichtbar => {
+            
+            match data.open_page.clone() {
+                Some(_) => { },
+                None => return,
+            }
+            
+            let open_file = match data.open_page.clone() {
+                Some(s) => s,
+                None => { return; },
+            };
+            
+            let file = match data.loaded_files.get(&open_file.0) {
+                Some(s) => s,
+                None => { return; },
+            };
+            
+            let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
+            
+            let temp_ordner = std::env::temp_dir()
+            .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
+            
+            let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
+            let pdftoppm_output_path = if data.konfiguration.vorschau_ohne_geroetet {
+                temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+            } else {
+                temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+            };
+            
+            if !pdftoppm_output_path.exists() {
+                if let Ok(o) = std::fs::read(&file.datei) {
+                    let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
+                        &o, 
+                        &[open_file.1], 
+                        &file.titelblatt, 
+                        !data.konfiguration.vorschau_ohne_geroetet
+                    );
+                }
+            }
+        
+            webview.eval(&format!("replacePdfImage(`{}`)", ui::render_pdf_image(data)));
+        },
         Cmd::CheckForPdfLoaded { file_path, file_name } => {
-            
-            println!("CheckForPdfLoaded {file_name}");
-            
+                        
             let default_parent = Path::new("/");
             let output_parent = Path::new(&file_path).clone().parent().unwrap_or(&default_parent).to_path_buf();
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
@@ -772,6 +836,14 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     );
                     bv_eintrag.set_flurstueck(new_value.clone());
                 },
+                ("bv", "bezeichnung") => {
+                    let mut bv_eintrag = get_mut_or_insert_last(
+                        &mut open_file.analysiert.bestandsverzeichnis.eintraege, 
+                        row, 
+                        BvEintrag::neu(row + 1)
+                    );
+                    bv_eintrag.set_bezeichnung(new_value.clone());
+                },
                 ("bv", "groesse") => {
                     let new_value = match new_value.parse::<u64>().ok() {
                         Some(s) => Some(s),
@@ -828,7 +900,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Eintrag::new(row + 1)
                     );
-                    abt1_eintrag.lfd_nr = new_value.clone();
+                    abt1_eintrag.set_lfd_nr(new_value.clone());
                 },
                 ("abt1", "eigentuemer") => {
                     let mut abt1_eintrag = get_mut_or_insert_last(
@@ -836,23 +908,23 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Eintrag::new(row + 1)
                     );
-                    abt1_eintrag.eigentuemer = new_value.clone();
+                    abt1_eintrag.set_eigentuemer(new_value.clone());
                 },
-                ("abt1", "bv-nr") => {
+                ("abt1-grundlage-eintragung", "bv-nr") => {
                     let mut abt1_eintrag = get_mut_or_insert_last(
-                        &mut open_file.analysiert.abt1.eintraege, 
+                        &mut open_file.analysiert.abt1.grundlagen_eintragungen, 
                         row, 
-                        Abt1Eintrag::new(row + 1)
+                        Abt1GrundEintragung::new()
                     );
                     abt1_eintrag.bv_nr = new_value.clone();
                 },
-                ("abt1", "grundlage-der-eintragung") => {
+                ("abt1-grundlage-eintragung", "text") => {
                     let mut abt1_eintrag = get_mut_or_insert_last(
-                        &mut open_file.analysiert.abt1.eintraege, 
+                        &mut open_file.analysiert.abt1.grundlagen_eintragungen, 
                         row, 
-                        Abt1Eintrag::new(row + 1)
+                        Abt1GrundEintragung::new()
                     );
-                    abt1_eintrag.grundlage_der_eintragung = new_value.clone();
+                    abt1_eintrag.text = new_value.clone();
                 },
                 ("abt1-veraenderung", "lfd-nr") => {
                     let mut abt1_veraenderung = get_mut_or_insert_last(
@@ -1098,7 +1170,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
@@ -1149,6 +1221,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "bv-abschreibung" => insert_after(&mut open_file.analysiert.bestandsverzeichnis.abschreibungen, row, BvAbschreibung::default()),
                 
                 "abt1" => insert_after(&mut open_file.analysiert.abt1.eintraege, row, Abt1Eintrag::new(row + 2)),
+                "abt1-grundlage-eintragung" => insert_after(&mut open_file.analysiert.abt1.grundlagen_eintragungen, row, Abt1GrundEintragung::default()),
                 "abt1-veraenderung" => insert_after(&mut open_file.analysiert.abt1.veraenderungen, row, Abt1Veraenderung::default()),
                 "abt1-loeschung" => insert_after(&mut open_file.analysiert.abt1.loeschungen, row, Abt1Loeschung::default()),
                 
@@ -1168,6 +1241,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "bv-abschreibung" => format!("bv-abschreibung_{}_bv-nr", row + 1),
                 
                 "abt1" => format!("abt1_{}_lfd-nr", row + 1),
+                "abt1-grundlage-eintragung" => format!("abt1-grundlage-eintragung_{}_bv-nr", row + 1),
                 "abt1-veraenderung" => format!("abt1-veraenderung_{}_lfd-nr", row + 1),
                 "abt1-loeschung" => format!("abt1-loeschung_{}_lfd-nr", row + 1),
                 
@@ -1191,7 +1265,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
                        
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
@@ -1285,11 +1359,24 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     open_file.analysiert.abt1.eintraege
                     .get_mut(row)
                     .map(|e| {
+                        let cur = *e.get_manuell_geroetet().get_or_insert_with(|| e.get_automatisch_geroetet());
+                        e.set_manuell_geroetet(Some(!cur));
+                    });
+                },
+                
+                ("abt1-grundlage-eintragung", false) => { 
+                    if !open_file.analysiert.abt1.grundlagen_eintragungen.is_empty() {
+                        open_file.analysiert.abt1.grundlagen_eintragungen.remove(row);
+                    }
+                },
+                ("abt1-grundlage-eintragung", true) => { 
+                    open_file.analysiert.abt1.grundlagen_eintragungen
+                    .get_mut(row)
+                    .map(|e| {
                         let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
-                
                 
                 ("abt1-veraenderung", false) => { 
                     if !open_file.analysiert.abt1.veraenderungen.is_empty() {
@@ -1436,7 +1523,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
     
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
@@ -1485,6 +1572,27 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             data.context_menu_active = None;
             webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+        },
+        Cmd::CheckPdfForErrors => {
+            // TODO Montag!
+            /*
+            let pdf_to_check = data.loaded_files
+            .iter()
+            .filter_map(|(k, v)| {
+                let icon = v.get_icon(&data.loaded_nb, &data.konfiguration)?;
+                Some((k.clone(), icon))
+            })
+            .take(3)
+            .collect::<Vec<_>>();
+            
+            for (k, v) in pdf_to_check {
+                // webview.eval(replaceIcon('');
+            }
+            */
+        },
+        Cmd::ToggleLefisAnalyse => {
+            data.konfiguration.lefis_analyse_einblenden = !data.konfiguration.lefis_analyse_einblenden;
+            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
         },
         Cmd::EditTextKuerzenAbt2Script { script } => {
             data.konfiguration.text_kuerzen_abt2_script = script.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
@@ -2028,8 +2136,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::ZeileNeu { file, page, y } => {
             
-            println!("ZeileNeu: file: {}, page: {}, y: {}", file, page, y);
-
             if data.loaded_files.is_empty() {
                 return;
             }
@@ -2042,8 +2148,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let mut ap = open_file.anpassungen_seite
                 .entry(*page)
                 .or_insert_with(|| AnpassungSeite::default());
-
-            println!("ap: {:#?}", ap);
 
             let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
                 Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
@@ -2059,9 +2163,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
                         
             ap.zeilen.push(y / img_ui_height * page_height);
-            
-            println!("ap.zeilen: {:#?}", ap.zeilen);
-
             ap.zeilen.sort_by(|a, b| ((a * 1000.0) as usize).cmp(&((b * 1000.0) as usize)));
             ap.zeilen.dedup();
 
@@ -2304,8 +2405,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 return;
             }
             
-            let tsv = get_nebenbeteiligte_tsv(&data);
-
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Nebenbeteiligte .TSV speichern unter", 
                 "~/", 
@@ -2322,6 +2421,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
+            let tsv = get_nebenbeteiligte_tsv(&data);
+
             let _ = std::fs::write(&f, tsv.as_bytes());
             
         },
@@ -2352,10 +2453,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 return;
             }
             
-            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
-                get_alle_rechte_html(&data)
-            );
-            
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
                 "~/", 
@@ -2371,6 +2468,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 None => return,
             };
+            
+            
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_rechte_html(&data)
+            );
             
             let _ = std::fs::write(&f, html.as_bytes());
         },
@@ -2379,10 +2481,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if data.loaded_files.is_empty() {
                 return;
             }
-            
-            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
-                get_alle_fehler_html(&data)
-            );
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
@@ -2399,6 +2497,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 None => return,
             };
+            
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_fehler_html(&data)
+            );
             
             let _ = std::fs::write(&f, html.as_bytes());
         },
@@ -2407,10 +2509,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if data.loaded_files.is_empty() {
                 return;
             }
-            
-            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
-                get_alle_abt1_html(&data)
-            );
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
@@ -2428,6 +2526,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_abt1_html(&data)
+            );
+            
             let _ = std::fs::write(&f, html.as_bytes());
         },
         Cmd::ExportAlleTeilbelastungen => {
@@ -2435,10 +2537,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if data.loaded_files.is_empty() {
                 return;
             }
-            
-            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
-                get_alle_teilbelastungen_html(&data)
-            );
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Teilbelastungen .HTML speichern unter", 
@@ -2455,6 +2553,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 None => return,
             };
+            
+            let html = format!("<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>", 
+                get_alle_teilbelastungen_html(&data)
+            );
             
             let _ = std::fs::write(&f, html.as_bytes());
         },
@@ -2622,7 +2724,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file)));
+            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
             webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
             webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
@@ -2832,7 +2934,9 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
 }
 
 fn get_alle_abt1_html(data: &RpcData) -> String {
-
+    
+    use crate::digitalisiere::Abt1Eintrag;
+    
     let mut entries = String::new();
     
     for (f_name, f) in data.loaded_files.iter() {
@@ -2841,7 +2945,7 @@ fn get_alle_abt1_html(data: &RpcData) -> String {
         let nr = &f.titelblatt.blatt;                        
         entries.push_str(&format!("<div><p>{blatt} Nr. {nr}</p>", ));
                     
-        for abt1 in f.analysiert.abt1.eintraege.iter() {
+        for abt1 in f.analysiert.abt1.eintraege.iter().filter_map(|a1| match a1 { Abt1Eintrag::V2(v2) => Some(v2), _ => None, }) {
             if abt1.ist_geroetet() {
                 continue;
             }
@@ -2940,7 +3044,8 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
 
 fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
     std::thread::spawn(move || {
-        for pdf in pdfs {
+        for mut pdf in pdfs {
+            
             rayon::spawn(move || {
             
                 let mut pdf = pdf;
@@ -2958,10 +3063,12 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                 let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
                 let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
 
-                if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                if let Some(mut cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
+                    cached_pdf.analysiert.abt1.migriere_v2();
                     pdf = cached_pdf;
                 }
-                if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                if let Some(mut target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
+                    target_pdf.analysiert.abt1.migriere_v2();
                     pdf = target_pdf;
                 }
                 
@@ -3069,6 +3176,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                     &pdf.pdftotext_layout,
                 );
 
+                pdf.analysiert.abt1.migriere_v2();
                 let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             });
@@ -3079,9 +3187,11 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
 fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
 
     let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite).ok()?;
-    let abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let mut abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    
+    abt1.migriere_v2();
     
     let gb = Grundbuch {
         titelblatt: pdf.titelblatt.clone(),

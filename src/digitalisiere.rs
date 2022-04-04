@@ -2394,6 +2394,13 @@ impl BvEintrag {
             }
         }
     }
+        
+    pub fn set_bezeichnung(&mut self, val: String) {
+        match self {
+            BvEintrag::Flurstueck(flst) => { flst.bezeichnung = if val.is_empty() { None } else { Some(val) }; },
+            BvEintrag::Recht(_) => { },
+        }
+    }
     
     pub fn get_bezeichnung(&self) -> Option<String> {
         match self {
@@ -3484,19 +3491,83 @@ pub fn bv_eintraege_roeten(
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Abteilung1 {
     // Index = lfd. Nr. der Grundstücke
+    #[serde(default)]
     pub eintraege: Vec<Abt1Eintrag>,
+    #[serde(default)]
+    pub grundlagen_eintragungen: Vec<Abt1GrundEintragung>,
+    #[serde(default)]
     pub veraenderungen: Vec<Abt1Veraenderung>,
+    #[serde(default)]
     pub loeschungen: Vec<Abt1Loeschung>,
 }
 
+impl Abteilung1 {
+    pub fn migriere_v2(&mut self) {        
+        let mut grundlage_eintragungen_neu = Vec::new();
+        for e in self.eintraege.iter_mut() {
+            let neu = match e.clone() {
+                Abt1Eintrag::V1(v1) => {                    
+                    let eintragung_neu = Abt1GrundEintragung {
+                        bv_nr: v1.bv_nr,
+                        text: v1.grundlage_der_eintragung,
+                        automatisch_geroetet: false,
+                        manuell_geroetet: None,
+                        position_in_pdf: v1.position_in_pdf.clone(),
+                    };
+                    
+                    grundlage_eintragungen_neu.push(eintragung_neu);
+                    Abt1Eintrag::V2(Abt1EintragV2 {
+                        lfd_nr: v1.lfd_nr,
+                        eigentuemer: v1.eigentuemer,
+                        version: 2,
+                        automatisch_geroetet: v1.automatisch_geroetet,
+                        manuell_geroetet: v1.manuell_geroetet,
+                        position_in_pdf: v1.position_in_pdf,
+                    })
+                },
+                Abt1Eintrag::V2(v2) => Abt1Eintrag::V2(v2),
+            };
+        
+            *e = neu;
+        }
+        
+        self.grundlagen_eintragungen.extend(grundlage_eintragungen_neu.into_iter());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Abt1Eintrag {
+#[serde(untagged)]
+#[repr(C)]
+pub enum Abt1Eintrag {
+    V1(Abt1EintragV1),
+    V2(Abt1EintragV2),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Abt1EintragV2 {
+    // lfd. Nr. der Eintragung
+    pub lfd_nr: usize,
+    // Rechtstext
+    pub eigentuemer: String,
+    // Used to distinguish from Abt1EintragV1
+    pub version: usize,
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Abt1EintragV1 {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
     // Rechtstext
     pub eigentuemer: String,
     // lfd. Nr der betroffenen Grundstücke im Bestandsverzeichnis
-    pub bv_nr: String, // Vec<BvNr>,
+    pub bv_nr: String, 
+    // Vec<BvNr>,
     pub grundlage_der_eintragung: String,
     
     #[serde(default)]
@@ -3507,22 +3578,102 @@ pub struct Abt1Eintrag {
     pub position_in_pdf: Option<PositionInPdf>,
 }
 
-impl Abt1Eintrag {
-    pub fn new(lfd_nr: usize) -> Self { 
-        Abt1Eintrag { 
-            lfd_nr, 
-            eigentuemer: String::new(),
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Abt1GrundEintragung {
+    // lfd. Nr. der Eintragung
+    pub bv_nr: String,
+    // Grundlage der Eintragung
+    pub text: String,
+    
+    #[serde(default)]
+    pub automatisch_geroetet: bool,
+    #[serde(default)]
+    pub manuell_geroetet: Option<bool>,
+    #[serde(default)]
+    pub position_in_pdf: Option<PositionInPdf>,
+}
+
+impl Abt1GrundEintragung {
+    pub fn new() -> Self { 
+        Abt1GrundEintragung { 
             bv_nr: String::new(), 
-            grundlage_der_eintragung: String::new(),
-            
+            text: String::new(),
+
             automatisch_geroetet: false,
             manuell_geroetet: None,
             position_in_pdf: None,
-        } 
+        }
     }
     
     pub fn ist_geroetet(&self) -> bool { 
         self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+impl Abt1EintragV1 {
+    pub fn ist_geroetet(&self) -> bool {
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+impl Abt1EintragV2 {
+    pub fn ist_geroetet(&self) -> bool {
+        self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
+    }
+}
+
+impl Abt1Eintrag {
+    pub fn new(lfd_nr: usize) -> Self { 
+        Abt1Eintrag::V2(Abt1EintragV2 { 
+            lfd_nr, 
+            eigentuemer: String::new(),
+            version: 2,
+            automatisch_geroetet: false,
+            manuell_geroetet: None,
+            position_in_pdf: None,
+        })
+    }
+    
+    pub fn set_lfd_nr(&mut self, lfd_nr: usize) {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.lfd_nr = lfd_nr; },
+            Abt1Eintrag::V2(v2) => { v2.lfd_nr = lfd_nr; },
+        }
+    }
+    
+    pub fn set_manuell_geroetet(&mut self, m: Option<bool>) {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.manuell_geroetet = m; },
+            Abt1Eintrag::V2(v2) => { v2.manuell_geroetet = m; },
+        }
+    }
+    
+    pub fn get_manuell_geroetet(&self) -> Option<bool> {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.manuell_geroetet },
+            Abt1Eintrag::V2(v2) => { v2.manuell_geroetet },
+        }
+    }
+    
+    pub fn get_automatisch_geroetet(&self) -> bool {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.automatisch_geroetet },
+            Abt1Eintrag::V2(v2) => { v2.automatisch_geroetet },
+        }
+    }
+    
+    pub fn set_eigentuemer(&mut self, eigentuemer: String) {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.eigentuemer = eigentuemer; },
+            Abt1Eintrag::V2(v2) =>{ v2.eigentuemer = eigentuemer; },
+        }
+    }
+    
+    pub fn ist_geroetet(&self) -> bool {
+        match self {
+            Abt1Eintrag::V1(v1) => v1.ist_geroetet(),
+            Abt1Eintrag::V2(v2) => v2.ist_geroetet(),
+        }
     }
 }
 
@@ -3563,33 +3714,14 @@ pub fn analysiere_abt1(
                 .map(|t| t.text.trim().to_string())
                 .unwrap_or_default();
                 
-                let bv_nr = s.texte
-                .get(2)
-                .and_then(|zeilen| zeilen.get(i))
-                .map(|t| t.text.trim().to_string())
-                .unwrap_or_default();
-                
-                let bv_nr = s.texte
-                .get(2)
-                .and_then(|zeilen| zeilen.get(i))
-                .map(|t| t.text.trim().to_string())
-                .unwrap_or_default();
-                
-                let grundlage_der_eintragung = s.texte
-                .get(3)
-                .and_then(|zeilen| zeilen.get(i))
-                .map(|t| t.text.trim().to_string())
-                .unwrap_or_default();
-                
-                Abt1Eintrag {
+                Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
                     eigentuemer,
-                    bv_nr,
-                    grundlage_der_eintragung,
+                    version: 2,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
-                }
+                })
             }).collect::<Vec<_>>()
         } else {
             let mut texte = s.texte.clone();
@@ -3624,6 +3756,63 @@ pub fn analysiere_abt1(
                     return None;
                 }
                 
+                Some(Abt1Eintrag::V2(Abt1EintragV2 {
+                    lfd_nr,
+                    eigentuemer,
+                    version: 2,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                    position_in_pdf: None,
+                }))
+            })
+            .collect::<Vec<_>>()
+        }.into_iter()
+    }).collect();
+    
+    let abt1_grundlagen_eintragungen = seiten
+    .iter()
+    .filter(|(num, s)| {
+        s.typ == SeitenTyp::Abt1Vert || 
+        s.typ == SeitenTyp::Abt1Horz
+    }).flat_map(|(seitenzahl, s)| {
+    
+        let zeilen_auf_seite = anpassungen_seite
+            .get(&(*seitenzahl as usize))
+            .map(|aps| aps.zeilen.clone())
+            .unwrap_or_default();
+        
+        if !zeilen_auf_seite.is_empty() {
+            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                
+                let bv_nr = s.texte
+                .get(2)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                let grundlage_der_eintragung = s.texte
+                .get(3)
+                .and_then(|zeilen| zeilen.get(i))
+                .map(|t| t.text.trim().to_string())
+                .unwrap_or_default();
+                
+                Abt1GrundEintragung {
+                    bv_nr,
+                    text: grundlage_der_eintragung,
+                    automatisch_geroetet: false,
+                    manuell_geroetet: None,
+                    position_in_pdf: None,
+                }
+            }).collect::<Vec<_>>()
+        } else {
+            let mut texte = s.texte.clone();
+            texte.get_mut(3).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
+            
+            texte.get(3).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
+                
+                let text_start_y = text.start_y;
+                let text_end_y = text.end_y;
+
                 let bv_nr = get_erster_text_bei_ca(
                     &texte.get(2).unwrap_or(&default_texte), 
                     text_num,
@@ -3638,11 +3827,9 @@ pub fn analysiere_abt1(
                     text_end_y,
                 ).map(|t| t.text.trim().to_string())?;
                 
-                Some(Abt1Eintrag {
-                    lfd_nr,
-                    eigentuemer,
+                Some(Abt1GrundEintragung {
                     bv_nr,
-                    grundlage_der_eintragung,
+                    text: grundlage_der_eintragung,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3652,11 +3839,16 @@ pub fn analysiere_abt1(
         }.into_iter()
     }).collect();
     
-    Ok(Abteilung1 {
+    let mut abt1 = Abteilung1 {
         eintraege: abt1_eintraege,
+        grundlagen_eintragungen: abt1_grundlagen_eintragungen,
         veraenderungen: Vec::new(),
         loeschungen: Vec::new(),
-    })
+    };
+    
+    abt1.migriere_v2();
+    
+    Ok(abt1)
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

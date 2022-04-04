@@ -15,7 +15,10 @@ let rpc = {
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
   export_alle_teilbelastungen: function() { rpc.invoke({ cmd : 'export_alle_teilbelastungen' }); },
-    
+  check_pdf_image_sichtbar: function() { rpc.invoke({ cmd : 'check_pdf_image_sichtbar' }); },
+  toggle_lefis_analyse: function() { rpc.invoke({ cmd : 'toggle_lefis_analyse' }); },
+  check_pdf_for_errors: function() { rpc.invoke({ cmd : 'check_pdf_for_errors' }); },
+
   import_nb:  function() { rpc.invoke({ cmd : 'import_nb' }); },
   export_lefis:  function() { rpc.invoke({ cmd : 'export_lefis' }); },
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
@@ -123,13 +126,19 @@ function stopCheckingForPageLoaded(filename) {
     }
 }
 
-let images_to_load = {};
+setInterval(function(){
+    if (!(document.getElementById("__application_page_img_inner"))) {
+        rpc.check_pdf_image_sichtbar();
+    }
+}, 50);
 
 setInterval(function(){
-    for (const [key, value] of Object.entries(images_to_load)) {
-        rpc.check_for_image_loaded(key, value);
-    }
-}, 1000);
+    rpc.check_pdf_for_errors();
+}, 100);
+
+function toggleLefisAnalyse(event) {
+    rpc.toggle_lefis_analyse();
+}
 
 function startCheckingForImageLoaded(filepath, filename) {
     images_to_load[filepath] = filename;
@@ -1161,6 +1170,15 @@ function zeilePreviewMove(event) {
     zeile.style.transform = "translateY(" + (y - 10.0) + "px)";
 }
 
+
+function replacePdfImage(s) {
+    let img = document.getElementById("__application-pdf-page-image");
+    if (!img)
+        return;
+
+    img.innerHTML = s;
+}
+
 function replacePdfImageZeilen(s) {
     let zeilen = document.getElementById("__application_zeilen");
     if (!zeilen)
@@ -1181,8 +1199,8 @@ function copyToClipboardOnSelectChange(event) {
 
 // Init
 window.onload = function() { rpc.init(); };
-
+/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
-});
+});*/
 

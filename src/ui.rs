@@ -666,6 +666,10 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_DOWNLOAD: &[u8] = include_bytes!("./img/icons8-desktop-download-48.png");
     static ICON_DELETE: &[u8] = include_bytes!("./img/icons8-delete-trash-48.png");
     static ICON_PDF: &[u8] = include_bytes!("./img/icons8-pdf-48.png");
+    static ICON_RECHTE_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-scales-96.png");
+    static ICON_FEHLER_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-high-priority-96.png");
+    static ICON_ABT1_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-person-96.png");
+    static ICON_TEILBELASTUNGEN_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-pass-fail-96.png");
     
     let ribbon_body = format!("
         <div class='__application-ribbon-body'>
@@ -758,7 +762,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_rechte_speichern}'>
                             </div>
                             <div>
                                 <p>Alle Rechte</p>
@@ -770,7 +774,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_alle_fehler(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_fehler_speichern}'>
                             </div>
                             <div>
                                 <p>Alle Fehler</p>
@@ -782,7 +786,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_alle_teilbelastungen(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_teilbelastungen}'>
                             </div>
                             <div>
                                 <p>Alle Teilbelast.</p>
@@ -794,7 +798,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.export_alle_abt1(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_abt1}'>
                             </div>
                             <div>
                                 <p>Alle Abt. 1</p>
@@ -879,7 +883,11 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         icon_download_base64 = base64::encode(ICON_DOWNLOAD),
         icon_delete_base64 = base64::encode(ICON_DELETE),
         icon_export_pdf = base64::encode(ICON_PDF),
-
+        icon_rechte_speichern = base64::encode(ICON_RECHTE_AUSGEBEN),
+        icon_fehler_speichern = base64::encode(ICON_FEHLER_AUSGEBEN),
+        icon_export_teilbelastungen = base64::encode(ICON_TEILBELASTUNGEN_AUSGEBEN),
+        icon_export_abt1 = base64::encode(ICON_ABT1_AUSGEBEN),
+        
         icon_export_csv = base64::encode(ICON_EXPORT_CSV),
         icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS),
     );
@@ -1051,8 +1059,10 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
         None => return String::new(),
     };
     
-    const RELOAD_PNG: &[u8] = include_bytes!("../src/img/icons8-synchronize-48.png");
-    
+    static RELOAD_PNG: &[u8] = include_bytes!("../src/img/icons8-synchronize-48.png");
+    static EXPAND_PNG: &[u8] = include_bytes!("../src/img/icons8-double-left-96.png");
+    static COLLAPSE_PNG: &[u8] = include_bytes!("../src/img/icons8-double-right-96.png");
+
     if !open_file.ist_geladen() {
         normalize_for_js(format!("
                 <div style='height: 100%;padding:10px;display:flex;flex-grow:1;align-items:center;justify-content:center;'>
@@ -1068,23 +1078,22 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                 <div style='height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
                     <div style='display:inline-block;width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
-                        <h4 style='padding:10px;font-size:16px;'>Grundbuch</h4>
-                        <div style='display:flex;flex-grow:1;'></div>
-                        <div style='padding:6px;'>
-                            <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
-                        </div>
+                            <h4 style='padding:10px;font-size:16px;'>Grundbuch</h4>
+                            <div style='display:flex;flex-grow:1;'></div>
+                            <div style='padding:6px;'>
+                                <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
+                            </div>
                         </div>
                     </div>
-                    <div style='display:inline-block;width:50%;overflow:hidden;'>
-                        <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
-                    </div>
+                    {lefis_analyse}
                 </div>
                 <div style='display:flex;flex-grow:1;flex-direction:row;padding:0px;'>
-                    <div style='display:inline-block;width:50%;overflow:scroll;max-height:557px;'>
+                    <div style='display:flex:flex-direction:column;flex-grow:1;overflow:scroll;max-height:525px;'>
                         <div id='__application-bestandsverzeichnis' style='margin:10px;'>{bestandsverzeichnis}</div>
                         <div id='__application-bestandsverzeichnis-veraenderungen' style='margin:10px;'>{bestandsverzeichnis_zuschreibungen}</div>
                         <div id='__application-bestandsverzeichnis-loeschungen' style='margin:10px;'>{bestandsverzeichnis_abschreibungen}</div>
                         <div id='__application-abteilung-1' style='margin:10px;'>{abt_1}</div>
+                        <div id='__application-abteilung-1-grundlagen-eintragungen' style='margin:10px;'>{abt_1_grundlagen_eintragungen}</div>
                         <div id='__application-abteilung-1-veraenderungen' style='margin:10px;'>{abt_1_zuschreibungen}</div>
                         <div id='__application-abteilung-1-loeschungen' style='margin:10px;'>{abt_1_abschreibungen}</div>
                         <div id='__application-abteilung-2' style='margin:10px;'>{abt_2}</div>
@@ -1094,18 +1103,41 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                         <div id='__application-abteilung-3-veraenderungen' style='margin:10px;'>{abt_3_zuschreibungen}</div>
                         <div id='__application-abteilung-3-loeschungen' style='margin:10px;'>{abt_3_abschreibungen}</div>
                     </div>
-                    <div id='__application-analyse-grundbuch' style='display:inline-block;width:50%;overflow:scroll;max-height:557px;'>
-                        {analyse}
-                    </div>
+                    {analyse_grundbuch}
                 </div>
             ",
+            lefis_analyse = if rpc_data.konfiguration.lefis_analyse_einblenden {
+                let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
+                format!("
+                    <div style='display:inline-block;width:50%;overflow:hidden;'>
+                        <div style='display:flex;flex-direction:row;'>
+                            <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
+                            <div style='padding:6px;'>
+                                <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                            </div>
+                        </div>
+                    </div>")
+            } else {
+                let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
+                format!("
+                <div style='display:inline-block;width:50%;overflow:hidden;'>
+                    <div style='display:flex;flex-direction:row;'>
+                        <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
+                        <div style='display:flex;flex-grow:1;'></div>
+                        <div style='padding:6px;'>
+                            <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                        </div>
+                    </div>
+                </div>")
+            },
             
             reload_icon = reload_str,
-            bestandsverzeichnis = render_bestandsverzeichnis(open_file),
+            bestandsverzeichnis = render_bestandsverzeichnis(open_file, &rpc_data.konfiguration),
             bestandsverzeichnis_zuschreibungen = render_bestandsverzeichnis_zuschreibungen(open_file),
             bestandsverzeichnis_abschreibungen = render_bestandsverzeichnis_abschreibungen(open_file),
             
             abt_1 = render_abt_1(open_file),
+            abt_1_grundlagen_eintragungen = render_abt_1_grundlage_eintragungen(open_file),
             abt_1_zuschreibungen = render_abt_1_veraenderungen(open_file),
             abt_1_abschreibungen = render_abt_1_loeschungen(open_file),
             
@@ -1116,8 +1148,15 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3 = render_abt_3(open_file),
             abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
-            
-            analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false),
+            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
+                format!("
+                    <div id='__application-analyse-grundbuch' style='display:inline-block;width:50%;overflow:scroll;max-height:525px;'>
+                        {analyse}
+                    </div>
+                ", analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false))
+            } else {
+                format!("")
+            }
         ))
     }
 }
@@ -1361,7 +1400,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
 
 }
 
-pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
+pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfiguration) -> String {
     
     use crate::digitalisiere::BvEintrag;
 
@@ -1386,7 +1425,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                         <option value='flst' selected='selected'>Flst.</option>
                         <option value='recht'>Recht</option>
                     </select>
-                    <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
+                    <input type='number' style='width: 30px;margin-left:10px;{bv_geroetet}' value='{lfd_nr}' 
                         id='bv_{zeile_nr}_lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
                         oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
@@ -1411,6 +1450,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flurstueck\", event)'
                         oninput='editText(\"bv:{zeile_nr}:flurstueck\", event)'
                     />
+                    {input_beschreibung}
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
                         <button onclick='eintragNeu(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1425,6 +1465,25 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                     flur = format!("{}", flst.flur),
                     flurstueck = format!("{}", flst.flurstueck),
                     gemarkung = flst.gemarkung.clone().unwrap_or_default(),
+                    input_beschreibung = if konfiguration.lefis_analyse_einblenden {
+                        String::new()
+                    } else {
+                        format!("
+                            <textarea rows='2' cols='45' style='width: 320px;{bv_geroetet}'
+                                id='bv_{zeile_nr}_bezeichnung'
+                                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bezeichnung\", event)'
+                                oninput='editText(\"bv:{zeile_nr}:bezeichnung\", event)'
+                            >{flst_beschreibung}</textarea>
+                            <input type='number' style='width: 80px;margin-left:10px;{bv_geroetet}'  value='{groesse}' 
+                                id='bv_{zeile_nr}_groesse'
+                                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:groesse\", event)'
+                                oninput='editText(\"bv:{zeile_nr}:groesse\", event)'
+                            />
+                            ", 
+                            flst_beschreibung = flst.bezeichnung.clone().unwrap_or_default(),
+                            groesse = flst.groesse.get_m2(),
+                        )
+                    }
                 )
             },
             BvEintrag::Recht(recht) => {
@@ -1434,22 +1493,22 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                         <option value='flst'>Flst.</option>
                         <option value='recht' selected='selected'>Recht</option>
                     </select>
-                    <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
+                    <input type='number' style='margin-left:10px;width: 30px;{bv_geroetet}' value='{lfd_nr}' 
                         id='bv_{zeile_nr}_lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
                         oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
                     />
-                    <input type='number' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
+                    <input type='number' placeholder='Bisherige lfd. Nr.' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
                         id='bv_{zeile_nr}_bisherige-lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
                         oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
                     />
-                    <input type='text' style='width: 30px;{bv_geroetet}' value='{zu_nr}' 
+                    <input type='text' placeholder='Gehört zu lfd. Nr. ...' style='width: 30px;{bv_geroetet}' value='{zu_nr}' 
                         id='bv_{zeile_nr}_zu-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:zu-nr\", event)' 
                         oninput='editText(\"bv:{zeile_nr}:zu-nr\", event)'
                     />
-                    <textarea rows='5' cols='45' style='width: 320px;{bv_geroetet}'
+                    <textarea rows='5' placeholder='Text Herrschvermerk' cols='45' style='width: 320px;{bv_geroetet}'
                         id='bv_{zeile_nr}_recht-text'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:recht-text\", event)'
                         oninput='editText(\"bv:{zeile_nr}:recht-text\", event)'
@@ -1460,7 +1519,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
                         <button onclick='eintragRoeten(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
                         <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
                     </div>
-                </div>", 
+                </div>",
                     bv_geroetet = bv_geroetet,
                     zeile_nr = zeile_nr,
                     lfd_nr = format!("{}", recht.lfd_nr),
@@ -1482,9 +1541,20 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile) -> String {
             <p style='width: 160px;'>Gemarkung</p>
             <p style='width: 80px;'>Flur</p>
             <p style='width: 80px;'>Flurstück</p>
+            {p_bezeichnung}
         </div>
         {bv}
-    ", bv = bv))
+    ", 
+        bv = bv, 
+        p_bezeichnung = if konfiguration.lefis_analyse_einblenden { 
+            "" 
+        } else { 
+            "
+            <p style='width: 320px;'>Bezeichnung</p>
+            <p style='width: 80px;'>Größe (m2)</p>
+            " 
+        }
+    ))
 }
 
 pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String {
@@ -1602,7 +1672,14 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
         abt1_eintraege = vec![Abt1Eintrag::new(1)];
     }
     
-    let abt1 = abt1_eintraege.iter().enumerate().map(|(zeile_nr, abt1)| {
+    let abt1 = abt1_eintraege
+    .iter()
+    .enumerate()
+    .filter_map(|(zeile_nr, abt1)| match abt1 {
+        Abt1Eintrag::V1(_) => None,
+        Abt1Eintrag::V2(v2) => Some((zeile_nr, v2)),
+    })
+    .map(|(zeile_nr, abt1)| {
     
         let bv_geroetet = if abt1.ist_geroetet() { 
             "background:rgb(255,195,195);" 
@@ -1625,18 +1702,6 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
                 oninput='editText(\"abt1:{zeile_nr}:eigentuemer\", event)'
             >{eigentuemer}</textarea>
             
-            <input type='text' style='margin-left:10px;width: 60px;{bv_geroetet}' value='{bv_nr}' 
-                id='abt1_{zeile_nr}_bv-nr'
-                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:bv-nr\", event)'
-                oninput='editText(\"abt1:{zeile_nr}:bv-nr\", event)'
-            />
-            
-            <textarea rows='3' cols='25' style='margin-bottom:2px;{bv_geroetet}'
-                id='abt1_{zeile_nr}_grundlage-der-eintragung'
-                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:grundlage-der-eintragung\", event)'
-                oninput='editText(\"abt1:{zeile_nr}:grundlage-der-eintragung\", event)'
-            >{grundlage_der_eintragung}</textarea>
-            
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
                 <button onclick='eintragNeu(\"abt1:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1649,10 +1714,11 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
             zeile_nr = zeile_nr,
             lfd_nr = abt1.lfd_nr,
             eigentuemer = abt1.eigentuemer,
-            bv_nr = abt1.bv_nr,
-            grundlage_der_eintragung = abt1.grundlage_der_eintragung,
         )
-    }).collect::<Vec<String>>().join("\r\n");
+    })
+    
+    .collect::<Vec<String>>()
+    .join("\r\n");
     
     normalize_for_js(format!("
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1</h4>
@@ -1660,6 +1726,67 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
           <div class='__application-table-header'>
             <p style='width: 30px;'>Nr.</p>
             <p style='width: 160px;'>Eigentümer</p>
+          </div>
+          
+          {abt1}", abt1 = abt1))
+}
+
+pub fn render_abt_1_grundlage_eintragungen(open_file: &PdfFile) -> String {
+    use crate::digitalisiere::Abt1GrundEintragung;
+    
+    let mut abt1_eintraege = open_file.analysiert.abt1.grundlagen_eintragungen.clone();
+    if abt1_eintraege.is_empty() {
+        abt1_eintraege = vec![Abt1GrundEintragung::new()];
+    }
+    
+    let abt1 = abt1_eintraege
+    .iter()
+    .enumerate()
+    .map(|(zeile_nr, abt1)| {
+    
+        let bv_geroetet = if abt1.ist_geroetet() { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
+        format!("
+        <div class='__application-abt1-grundlage-eintragung' style='display:flex;margin-top:5px;'>
+        
+            <input type='text' style='width: 60px;{bv_geroetet}' value='{bv_nr}' 
+                id='abt1-grundlage-eintragung_{zeile_nr}_bv-nr'
+                onkeyup='inputOnKeyDown(\"abt1-grundlage-eintragung:{zeile_nr}:bv-nr\", event)'
+                oninput='editText(\"abt1-grundlage-eintragung:{zeile_nr}:bv-nr\", event)'
+            />
+            
+            <textarea rows='3' cols='25' style='margin-bottom:2px;{bv_geroetet}'
+                id='abt1-grundlage-eintragung_{zeile_nr}_text'
+                onkeyup='inputOnKeyDown(\"abt1-grundlage-eintragung:{zeile_nr}:text\", event)'
+                oninput='editText(\"abt1-grundlage-eintragung:{zeile_nr}:text\", event)'
+            >{grundlage_der_eintragung}</textarea>
+            
+            <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                <div style='display:flex;flex-grow:1'></div>
+                <button onclick='eintragNeu(\"abt1-grundlage-eintragung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
+                <button onclick='eintragRoeten(\"abt1-grundlage-eintragung:{zeile_nr}\")' tabindex='-1' class='btn btn_roeten'>röten</button>
+                <button onclick='eintragLoeschen(\"abt1-grundlage-eintragung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
+            </div>
+            
+        </div>", 
+            bv_geroetet = bv_geroetet,
+            zeile_nr = zeile_nr,
+            bv_nr = abt1.bv_nr,
+            grundlage_der_eintragung = abt1.text,
+        )
+    })
+    
+    .collect::<Vec<String>>()
+    .join("\r\n");
+    
+    normalize_for_js(format!("
+           <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Grundlagen der Eintragungen</h4>
+          
+          <div class='__application-table-header'>
             <p style='width: 60px;'>BV-Nr.</p>
             <p style='width: 160px;'>Grundlage d. Eintragung</p>
           </div>
@@ -2171,18 +2298,6 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     } else {
         temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
     };
-    
-    if !pdftoppm_output_path.exists() {
-        if let Ok(o) = std::fs::read(&file.datei) {
-            /*
-            let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
-                &o, 
-                &[open_file.1], 
-                &file.titelblatt, 
-                !rpc_data.konfiguration.vorschau_ohne_geroetet
-            );*/
-        }
-    }
     
     let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
         Ok(o) => o,
