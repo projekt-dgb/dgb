@@ -132,9 +132,11 @@ setInterval(function(){
     }
 }, 100);
 
-setInterval(function(){
-    rpc.check_pdf_for_errors();
-}, 100);
+function startCheckingForPdfErrors() {
+    setInterval(function(){
+        rpc.check_pdf_for_errors();
+    }, 1278);
+}
 
 function toggleLefisAnalyse(event) {
     rpc.toggle_lefis_analyse();
@@ -447,17 +449,23 @@ function openContextMenu(e) {
 function replaceIcon(id, data) {
 
     let icon = document.getElementById("__application_file_icon-" + id);
-    
+    let icon_inner = document.getElementById("__application_file_icon-inner-" + id);
+
     if (!icon) {
         return;
     }
-
-    let icon_html = "<img id='__application_file_icon-inner-" + id;
-    icon_html += "' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='";
-    icon_html += id;
-    icon_html += "' src='" + data + "'></img>";
-
-    icon.innerHTML = icon_html;
+    
+    if (icon_inner) {
+        icon_inner.remove();
+    }
+    
+    let new_icon = window.document.createElement('img');
+    new_icon.id = "__application_file_icon-inner-" + id;
+    new_icon.style = "width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;";
+    new_icon.src = data;
+    new_icon["data-fileName"] = id;
+    
+    icon.appendChild(new_icon);
 }
 
 function replacePopOver(s) {

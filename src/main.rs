@@ -208,9 +208,7 @@ impl PdfFile {
     }
     
     pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
-        
-        println!("get_icon!");
-        
+                
         if !self.ist_geladen() {
             return None;
         }
@@ -577,7 +575,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     }
                 };
                 
-                println!("lese seitenzahlen...");
                 let mut seitenzahlen = match digitalisiere::lese_seitenzahlen(&datei_bytes) {
                     Ok(o) => o,
                     Err(e) => {
@@ -587,7 +584,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
 
-                println!("lese titelblatt...");
                 let titelblatt = match digitalisiere::lese_titelblatt(&datei_bytes) {
                     Ok(o) => o,
                     Err(_) => {
@@ -650,21 +646,16 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 }
             }
             
-            println!("replaceEntireScreen...");
             let html_inner = ui::render_entire_screen(data);
-            println!("html inner done!");
             webview.eval(&format!("replaceEntireScreen(`{}`)", html_inner));
-            
-            println!("ok done");
-            
+            webview.eval("startCheckingForPdfErrors()");
+
             for pdf_parsed in &pdf_zu_laden {
                 let default_parent = Path::new("/");
                 let output_parent = Path::new(&pdf_parsed.datei).parent().unwrap_or(&default_parent).to_path_buf();
                 let file_name = format!("{}_{}", pdf_parsed.titelblatt.grundbuch_von, pdf_parsed.titelblatt.blatt);
                 let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-                println!("startCheckingForPageLoaded...");
                 webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
-                println!("ok...");
             }
                         
             digitalisiere_dateien(pdf_zu_laden);
@@ -1590,12 +1581,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::CheckPdfForErrors => {
-            
             let mut new_icons = BTreeMap::new();
             let mut icon_count = 0;
             
             for (k, v) in data.loaded_files.iter() {
-                if icon_count > 3 {
+                if icon_count >= 1 {
                     break;
                 }
                 
@@ -1612,12 +1602,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             for (k, v) in new_icons {
                 if let Some(s) = data.loaded_files.get_mut(&k.clone()) {
                     s.icon = Some(v);
-                }
-            }
-                                    
-            for (k, v) in data.loaded_files.iter() {
-                if let Some(i) = v.icon.as_ref() {
-                    webview.eval(&format!("replaceIcon(`{}`, `{}`)", k, i.get_base64()));
+                    webview.eval(&format!("replaceIcon(`{}`, `{}`)", k, v.get_base64()));
                 }
             }
         },
@@ -1973,13 +1958,16 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Ok(json) = serde_json::to_string_pretty(&open_file) {
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
-            
-            println!("replace entire screen!");
-            
+                        
             webview.eval(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
 
         },
         Cmd::ClosePopOver { } => {
+            if data.configuration_active {
+                for (k, v) in data.loaded_files.iter_mut() {
+                    v.icon = None;
+                }
+            }
             data.context_menu_active = None;
             data.configuration_active = false;
             data.info_active = false;
