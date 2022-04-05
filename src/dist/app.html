@@ -1735,10 +1735,14 @@ img {
 
 #__application-main input {
   margin-right: 10px;
-  margin-bottom: 2px;
-  font-family: sans-serif;
-  border: 1px solid grey;
-  font-size: 1.2em;
+  font-family: monospace;
+  border: 1px solid rgba(255, 255, 255, 0);
+  font-size: 16px;
+  cursor: text;
+}
+
+#__application-main input:hover {
+    border: 1px solid rgba(25, 25, 25, 1);
 }
 
 #__application-main textarea {
@@ -1846,6 +1850,40 @@ img {
 .disabled {
     filter: grayscale(100%) brightness(150%);
 }
+
+.__application-bestandsverzeichnis-eintrag,
+.__application-abt1-eintrag,
+.__application-abt1-grundlage-eintragung,
+.__application-abt2-eintrag,
+.__application-abt3-eintrag {
+   padding: 2px;
+}
+
+.__application-bestandsverzeichnis-eintrag:hover,
+.__application-abt1-eintrag:hover,
+.__application-abt1-grundlage-eintragung:hover,
+.__application-abt2-eintrag:hover,
+.__application-abt3-eintrag:hover {
+    background: rgb(245, 245, 245);
+}
+
+.stringorlines-textfield {
+  margin-right: 10px;
+  font-family: monospace;
+  border: 1px solid rgba(255, 255, 255, 0);
+  font-size: 16px;
+  cursor: text;
+}
+
+.stringorlines-textfield > p {
+  font-family: monospace;
+  font-size: 16px;
+  cursor: text;
+}
+
+.stringorlines-textfield:hover {
+    border: 1px solid rgba(25, 25, 25, 1);
+}
 </style>
         <script type="text/javascript">
 "use strict";
@@ -1872,6 +1910,7 @@ let rpc = {
   export_lefis:  function() { rpc.invoke({ cmd : 'export_lefis' }); },
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
+  open_help: function() { rpc.invoke({ cmd : 'open_help' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
@@ -1954,6 +1993,7 @@ let tab_functions = {
     export_lefis: function(event) { rpc.export_lefis() },
     export_pdf: function(event) { rpc.export_pdf() },
     open_configuration: function(event) { rpc.open_configuration() },
+    open_help: function(event) { rpc.open_help() },
     open_info: function(event) { rpc.open_info() },
 };
 

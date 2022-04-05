@@ -2540,6 +2540,7 @@ pub enum StringOrLines {
 }
 
 impl StringOrLines {
+
     // id: bv_{zeile_nr}_bezeichnung
     // width:
     // bv_geroetet
@@ -2560,7 +2561,7 @@ impl StringOrLines {
         };
         
         format!("
-            <div class='stringorlines-textfield' style='width: {width}px;{bv_geroetet}' 
+            <div class='stringorlines-textfield' style='font-size:16px;min-width: {width}px;{bv_geroetet}' 
                 onkeydown='insertTabAtCaret(event);' 
                 oninput='editStringOrLines(event, input_id);' 
                 id='{id}' 

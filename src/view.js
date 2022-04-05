@@ -23,6 +23,7 @@ let rpc = {
   export_lefis:  function() { rpc.invoke({ cmd : 'export_lefis' }); },
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
+  open_help: function() { rpc.invoke({ cmd : 'open_help' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
@@ -105,6 +106,7 @@ let tab_functions = {
     export_lefis: function(event) { rpc.export_lefis() },
     export_pdf: function(event) { rpc.export_pdf() },
     open_configuration: function(event) { rpc.open_configuration() },
+    open_help: function(event) { rpc.open_help() },
     open_info: function(event) { rpc.open_info() },
 };
 

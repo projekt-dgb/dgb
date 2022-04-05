@@ -38,9 +38,7 @@ pub mod pdf;
 pub struct RpcData {
     // UI
     pub active_tab: usize,
-    pub configuration_active: bool,
-    pub info_active: bool,
-    pub context_menu_active: Option<ContextMenuData>,
+    pub popover_state: Option<PopoverState>,
     pub open_page: Option<(FileName, u32)>,
     
     pub loaded_files: BTreeMap<FileName, PdfFile>,
@@ -51,7 +49,24 @@ pub struct RpcData {
     pub konfiguration: Konfiguration,
 }
 
-#[derive(Debug, Clone)]
+impl RpcData {
+    pub fn is_context_menu_open(&self) -> bool {
+        match self.popover_state {
+            Some(PopoverState::ContextMenu(_)) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
+pub enum PopoverState {
+    ContextMenu(ContextMenuData),
+    Info,
+    Configuration,
+    Help,
+}
+
+#[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
 pub struct ContextMenuData {
     pub x: f32,
     pub y: f32,
@@ -101,9 +116,7 @@ impl Default for RpcData {
         Self {
             active_tab: 0,
             open_page: None,
-            configuration_active: false,
-            info_active: false,
-            context_menu_active: None,
+            popover_state: None,
             loaded_files: BTreeMap::new(),
             back_forward: BTreeMap::new(),
             loaded_nb: Vec::new(),
@@ -391,6 +404,8 @@ pub enum Cmd {
     OpenConfiguration,
     #[serde(rename = "open_info")]
     OpenInfo,
+    #[serde(rename = "open_help")]
+    OpenHelp,
     #[serde(rename = "close_file")]
     CloseFile { file_name: String },
     #[serde(rename = "klassifiziere_seite_neu")]
@@ -1555,32 +1570,28 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }})();", next_focus));
         },
         Cmd::OpenContextMenu { x, y, seite } => {
-            data.context_menu_active = Some(ContextMenuData {
+            data.popover_state = Some(PopoverState::ContextMenu(ContextMenuData {
                 x: *x,
                 y: *y,
                 seite_ausgewaehlt: *seite,
-            });
-            data.info_active = false;
-            data.configuration_active = false;
+            }));
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenConfiguration => {
-            data.context_menu_active = None;
-            data.configuration_active = true;
-            data.info_active = false;
+            data.popover_state = Some(PopoverState::Configuration);
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenInfo => {
-            data.context_menu_active = None;
-            data.configuration_active = false;
-            data.info_active = true;
+            data.popover_state = Some(PopoverState::Info);
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+        },
+        Cmd::OpenHelp => {
+            data.popover_state = Some(PopoverState::Help);
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::CloseFile { file_name } => {
             let _ = data.loaded_files.remove(file_name);
-            data.info_active = false;
-            data.configuration_active = false;
-            data.context_menu_active = None;
+            data.popover_state = None;
             webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
             webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
@@ -1941,11 +1952,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "abt3-vert" => Abt3Vert,
                 _ => { return; },
             };
-            
-            println!("klassifiziere seite neu: {} - {:?}", *seite, seiten_typ_neu);
-            
+                        
             open_file.klassifikation_neu.insert(*seite, seiten_typ_neu);
-            data.context_menu_active = None;            
+            data.popover_state = None;            
             
             println!("{:#?}", open_file.klassifikation_neu);
             
@@ -1967,15 +1976,14 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
         },
         Cmd::ClosePopOver { } => {
-            if data.configuration_active {
+            if data.popover_state == Some(PopoverState::Configuration) {
                 for (k, v) in data.loaded_files.iter_mut() {
                     v.icon = None;
                 }
+                webview.eval(&format!("replaceFileList(`{}`)", ui::render_file_list(data)));
             }
-            data.context_menu_active = None;
-            data.configuration_active = false;
-            data.info_active = false;
-            webview.eval(&format!("replacePopOver(`{}`)", String::new()));
+            data.popover_state = None;
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::Undo => {
             println!("undo");
