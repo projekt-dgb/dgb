@@ -781,7 +781,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_lfd_nr(new_value.clone());
+                    bv_eintrag.set_lfd_nr(new_value.clone().into());
                 },
                 ("bv", "bisherige-lfd-nr") => {
                     let new_value = match new_value.parse::<usize>().ok() {
@@ -793,7 +793,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_bisherige_lfd_nr(new_value.clone());
+                    bv_eintrag.set_bisherige_lfd_nr(new_value.clone().into());
                 },
                 ("bv", "zu-nr") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -801,7 +801,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_zu_nr(new_value.clone());
+                    bv_eintrag.set_zu_nr(new_value.clone().into());
                 },
                 ("bv", "recht-text") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -809,7 +809,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_recht_text(new_value.clone());
+                    bv_eintrag.set_recht_text(new_value.clone().into());
                 },
                 ("bv", "gemarkung") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -820,7 +820,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     bv_eintrag.set_gemarkung(if new_value.trim().is_empty() { 
                         None 
                     } else { 
-                        Some(new_value.clone()) 
+                        Some(new_value.clone().into()) 
                     });
                 },
                 ("bv", "flur") => {
@@ -833,7 +833,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_flur(new_value.clone());
+                    bv_eintrag.set_flur(new_value.clone().into());
                 },
                 ("bv", "flurstueck") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -841,7 +841,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_flurstueck(new_value.clone());
+                    bv_eintrag.set_flurstueck(new_value.clone().into());
                 },
                 ("bv", "bezeichnung") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -849,7 +849,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvEintrag::neu(row + 1)
                     );
-                    bv_eintrag.set_bezeichnung(new_value.clone());
+                    bv_eintrag.set_bezeichnung(new_value.clone().into());
                 },
                 ("bv", "groesse") => {
                     let new_value = match new_value.parse::<u64>().ok() {
@@ -870,7 +870,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         BvZuschreibung::default()
                     );
                     
-                    bv_eintrag.bv_nr = new_value.clone();
+                    bv_eintrag.bv_nr = new_value.clone().into();
                 },
                 ("bv-zuschreibung", "text") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -878,7 +878,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvZuschreibung::default()
                     );
-                    bv_eintrag.text = new_value.clone();
+                    bv_eintrag.text = new_value.clone().into();
                 },
                 ("bv-abschreibung", "bv-nr") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -886,7 +886,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvAbschreibung::default()
                     );
-                    bv_eintrag.bv_nr = new_value.clone();
+                    bv_eintrag.bv_nr = new_value.clone().into();
                 },
                 ("bv-abschreibung", "text") => {
                     let mut bv_eintrag = get_mut_or_insert_last(
@@ -894,7 +894,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         BvAbschreibung::default()
                     );
-                    bv_eintrag.text = new_value.clone();
+                    bv_eintrag.text = new_value.clone().into();
                 },
                 
                 ("abt1", "lfd-nr") => {
@@ -907,7 +907,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Eintrag::new(row + 1)
                     );
-                    abt1_eintrag.set_lfd_nr(new_value.clone());
+                    abt1_eintrag.set_lfd_nr(new_value.clone().into());
                 },
                 ("abt1", "eigentuemer") => {
                     let mut abt1_eintrag = get_mut_or_insert_last(
@@ -915,7 +915,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Eintrag::new(row + 1)
                     );
-                    abt1_eintrag.set_eigentuemer(new_value.clone());
+                    abt1_eintrag.set_eigentuemer(new_value.clone().into());
                 },
                 ("abt1-grundlage-eintragung", "bv-nr") => {
                     let mut abt1_eintrag = get_mut_or_insert_last(
@@ -923,7 +923,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1GrundEintragung::new()
                     );
-                    abt1_eintrag.bv_nr = new_value.clone();
+                    abt1_eintrag.bv_nr = new_value.clone().into();
                 },
                 ("abt1-grundlage-eintragung", "text") => {
                     let mut abt1_eintrag = get_mut_or_insert_last(
@@ -931,7 +931,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1GrundEintragung::new()
                     );
-                    abt1_eintrag.text = new_value.clone();
+                    abt1_eintrag.text = new_value.clone().into();
                 },
                 ("abt1-veraenderung", "lfd-nr") => {
                     let mut abt1_veraenderung = get_mut_or_insert_last(
@@ -939,7 +939,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Veraenderung::default()
                     );
-                    abt1_veraenderung.lfd_nr = new_value.clone();
+                    abt1_veraenderung.lfd_nr = new_value.clone().into();
                 },
                 ("abt1-veraenderung", "text") => {
                     let mut abt1_veraenderung = get_mut_or_insert_last(
@@ -947,7 +947,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Veraenderung::default()
                     );
-                    abt1_veraenderung.text = new_value.clone();
+                    abt1_veraenderung.text = new_value.clone().into();
                 },
                 ("abt1-loeschung", "lfd-nr") => {
                     let mut abt1_loeschung = get_mut_or_insert_last(
@@ -955,7 +955,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Loeschung::default()
                     );
-                    abt1_loeschung.lfd_nr = new_value.clone();
+                    abt1_loeschung.lfd_nr = new_value.clone().into();
                 },
                 ("abt1-loeschung", "text") => {
                     let mut abt1_loeschung = get_mut_or_insert_last(
@@ -963,7 +963,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt1Loeschung::default()
                     );
-                    abt1_loeschung.text = new_value.clone();
+                    abt1_loeschung.text = new_value.clone().into();
                 },
                 
                 ("abt2", "lfd-nr") => {
@@ -976,7 +976,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Eintrag::new(row + 1)
                     );
-                    abt2_eintrag.lfd_nr = new_value.clone();
+                    abt2_eintrag.lfd_nr = new_value.clone().into();
                 },
                 ("abt2", "bv-nr") => {
                     let mut abt2_eintrag = get_mut_or_insert_last(
@@ -984,7 +984,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Eintrag::new(row + 1)
                     );
-                    abt2_eintrag.bv_nr = new_value.clone();
+                    abt2_eintrag.bv_nr = new_value.clone().into();
                 },
                 ("abt2", "text") => {
                     let mut abt2_eintrag = get_mut_or_insert_last(
@@ -992,7 +992,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Eintrag::new(row + 1)
                     );
-                    abt2_eintrag.text = new_value.clone();
+                    abt2_eintrag.text = new_value.clone().into();
                 },
                 ("abt2-veraenderung", "lfd-nr") => {
                     let mut abt2_veraenderung = get_mut_or_insert_last(
@@ -1000,7 +1000,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Veraenderung::default()
                     );
-                    abt2_veraenderung.lfd_nr = new_value.clone();
+                    abt2_veraenderung.lfd_nr = new_value.clone().into();
                 },
                 ("abt2-veraenderung", "text") => {
                     let mut abt2_veraenderung = get_mut_or_insert_last(
@@ -1008,7 +1008,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Veraenderung::default()
                     );
-                    abt2_veraenderung.text = new_value.clone();
+                    abt2_veraenderung.text = new_value.clone().into();
                 },
                 ("abt2-loeschung", "lfd-nr") => {
                     let mut abt2_loeschung = get_mut_or_insert_last(
@@ -1016,7 +1016,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Loeschung::default()
                     );
-                    abt2_loeschung.lfd_nr = new_value.clone();
+                    abt2_loeschung.lfd_nr = new_value.clone().into();
                 },
                 ("abt2-loeschung", "text") => {
                     let mut abt2_loeschung = get_mut_or_insert_last(
@@ -1024,7 +1024,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt2Loeschung::default()
                     );
-                    abt2_loeschung.text = new_value.clone();
+                    abt2_loeschung.text = new_value.clone().into();
                 },
                 
                 ("abt3", "lfd-nr") => {
@@ -1045,7 +1045,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Eintrag::new(row + 1)
                     );
-                    abt3_eintrag.bv_nr = new_value.clone();
+                    abt3_eintrag.bv_nr = new_value.clone().into();
                 },
                 ("abt3", "betrag") => {
                     let mut abt3_eintrag = get_mut_or_insert_last(
@@ -1053,7 +1053,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Eintrag::new(row + 1)
                     );
-                    abt3_eintrag.betrag = new_value.clone();
+                    abt3_eintrag.betrag = new_value.clone().into();
                 },
                 ("abt3", "text") => {
                     let mut abt3_eintrag = get_mut_or_insert_last(
@@ -1061,7 +1061,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Eintrag::new(row + 1)
                     );
-                    abt3_eintrag.text = new_value.clone();
+                    abt3_eintrag.text = new_value.clone().into();
                 },
                 ("abt3-veraenderung", "lfd-nr") => {
                     let mut abt3_veraenderung = get_mut_or_insert_last(
@@ -1069,7 +1069,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Veraenderung::default()
                     );
-                    abt3_veraenderung.lfd_nr = new_value.clone();
+                    abt3_veraenderung.lfd_nr = new_value.clone().into();
                 },
                 ("abt3-veraenderung", "betrag") => {
                     let mut abt3_veraenderung = get_mut_or_insert_last(
@@ -1077,7 +1077,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Veraenderung::default()
                     );
-                    abt3_veraenderung.betrag = new_value.clone();
+                    abt3_veraenderung.betrag = new_value.clone().into();
                 },
                 ("abt3-veraenderung", "text") => {
                     let mut abt3_veraenderung = get_mut_or_insert_last(
@@ -1085,7 +1085,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Veraenderung::default()
                     );
-                    abt3_veraenderung.text = new_value.clone();
+                    abt3_veraenderung.text = new_value.clone().into();
                 },
                 ("abt3-loeschung", "lfd-nr") => {
                     let mut abt3_loeschung = get_mut_or_insert_last(
@@ -1093,7 +1093,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Loeschung::default()
                     );
-                    abt3_loeschung.lfd_nr = new_value.clone();
+                    abt3_loeschung.lfd_nr = new_value.clone().into();
                 },             
                 ("abt3-loeschung", "betrag") => {
                     let mut abt3_loeschung = get_mut_or_insert_last(
@@ -1101,7 +1101,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Loeschung::default()
                     );
-                    abt3_loeschung.betrag = new_value.clone();
+                    abt3_loeschung.betrag = new_value.clone().into();
                 },
                 ("abt3-loeschung", "text") => {
                     let mut abt3_loeschung = get_mut_or_insert_last(
@@ -1109,7 +1109,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         row, 
                         Abt3Loeschung::default()
                     );
-                    abt3_loeschung.text = new_value.clone();
+                    abt3_loeschung.text = new_value.clone().into();
                 },
                 
                 _ => { return; }
@@ -1997,7 +1997,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             page_height,
         } => {
             
-            use std::env::temp_dir;
             use std::fs::File;
             use std::process::Command;
             use image::ImageOutputFormat;
@@ -2958,9 +2957,7 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
 }
 
 fn get_alle_abt1_html(data: &RpcData) -> String {
-    
-    use crate::digitalisiere::Abt1Eintrag;
-    
+        
     let mut entries = String::new();
     
     for (f_name, f) in data.loaded_files.iter() {
@@ -2974,7 +2971,7 @@ fn get_alle_abt1_html(data: &RpcData) -> String {
                 continue;
             }
             let lfd_nr = &abt1.lfd_nr;
-            let text = &abt1.eigentuemer;
+            let text = &abt1.eigentuemer.text();
             entries.push_str(&format!("<div><p>{lfd_nr}</p><p>{text}</p></div>"));
         }
         
@@ -3244,9 +3241,7 @@ fn reload_grundbuch(pdf: PdfFile) {
 }
 
 fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
-    
-    use rayon::prelude::*;
-    
+        
     let datei_bytes = match fs::read(&pdf.datei) {
         Ok(s) => s,
         Err(e) => return Err(Fehler::Io(pdf.datei.clone(), e)),

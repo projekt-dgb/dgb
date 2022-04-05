@@ -1,5 +1,5 @@
 {
-  "spalten_ausblenden": true,
+  "spalten_ausblenden": false,
   "zeilenumbrueche_in_ocr_text": false,
   "vorschau_ohne_geroetet": false,
   "regex": {

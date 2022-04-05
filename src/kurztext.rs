@@ -16,7 +16,12 @@ pub struct KurzTextAbt2 {
     pub eingetragen_am: Option<String>,
 }
 
-pub fn text_kuerzen_abt2(recht_id: &str, input: &str, fehler: &mut Vec<String>, konfiguration: &Konfiguration) -> KurzTextAbt2 {
+pub fn text_kuerzen_abt2(
+    recht_id: &str, 
+    input: &str, 
+    fehler: &mut Vec<String>, 
+    konfiguration: &Konfiguration
+) -> KurzTextAbt2 {
     
     let (text_sauber, saetze_clean) = match text_saubern(input, konfiguration) {
         Ok(o) => o,

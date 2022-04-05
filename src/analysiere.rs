@@ -1,8 +1,8 @@
 use crate::{Grundbuch, Titelblatt, Konfiguration};
-use crate::digitalisiere::{Nebenbeteiligter, NebenbeteiligterExtra, BvEintrag, Bestandsverzeichnis};
+use crate::digitalisiere::{Nebenbeteiligter, NebenbeteiligterExtra, BvEintrag};
 use crate::kurztext::{self, SchuldenArt, RechteArt};
 use serde_derive::{Serialize, Deserialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use pyo3::{Python, pyclass, pymethods};
 use crate::get_or_insert_regex;
 use std::fmt;
@@ -179,10 +179,10 @@ pub fn analysiere_grundbuch<'py>(
         
         for v in grundbuch.abt2.veraenderungen.iter() {
             
-            let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr) {
+            let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
                 Ok(s) => s,
                 Err(e) => {
-                    fehler.push(format!("Konnte Abt. 2 Veränderung nicht lesen: {}: {}", v.lfd_nr, e));
+                    fehler.push(format!("Konnte Abt. 2 Veränderung nicht lesen: {}: {}", v.lfd_nr.text(), e));
                     Vec::new()
                 },
             };
@@ -195,10 +195,10 @@ pub fn analysiere_grundbuch<'py>(
         // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
         if !eintrag_veraenderungen.is_empty() {
             for v in eintrag_veraenderungen.iter() {
-                warnungen.push(format!("Veränderungsmitteilung beachten:<br/>{}", v));
+                warnungen.push(format!("Veränderungsmitteilung beachten:<br/>{}", v.text()));
                 if eintrag.text.contains("Rang") || eintrag.text.contains("Gleichrang") {
                     eintrag.text.push_str(" ");
-                    eintrag.text.push_str(v);
+                    eintrag.text.push_str(&v.text());
                     eintrag.text.push_str("\r\n");
                 }
             }
@@ -209,13 +209,13 @@ pub fn analysiere_grundbuch<'py>(
         let lfd_nr = eintrag.lfd_nr;
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
         
-        let kt = kurztext::text_kuerzen_abt2(&recht_id, &eintrag.text, &mut fehler, konfiguration);
+        let kt = kurztext::text_kuerzen_abt2(&recht_id, &eintrag.text.text(), &mut fehler, konfiguration);
         let mut lastend_an = Vec::new();
         let mut debug_log = String::new();
         let belastete_flurstuecke = match Python::with_gil(|py| {
             get_belastete_flurstuecke(
                 py,
-                &eintrag.bv_nr, 
+                &eintrag.bv_nr.text(), 
                 &kt.text_sauber, 
                 &grundbuch.titelblatt,
                 &grundbuch.bestandsverzeichnis.eintraege,
@@ -291,7 +291,7 @@ pub fn analysiere_grundbuch<'py>(
             rechteart,
             rechtsinhaber,
             rangvermerk,
-            spalte_2: eintrag.bv_nr.clone(),
+            spalte_2: eintrag.bv_nr.clone().text(),
             belastete_flurstuecke,
             lastend_an,
             text_original: kt.text_sauber,
@@ -314,10 +314,10 @@ pub fn analysiere_grundbuch<'py>(
         
         for v in grundbuch.abt3.veraenderungen.iter() {
             
-            let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr) {
+            let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
                 Ok(s) => s,
                 Err(e) => {
-                    fehler.push(format!("Konnte Abt. 3 Veränderung nicht lesen: {}: {}", v.lfd_nr, e));
+                    fehler.push(format!("Konnte Abt. 3 Veränderung nicht lesen: {}: {}", v.lfd_nr.text(), e));
                     Vec::new()
                 },
             };
@@ -329,7 +329,7 @@ pub fn analysiere_grundbuch<'py>(
                     
         // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
         if !eintrag_veraenderungen.is_empty() {
-            warnungen.push(format!("Veränderungsmittelungen Abt.3 beachten!: {}", eintrag_veraenderungen.join("\r\n")));
+            warnungen.push(format!("Veränderungsmittelungen Abt.3 beachten!: {}", eintrag_veraenderungen.iter().map(|q| q.text()).collect::<Vec<_>>().join("\r\n")));
             for v in eintrag_veraenderungen.iter() {
                 if eintrag.text.contains("Rang") || 
                     eintrag.text.contains("Gleichrang") || 
@@ -337,7 +337,7 @@ pub fn analysiere_grundbuch<'py>(
                     eintrag.text.contains("Gesamthaft") {
                     
                     eintrag.text.push_str(" ");
-                    eintrag.text.push_str(v);
+                    eintrag.text.push_str(&v.text());
                     eintrag.text.push_str("\r\n");
                 }
             }
@@ -348,13 +348,13 @@ pub fn analysiere_grundbuch<'py>(
         let lfd_nr = eintrag.lfd_nr;
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
         
-        let kt = kurztext::text_kuerzen_abt3(&recht_id, &eintrag.betrag, &eintrag.text, &mut fehler, konfiguration);
+        let kt = kurztext::text_kuerzen_abt3(&recht_id, &eintrag.betrag.text(), &eintrag.text.text(), &mut fehler, konfiguration);
         let mut lastend_an = Vec::new();
         let mut debug_log = String::new();
         let belastete_flurstuecke = match Python::with_gil(|py| {
             get_belastete_flurstuecke(
                 py,
-                &eintrag.bv_nr, 
+                &eintrag.bv_nr.text(), 
                 &kt.text_sauber, 
                 &grundbuch.titelblatt,
                 &grundbuch.bestandsverzeichnis.eintraege,
@@ -407,7 +407,7 @@ pub fn analysiere_grundbuch<'py>(
             schuldenart,
             rechtsinhaber,
             betrag: kt.betrag,
-            spalte_2: eintrag.bv_nr.clone(),
+            spalte_2: eintrag.bv_nr.clone().text(),
             belastete_flurstuecke,
             lastend_an,
             text_original: kt.text_sauber,
@@ -723,7 +723,7 @@ pub fn get_belastete_flurstuecke_python<'py>(
 ) -> Result<Vec<Spalte1Eintrag>, String> {
     
     use pyo3::prelude::*;
-    use pyo3::types::{PyDict, PyList, PyTuple};
+    use pyo3::types::{PyDict, PyTuple};
         
     let script = konfiguration
         .flurstuecke_auslesen_script

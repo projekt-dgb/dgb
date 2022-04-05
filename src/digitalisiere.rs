@@ -1617,7 +1617,12 @@ pub fn formatiere_seitenzahl(zahl: u32, max_seiten: u32) -> String {
 }
 
 // Lässt die Schrifterkennung über die Spalten laufen, Ausgabe in .hocr Dateien
-pub fn ocr_spalten(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32, spalten: &[Column]) -> Result<(), Fehler> {
+pub fn ocr_spalten(
+    titelblatt: &Titelblatt, 
+    seitenzahl: u32, 
+    max_seitenzahl: u32, 
+    spalten: &[Column]
+) -> Result<(), Fehler> {
     
     use std::path::Path;
     
@@ -1697,7 +1702,9 @@ pub struct Textblock {
     pub end_x: f32,
 }
 
-pub fn zeilen_aus_tesseract_hocr(tesseract_hocr_path: String) -> Result<Vec<String>, Fehler> {
+pub fn zeilen_aus_tesseract_hocr(
+    tesseract_hocr_path: String
+) -> Result<Vec<String>, Fehler> {
     
     use kuchiki::traits::TendrilSink;
 
@@ -1745,8 +1752,6 @@ pub fn textbloecke_aus_spalten(
     pdftotext: &PdfToTextLayout,
     anpassungen_seite: Option<&AnpassungSeite>,
 ) -> Result<Vec<Vec<Textblock>>, Fehler> {
-
-    use crate::Rect;
 
     let temp_dir = std::env::temp_dir()
     .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
@@ -2105,7 +2110,10 @@ const OPERATIONS_TO_CLEAN: &[&str;10] = &[
 ];
 
 // Löscht alle gemalten Linien aus dem PDF heraus
-pub fn clean_pdf(pdf_bytes: &[u8], titelblatt: &Titelblatt) -> Result<Vec<u8>, Fehler> {
+pub fn clean_pdf(
+    pdf_bytes: &[u8], 
+    titelblatt: &Titelblatt
+) -> Result<Vec<u8>, Fehler> {
     
     use lopdf::Object;
     use std::collections::BTreeSet;
@@ -2262,6 +2270,7 @@ impl fmt::Display for BvEintrag {
                 write!(f, "{lfd_nr}: Gemarkung {gemarkung:?} Flur {flur} Flurstück {flurstueck} (bisher lfd. Nr. {bisherige_lfd_nr:?})")
             },
             BvEintrag::Recht(BvEintragRecht { lfd_nr, zu_nr, bisherige_lfd_nr, .. }) => {
+                let zu_nr = zu_nr.text();
                 write!(f, "Grundstücksgleiches Recht {lfd_nr} (zu Nr. {zu_nr}, bisher {bisherige_lfd_nr:?})")
             },
         }
@@ -2272,9 +2281,9 @@ impl fmt::Display for BvEintrag {
 #[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct BvEintragRecht {
     pub lfd_nr: usize,
-    pub zu_nr: String,
+    pub zu_nr: StringOrLines,
     pub bisherige_lfd_nr: Option<usize>,
-    pub text: String,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: Option<bool>,
     #[serde(default)]
@@ -2291,7 +2300,7 @@ pub struct BvEintragFlurstueck {
     // "87" oder "87/2"
     pub flurstueck: String,
     pub gemarkung: Option<String>,
-    pub bezeichnung: Option<String>,
+    pub bezeichnung: Option<StringOrLines>,
     pub groesse: FlurstueckGroesse,
     #[serde(default)]
     pub automatisch_geroetet: Option<bool>,
@@ -2322,9 +2331,9 @@ impl BvEintragRecht {
     pub fn neu(lfd_nr: usize) -> Self {
         BvEintragRecht {
             lfd_nr,
-            zu_nr: String::new(),
+            zu_nr: String::new().into(),
             bisherige_lfd_nr: None,
-            text: String::new(),
+            text: String::new().into(),
             automatisch_geroetet: None,
             manuell_geroetet: None,
             position_in_pdf: None,
@@ -2397,14 +2406,14 @@ impl BvEintrag {
         
     pub fn set_bezeichnung(&mut self, val: String) {
         match self {
-            BvEintrag::Flurstueck(flst) => { flst.bezeichnung = if val.is_empty() { None } else { Some(val) }; },
+            BvEintrag::Flurstueck(flst) => { flst.bezeichnung = if val.is_empty() { None } else { Some(val.into()) }; },
             BvEintrag::Recht(_) => { },
         }
     }
     
     pub fn get_bezeichnung(&self) -> Option<String> {
         match self {
-            BvEintrag::Flurstueck(flst) => flst.bezeichnung.clone(),
+            BvEintrag::Flurstueck(flst) => flst.bezeichnung.clone().map(|s| s.text()),
             BvEintrag::Recht(recht) => None,
         }
     }
@@ -2447,14 +2456,14 @@ impl BvEintrag {
     pub fn set_zu_nr(&mut self, val: String) {
         match self {
             BvEintrag::Flurstueck(_) => { },
-            BvEintrag::Recht(recht) => { recht.zu_nr = val; },
+            BvEintrag::Recht(recht) => { recht.zu_nr = val.into(); },
         }
     }
     
     pub fn set_recht_text(&mut self, val: String) {
         match self {
             BvEintrag::Flurstueck(_) => { },
-            BvEintrag::Recht(recht) => { recht.text = val; },
+            BvEintrag::Recht(recht) => { recht.text = val.into(); },
         }
     }
     
@@ -2523,6 +2532,101 @@ impl BvEintrag {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum StringOrLines {
+    SingleLine(String),
+    MultiLine(Vec<String>),
+}
+
+impl StringOrLines {
+    // id: bv_{zeile_nr}_bezeichnung
+    // width:
+    // bv_geroetet
+    // input_id: bv:{zeile_nr}:bezeichnung
+    pub fn get_html_editable_textfield(&self, width: usize, geroetet: bool, id: String, input_id: String) -> String {
+        
+        let lines = self.lines().iter()
+            .map(|l| l.replace(" ", "\u{00a0}"))
+            .map(|l| l.replace("\\", "&bsol;"))
+            .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+            .collect::<Vec<String>>()
+        .join("\r\n");
+
+        let bv_geroetet = if geroetet { 
+            "background:rgb(255,195,195);" 
+        } else { 
+            "background:white;" 
+        };
+        
+        format!("
+            <div class='stringorlines-textfield' style='width: {width}px;{bv_geroetet}' 
+                onkeydown='insertTabAtCaret(event);' 
+                oninput='editStringOrLines(event, input_id);' 
+                id='{id}' 
+                contenteditable='true'
+            >{lines}</div>
+        ")
+    }
+    
+    pub fn push_str(&mut self, s: &str) {
+        let mut self_str = self.lines().join("\r\n");
+        self_str.push_str(s);
+        *self = self_str.into();
+    }
+    
+    pub fn contains(&self, s: &str) -> bool {
+        match self {
+            StringOrLines::SingleLine(s) => s.contains(s),
+            StringOrLines::MultiLine(ml) => ml.iter().any(|q| q.contains(s)),
+        }
+    }
+    
+    pub fn text(&self) -> String {
+        self.lines().join("\r\n")
+    }
+}
+
+impl Default for StringOrLines {
+    fn default() -> Self {
+        String::new().into()
+    }
+}
+
+impl StringOrLines {
+    pub fn lines(&self) -> Vec<String> {
+        match self {
+            StringOrLines::SingleLine(s) => s.lines().map(|s| s.to_string()).collect(),
+            StringOrLines::MultiLine(ml) => ml.clone(),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        match self {
+            StringOrLines::SingleLine(s) => s.is_empty(),
+            StringOrLines::MultiLine(ml) => ml.is_empty(),
+        }
+    }
+}
+
+impl From<String> for StringOrLines {
+    fn from(s: String) -> StringOrLines {
+        StringOrLines::MultiLine(
+            s.lines()
+            .map(|s| s.to_string())
+            .collect()
+        )
+    }
+}
+
+impl From<StringOrLines> for String {
+    fn from(s: StringOrLines) -> String {
+        match s {
+            StringOrLines::SingleLine(s) => s,
+            StringOrLines::MultiLine(ml) => ml.join("\r\n"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 #[serde(tag = "typ", content = "wert")]
 pub enum FlurstueckGroesse {
@@ -2556,8 +2660,8 @@ impl FlurstueckGroesse {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BvZuschreibung {
-    pub bv_nr: String,
-    pub text: String,
+    pub bv_nr: StringOrLines,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -2578,8 +2682,8 @@ impl BvZuschreibung {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BvAbschreibung {
-    pub bv_nr: String,
-    pub text: String,
+    pub bv_nr: StringOrLines,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -2693,7 +2797,7 @@ pub fn analysiere_bv(
                     })
                     .unwrap_or_default();
                     
-                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
+                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung.into()) };
                     
                     let ha = s.texte
                     .get(6)
@@ -2809,10 +2913,10 @@ pub fn analysiere_bv(
                     
                     let bezeichnung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
                         get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string()})
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string().into() })
                     } else {
                         get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, flurstueck_start_y, flurstueck_end_y)
-                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string()})
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string().into() })
                     };
                     
                     let groesse = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
@@ -2911,7 +3015,7 @@ pub fn analysiere_bv(
                     })
                     .unwrap_or_default();
                     
-                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
+                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung.into()) };
                     
                     let m2 = s.texte
                     .get(5)
@@ -2986,7 +3090,7 @@ pub fn analysiere_bv(
                         .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string() })?;
                         
                     let bezeichnung = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string() });
+                        .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string().into() });
                     
                     let groesse = {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(5).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
@@ -3060,7 +3164,7 @@ pub fn analysiere_bv(
                     .map(|t| { position_in_pdf.expand(&t); t.text.trim().to_string() })
                     .unwrap_or_default();
                     
-                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung) };
+                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung.into()) };
                     
                     let m2 = s.texte
                     .get(4)
@@ -3133,7 +3237,7 @@ pub fn analysiere_bv(
                     }
                         
                     let bezeichnung = get_erster_text_bei_ca(&s.texte.get(3).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
-                        .map(|t| t.text.trim().to_string());
+                        .map(|t| t.text.trim().to_string().into());
                     
                     let groesse = {
                         let m2 = get_erster_text_bei_ca(&s.texte.get(4).unwrap_or(&default_texte), lfd_num, lfd_nr_start_y, lfd_nr_end_y)
@@ -3316,8 +3420,8 @@ pub fn analysiere_bv(
                 .unwrap_or_default();
                 
                 BvZuschreibung {
-                    bv_nr: zur_lfd_nr,
-                    text: bestand_und_zuschreibungen,
+                    bv_nr: zur_lfd_nr.into(),
+                    text: bestand_und_zuschreibungen.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3336,8 +3440,8 @@ pub fn analysiere_bv(
                     .map(|t| t.text.trim().to_string())?;            
                 
                 Some(BvZuschreibung {
-                    bv_nr: zur_lfd_nr,
-                    text: bestand_und_zuschreibungen,
+                    bv_nr: zur_lfd_nr.into(),
+                    text: bestand_und_zuschreibungen.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3377,8 +3481,8 @@ pub fn analysiere_bv(
                 .unwrap_or_default();
                 
                 BvAbschreibung {
-                    bv_nr: zur_lfd_nr,
-                    text: abschreibungen,
+                    bv_nr: zur_lfd_nr.into(),
+                    text: abschreibungen.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3397,8 +3501,8 @@ pub fn analysiere_bv(
                     .map(|t| t.text.trim().to_string())?;            
                 
                 Some(BvAbschreibung {
-                    bv_nr: zur_lfd_nr,
-                    text: abschreibungen,
+                    bv_nr: zur_lfd_nr.into(),
+                    text: abschreibungen.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3503,7 +3607,9 @@ pub struct Abteilung1 {
 
 impl Abteilung1 {
     pub fn migriere_v2(&mut self) {        
+        
         let mut grundlage_eintragungen_neu = Vec::new();
+        
         for e in self.eintraege.iter_mut() {
             let neu = match e.clone() {
                 Abt1Eintrag::V1(v1) => {                    
@@ -3548,7 +3654,7 @@ pub struct Abt1EintragV2 {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
     // Rechtstext
-    pub eigentuemer: String,
+    pub eigentuemer: StringOrLines,
     // Used to distinguish from Abt1EintragV1
     pub version: usize,
     #[serde(default)]
@@ -3564,11 +3670,11 @@ pub struct Abt1EintragV1 {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
     // Rechtstext
-    pub eigentuemer: String,
+    pub eigentuemer: StringOrLines,
     // lfd. Nr der betroffenen Grundstücke im Bestandsverzeichnis
-    pub bv_nr: String, 
+    pub bv_nr: StringOrLines, 
     // Vec<BvNr>,
-    pub grundlage_der_eintragung: String,
+    pub grundlage_der_eintragung: StringOrLines,
     
     #[serde(default)]
     pub automatisch_geroetet: bool,
@@ -3581,9 +3687,9 @@ pub struct Abt1EintragV1 {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Abt1GrundEintragung {
     // lfd. Nr. der Eintragung
-    pub bv_nr: String,
+    pub bv_nr: StringOrLines,
     // Grundlage der Eintragung
-    pub text: String,
+    pub text: StringOrLines,
     
     #[serde(default)]
     pub automatisch_geroetet: bool,
@@ -3596,8 +3702,8 @@ pub struct Abt1GrundEintragung {
 impl Abt1GrundEintragung {
     pub fn new() -> Self { 
         Abt1GrundEintragung { 
-            bv_nr: String::new(), 
-            text: String::new(),
+            bv_nr: String::new().into(), 
+            text: String::new().into(),
 
             automatisch_geroetet: false,
             manuell_geroetet: None,
@@ -3626,7 +3732,7 @@ impl Abt1Eintrag {
     pub fn new(lfd_nr: usize) -> Self { 
         Abt1Eintrag::V2(Abt1EintragV2 { 
             lfd_nr, 
-            eigentuemer: String::new(),
+            eigentuemer: String::new().into(),
             version: 2,
             automatisch_geroetet: false,
             manuell_geroetet: None,
@@ -3664,8 +3770,8 @@ impl Abt1Eintrag {
     
     pub fn set_eigentuemer(&mut self, eigentuemer: String) {
         match self {
-            Abt1Eintrag::V1(v1) => { v1.eigentuemer = eigentuemer; },
-            Abt1Eintrag::V2(v2) =>{ v2.eigentuemer = eigentuemer; },
+            Abt1Eintrag::V1(v1) => { v1.eigentuemer = eigentuemer.into(); },
+            Abt1Eintrag::V2(v2) =>{ v2.eigentuemer = eigentuemer.into(); },
         }
     }
     
@@ -3716,7 +3822,7 @@ pub fn analysiere_abt1(
                 
                 Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
-                    eigentuemer,
+                    eigentuemer: eigentuemer.into(),
                     version: 2,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
@@ -3758,7 +3864,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
-                    eigentuemer,
+                    eigentuemer: eigentuemer.into(),
                     version: 2,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
@@ -3797,8 +3903,8 @@ pub fn analysiere_abt1(
                 .unwrap_or_default();
                 
                 Abt1GrundEintragung {
-                    bv_nr,
-                    text: grundlage_der_eintragung,
+                    bv_nr: bv_nr.into(),
+                    text: grundlage_der_eintragung.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3828,8 +3934,8 @@ pub fn analysiere_abt1(
                 ).map(|t| t.text.trim().to_string())?;
                 
                 Some(Abt1GrundEintragung {
-                    bv_nr,
-                    text: grundlage_der_eintragung,
+                    bv_nr: bv_nr.into(),
+                    text: grundlage_der_eintragung.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -3864,9 +3970,9 @@ pub struct Abt2Eintrag {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
     // lfd. Nr der betroffenen Grundstücke im Bestandsverzeichnis
-    pub bv_nr: String, // Vec<BvNr>,
+    pub bv_nr: StringOrLines, // Vec<BvNr>,
     // Rechtstext
-    pub text: String,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -3877,8 +3983,8 @@ impl Abt2Eintrag {
     pub fn new(lfd_nr: usize) -> Self { 
         Abt2Eintrag { 
             lfd_nr, 
-            bv_nr: String::new(), 
-            text: String::new(),
+            bv_nr: String::new().into(), 
+            text: String::new().into(),
             automatisch_geroetet: false,
             manuell_geroetet: None,
         } 
@@ -4160,8 +4266,8 @@ pub struct GemarkungFlurFlurstueck {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt1Veraenderung {
-    pub lfd_nr: String,
-    pub text: String,
+    pub lfd_nr: StringOrLines,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4178,8 +4284,8 @@ impl Abt1Veraenderung {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt1Loeschung {
-    pub lfd_nr: String,
-    pub text: String,
+    pub lfd_nr: StringOrLines,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4196,8 +4302,8 @@ impl Abt1Loeschung {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt2Veraenderung {
-    pub lfd_nr: String,
-    pub text: String,
+    pub lfd_nr: StringOrLines,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4214,8 +4320,8 @@ impl Abt2Veraenderung {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt2Loeschung {
-    pub lfd_nr: String,
-    pub text: String,
+    pub lfd_nr: StringOrLines,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4275,8 +4381,8 @@ pub fn analysiere_abt2(
                 
                 Abt2Eintrag {
                     lfd_nr,
-                    bv_nr,
-                    text,
+                    bv_nr: bv_nr.into(),
+                    text: text.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                 }
@@ -4316,8 +4422,8 @@ pub fn analysiere_abt2(
                 
                 Some(Abt2Eintrag {
                     lfd_nr,
-                    bv_nr: bv_nr.to_string(),
-                    text: text.text.trim().to_string(),
+                    bv_nr: bv_nr.to_string().into(),
+                    text: text.text.trim().to_string().into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                 })
@@ -4355,8 +4461,8 @@ pub fn analysiere_abt2(
                 .unwrap_or_default();
                 
                 Abt2Veraenderung {
-                    lfd_nr,
-                    text: text.trim().to_string(),
+                    lfd_nr: lfd_nr.into(),
+                    text: text.trim().to_string().into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4384,8 +4490,8 @@ pub fn analysiere_abt2(
                 // TODO: recht analysieren!
                 
                 Some(Abt2Veraenderung {
-                    lfd_nr,
-                    text: text.text.trim().to_string(),
+                    lfd_nr: lfd_nr.into(),
+                    text: text.text.trim().to_string().into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4417,11 +4523,11 @@ pub struct Abt3Eintrag {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
     // lfd. Nr der betroffenen Grundstücke im Bestandsverzeichnis
-    pub bv_nr: String, // Vec<BvNr>,
+    pub bv_nr: StringOrLines, // Vec<BvNr>,
     // Betrag (EUR / DM)
-    pub betrag: String,
+    pub betrag: StringOrLines,
     /// Rechtstext
-    pub text: String,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4434,9 +4540,9 @@ impl Abt3Eintrag {
     pub fn new(lfd_nr: usize) -> Self { 
         Abt3Eintrag { 
             lfd_nr, 
-            bv_nr: String::new(), 
-            text: String::new(), 
-            betrag: String::new(),
+            bv_nr: String::new().into(), 
+            text: String::new().into(), 
+            betrag: String::new().into(),
             automatisch_geroetet: false,
             manuell_geroetet: None,
             position_in_pdf: None,
@@ -4450,11 +4556,11 @@ impl Abt3Eintrag {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Veraenderung {
-    pub lfd_nr: String,
+    pub lfd_nr: StringOrLines,
     #[serde(default)]
-    pub betrag: String,
+    pub betrag: StringOrLines,
     #[serde(default)]
-    pub text: String,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4471,11 +4577,11 @@ impl Abt3Veraenderung {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Abt3Loeschung {
-    pub lfd_nr: String,
+    pub lfd_nr: StringOrLines,
     #[serde(default)]
-    pub betrag: String,
+    pub betrag: StringOrLines,
     #[serde(default)]
-    pub text: String,
+    pub text: StringOrLines,
     #[serde(default)]
     pub automatisch_geroetet: bool,
     #[serde(default)]
@@ -4545,10 +4651,10 @@ pub fn analysiere_abt3(
                 .unwrap_or_default();
                 
                 Abt3Eintrag {
-                    lfd_nr,
-                    bv_nr: bv_nr.to_string(),
-                    betrag: betrag.trim().to_string(),
-                    text: text.trim().to_string(),
+                    lfd_nr: lfd_nr.into(),
+                    bv_nr: bv_nr.to_string().into(),
+                    betrag: betrag.trim().to_string().into(),
+                    text: text.trim().to_string().into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4603,10 +4709,10 @@ pub fn analysiere_abt3(
                 }
                 
                 Some(Abt3Eintrag {
-                    lfd_nr,
-                    bv_nr: bv_nr.to_string(),
-                    betrag: betrag.trim().to_string(),
-                    text: text.text.trim().to_string(),
+                    lfd_nr: lfd_nr.into(),
+                    bv_nr: bv_nr.to_string().into(),
+                    betrag: betrag.trim().to_string().into(),
+                    text: text.text.trim().to_string().into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4653,9 +4759,9 @@ pub fn analysiere_abt3(
                     .unwrap_or_default();
                     
                     Abt3Veraenderung {
-                        lfd_nr,
-                        betrag,
-                        text: text.trim().to_string(),
+                        lfd_nr: lfd_nr.into(),
+                        betrag: betrag.into(),
+                        text: text.trim().to_string().into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
@@ -4686,9 +4792,9 @@ pub fn analysiere_abt3(
                     ).map(|s| s.text.trim().to_string()).unwrap_or_default();
                     
                     Abt3Veraenderung {
-                        lfd_nr,
-                        betrag,
-                        text: text.text.trim().to_string(),
+                        lfd_nr: lfd_nr.into(),
+                        betrag: betrag.into(),
+                        text: text.text.trim().to_string().into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
@@ -4743,9 +4849,9 @@ pub fn analysiere_abt3(
                     .unwrap_or_default();
                     
                     Abt3Loeschung {
-                        lfd_nr,
-                        betrag,
-                        text: text.trim().to_string(),
+                        lfd_nr: lfd_nr.into(),
+                        betrag: betrag.into(),
+                        text: text.trim().to_string().into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
@@ -4782,9 +4888,9 @@ pub fn analysiere_abt3(
                     ).map(|s| s.text.trim().to_string()).unwrap_or_default();
                     
                     Abt3Loeschung {
-                        lfd_nr,
-                        betrag,
-                        text: text.text.trim().to_string(),
+                        lfd_nr: lfd_nr.into(),
+                        betrag: betrag.into(),
+                        text: text.text.trim().to_string().into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,

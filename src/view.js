@@ -571,6 +571,19 @@ function insertTabAtCaret(event){
     }
 }
 
+function editTextarea(event, id) {
+    
+    // using innerText here because it preserves newlines
+    var innerText = event.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_textarea(innerText, id);        
+    }
+}
+
 function editAbkuerzungenScript(e) {
     // using innerText here because it preserves newlines
     var innerText = e.target.innerText;
@@ -581,7 +594,6 @@ function editAbkuerzungenScript(e) {
     if (innerText) {
         rpc.edit_abkuerzungen_script(innerText);        
     }
-
 }
 
 

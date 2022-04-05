@@ -1,11 +1,9 @@
-use printpdf::*;
-use std::fs::File;
-use std::io::Cursor;
 use crate::{Grundbuch, Abt2Eintrag, Abt3Eintrag};
 use crate::digitalisiere::BvEintrag;
-use std::io;
-use std::io::prelude::*;
-use std::collections::{BTreeSet, BTreeMap};
+use printpdf::{
+    BuiltinFont, PdfDocument, Mm,
+    Line, Point, Color, Cmyk
+};
 
 pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     
@@ -49,9 +47,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
 
     // Bestandsverzeichnis
     for bv in grundbuch.bestandsverzeichnis.eintraege.chunks(59) {
-    
-        use printpdf::SvgTransform;
-        
+            
         // Bestandsverzeichnis Einträge
         let (current_page, formular_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
         let text_layer = doc.get_page(current_page).add_layer("Text");
@@ -366,8 +362,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     for abt2_eintrag in grundbuch.abt2.eintraege.iter() {
     
         let extent_y_lfd_nr = 3.43;
-        let extent_y_text = wordbreak_text(&abt2_eintrag.text, 50).lines().count() as f64 * 3.43;
-        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12).lines().count() as f64 * 3.43;
+        let extent_y_text = wordbreak_text(&abt2_eintrag.text.text(), 50).lines().count() as f64 * 3.43;
+        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr.text()), 12).lines().count() as f64 * 3.43;
         let extent_y = extent_y_bv_nr
             .max(extent_y_text)
             .max(extent_y_lfd_nr);
@@ -446,8 +442,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
                 is_clipping_path: false,
             };
             
-            let bv_break = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12);
-            let text_break = wordbreak_text(&abt2_eintrag.text, 50);
+            let bv_break = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr.text()), 12);
+            let text_break = wordbreak_text(&abt2_eintrag.text.text(), 50);
             
             doc.get_page(current_page).get_layer(formular_layer)
             .use_text(&format!("Grundbuch von {grundbuch_von}  -  Blatt {blatt}"), 12.0, Mm(10.0), Mm(297.0 - 10.0), &times);        
@@ -490,8 +486,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
             text_layer.end_text_section();
             
             let extent_y_lfd_nr = 3.43;
-            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr), 12).lines().count() as f64 * 3.43;
-            let extent_y_text = wordbreak_text(&abt2_eintrag.text, 50).lines().count() as f64 * 3.43;
+            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt2_eintrag.bv_nr.text()), 12).lines().count() as f64 * 3.43;
+            let extent_y_text = wordbreak_text(&abt2_eintrag.text.text(), 50).lines().count() as f64 * 3.43;
             let extent_y = extent_y_bv_nr
                 .max(extent_y_text)
                 .max(extent_y_lfd_nr);
@@ -539,8 +535,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     for abt3_eintrag in grundbuch.abt3.eintraege.iter() {
     
         let extent_y_lfd_nr = 3.43;
-        let extent_y_text = wordbreak_text(&abt3_eintrag.text, 50).lines().count() as f64 * 3.43;
-        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr), 7).lines().count() as f64 * 3.43;
+        let extent_y_text = wordbreak_text(&abt3_eintrag.text.text(), 50).lines().count() as f64 * 3.43;
+        let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr.text()), 7).lines().count() as f64 * 3.43;
         let extent_y = extent_y_bv_nr
             .max(extent_y_text)
             .max(extent_y_lfd_nr);
@@ -632,8 +628,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
                 is_clipping_path: false,
             };
             
-            let bv_break = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr), 7);
-            let text_break = wordbreak_text(&abt3_eintrag.text, 50);
+            let bv_break = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr.text()), 7);
+            let text_break = wordbreak_text(&abt3_eintrag.text.text(), 50);
             
             doc.get_page(current_page).get_layer(formular_layer)
             .use_text(&format!("Grundbuch von {grundbuch_von}  -  Blatt {blatt}"), 12.0, Mm(10.0), Mm(297.0 - 10.0), &times);        
@@ -669,7 +665,7 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
     
             text_layer
             .use_text(
-                &abt3_eintrag.betrag, 
+                &abt3_eintrag.betrag.text(), 
                 10.0, Mm(47.0), start, &courier_bold
             );
         
@@ -685,8 +681,8 @@ pub fn generate_grundbuch_pdf(grundbuch: &Grundbuch) -> Vec<u8> {
             text_layer.end_text_section();
             
             let extent_y_lfd_nr = 3.43;
-            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr), 7).lines().count() as f64 * 3.43;
-            let extent_y_text = wordbreak_text(&abt3_eintrag.text, 50).lines().count() as f64 * 3.43;
+            let extent_y_bv_nr = wordbreak_text(&clean_bv(&abt3_eintrag.bv_nr.text()), 7).lines().count() as f64 * 3.43;
+            let extent_y_text = wordbreak_text(&abt3_eintrag.text.text(), 50).lines().count() as f64 * 3.43;
             let extent_y = extent_y_bv_nr
                 .max(extent_y_text)
                 .max(extent_y_lfd_nr);

@@ -917,9 +917,7 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_file_list(rpc_data: &RpcData) -> String {
-        
-    use crate::PdfFileIcon;
-    
+
     const CLOSE_PNG: &[u8] = include_bytes!("../src/img/icons8-close-48.png");
     let close_str = format!("data:image/png;base64,{}", base64::encode(&CLOSE_PNG));
     
@@ -1401,36 +1399,44 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
             BvEintrag::Flurstueck(flst) => {
                 format!("
                 <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
+                    
                     <select style='width: 60px;{bv_geroetet}' id='bv_{zeile_nr}_typ' onchange='bvEintragTypAendern(\"bv:{zeile_nr}:typ\", this.options[this.selectedIndex].value)'>
                         <option value='flst' selected='selected'>Flst.</option>
                         <option value='recht'>Recht</option>
                     </select>
+                    
                     <input type='number' style='width: 30px;margin-left:10px;{bv_geroetet}' value='{lfd_nr}' 
                         id='bv_{zeile_nr}_lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
                         oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
                     />
+                    
                     <input type='number' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
                         id='bv_{zeile_nr}_bisherige-lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
                         oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
                     />
+                    
                     <input type='text' style='width: 160px;{bv_geroetet}'  value='{gemarkung}' 
                         id='bv_{zeile_nr}_gemarkung'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:gemarkung\", event)'
                         oninput='editText(\"bv:{zeile_nr}:gemarkung\", event)'
                     />
+                    
                     <input type='number' style='width: 80px;{bv_geroetet}'  value='{flur}' 
                         id='bv_{zeile_nr}_flur'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flur\", event)'
                         oninput='editText(\"bv:{zeile_nr}:flur\", event)'
                     />
+                    
                     <input type='text' style='width: 80px;{bv_geroetet}'  value='{flurstueck}' 
                         id='bv_{zeile_nr}_flurstueck'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flurstueck\", event)'
                         oninput='editText(\"bv:{zeile_nr}:flurstueck\", event)'
                     />
-                    {input_beschreibung}
+
+                    {input_beschreibung_textfield}
+
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
                         <button onclick='eintragNeu(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1445,22 +1451,24 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                     flur = format!("{}", flst.flur),
                     flurstueck = format!("{}", flst.flurstueck),
                     gemarkung = flst.gemarkung.clone().unwrap_or_default(),
-                    input_beschreibung = if konfiguration.lefis_analyse_einblenden {
+                    input_beschreibung_textfield = if konfiguration.lefis_analyse_einblenden {
                         String::new()
                     } else {
                         format!("
-                            <textarea rows='2' cols='45' style='width: 320px;{bv_geroetet}'
-                                id='bv_{zeile_nr}_bezeichnung'
-                                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bezeichnung\", event)'
-                                oninput='editText(\"bv:{zeile_nr}:bezeichnung\", event)'
-                            >{flst_beschreibung}</textarea>
+                            {beschreibung_textfield}
+                            
                             <input type='number' style='width: 80px;margin-left:10px;{bv_geroetet}'  value='{groesse}' 
                                 id='bv_{zeile_nr}_groesse'
                                 onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:groesse\", event)'
                                 oninput='editText(\"bv:{zeile_nr}:groesse\", event)'
                             />
                             ", 
-                            flst_beschreibung = flst.bezeichnung.clone().unwrap_or_default(),
+                            beschreibung_textfield = flst.bezeichnung.clone().unwrap_or_default().get_html_editable_textfield(
+                                320, // px width
+                                bve.ist_geroetet(),
+                                format!("bv_{zeile_nr}_bezeichnung"),
+                                format!("bv:{zeile_nr}:bezeichnung"),
+                            ),
                             groesse = flst.groesse.get_m2(),
                         )
                     }
@@ -1483,16 +1491,10 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
                         oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
                     />
-                    <input type='text' placeholder='Gehört zu lfd. Nr. ...' style='width: 30px;{bv_geroetet}' value='{zu_nr}' 
-                        id='bv_{zeile_nr}_zu-nr'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:zu-nr\", event)' 
-                        oninput='editText(\"bv:{zeile_nr}:zu-nr\", event)'
-                    />
-                    <textarea rows='5' placeholder='Text Herrschvermerk' cols='45' style='width: 320px;{bv_geroetet}'
-                        id='bv_{zeile_nr}_recht-text'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:recht-text\", event)'
-                        oninput='editText(\"bv:{zeile_nr}:recht-text\", event)'
-                    >{recht_text}</textarea>
+                    {zu_nr_textfield}
+
+                    {text_recht_textfield}
+
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
                         <button onclick='eintragNeu(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1503,9 +1505,19 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                     bv_geroetet = bv_geroetet,
                     zeile_nr = zeile_nr,
                     lfd_nr = format!("{}", recht.lfd_nr),
-                    zu_nr = recht.zu_nr,
+                    zu_nr_textfield = recht.zu_nr.clone().get_html_editable_textfield(
+                        320, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_zu-nr"),
+                        format!("bv:{zeile_nr}:zu-nr"),
+                    ),
+                    text_recht_textfield = recht.text.clone().get_html_editable_textfield(
+                        320, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_recht-text"),
+                        format!("bv:{zeile_nr}:recht-text"),
+                    ),
                     bisherige_lfd_nr = recht.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
-                    recht_text = recht.text,
                 )
             },
         }
@@ -1554,16 +1566,8 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{bv_nr}' 
-                id='bv-zuschreibung_{zeile_nr}_bv-nr'
-                onkeyup='inputOnKeyDown(\"bv-zuschreibung:{zeile_nr}:bv-nr\", event)' 
-                oninput='editText(\"bv-zuschreibung:{zeile_nr}:bv-nr\", event)'
-            />
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='bv-zuschreibung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"bv-zuschreibung:{zeile_nr}:text\", event)'
-                oninput='editText(\"bv-zuschreibung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+            {bv_nr_textfield}
+            {bv_veraenderung_text_textfield}
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
                 <button onclick='eintragNeu(\"bv-zuschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1571,10 +1575,19 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
                 <button onclick='eintragLoeschen(\"bv-zuschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            bv_nr = bvz.bv_nr,
-            text = bvz.text,
+            bv_nr_textfield = bvz.bv_nr.clone().get_html_editable_textfield(
+                90, // px width
+                bvz.ist_geroetet(),
+                format!("bv-zuschreibung_{zeile_nr}_bv-nr"),
+                format!("bv-zuschreibung:{zeile_nr}:bv-nr"),
+            ),
+            bv_veraenderung_text_textfield = bvz.text.clone().get_html_editable_textfield(
+                320, // px width
+                bvz.ist_geroetet(),
+                format!("bv-zuschreibung_{zeile_nr}_text"),
+                format!("bv-zuschreibung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -1607,16 +1620,8 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{bv_nr}' 
-                id='bv-abschreibung_{zeile_nr}_bv-nr'
-                onkeyup='inputOnKeyDown(\"bv-abschreibung:{zeile_nr}:bv-nr\", event)' 
-                oninput='editText(\"bv-abschreibung:{zeile_nr}:bv-nr\", event)'
-            />
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='bv-abschreibung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"bv-abschreibung:{zeile_nr}:text\", event)'
-                oninput='editText(\"bv-abschreibung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+            {bv_nr_textfield}
+            {bv_abschreibung_text_textfield}
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
                 <button onclick='eintragNeu(\"bv-abschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1624,10 +1629,19 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
                 <button onclick='eintragLoeschen(\"bv-abschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            bv_nr = bva.bv_nr,
-            text = bva.text,
+            bv_nr_textfield = bva.bv_nr.clone().get_html_editable_textfield(
+                90, // px width
+                bva.ist_geroetet(),
+                format!("bv-abschreibung_{zeile_nr}_text"),
+                format!("bv-abschreibung:{zeile_nr}:text"),
+            ),
+            bv_abschreibung_text_textfield = bva.text.clone().get_html_editable_textfield(
+                320, // px width
+                bva.ist_geroetet(),
+                format!("bv-abschreibung_{zeile_nr}_text"),
+                format!("bv-abschreibung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -1676,11 +1690,7 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
                 oninput='editText(\"abt1:{zeile_nr}:lfd-nr\", event)'
             />
             
-            <textarea rows='3' cols='16' style='margin-bottom:2px;{bv_geroetet}'
-                id='abt1_{zeile_nr}_eigentuemer'
-                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:eigentuemer\", event)'
-                oninput='editText(\"abt1:{zeile_nr}:eigentuemer\", event)'
-            >{eigentuemer}</textarea>
+            {eigentuemer_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1693,7 +1703,12 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
             bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt1.lfd_nr,
-            eigentuemer = abt1.eigentuemer,
+            eigentuemer_textfield = abt1.eigentuemer.get_html_editable_textfield(
+                320, // px width
+                abt1.ist_geroetet(),
+                format!("abt1_{zeile_nr}_eigentuemer"),
+                format!("abt1:{zeile_nr}:eigentuemer"),
+            ),
         )
     })
     
@@ -1732,18 +1747,10 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
 
         format!("
         <div class='__application-abt1-grundlage-eintragung' style='display:flex;margin-top:5px;'>
-        
-            <input type='text' style='width: 60px;{bv_geroetet}' value='{bv_nr}' 
-                id='abt1-grundlage-eintragung_{zeile_nr}_bv-nr'
-                onkeyup='inputOnKeyDown(\"abt1-grundlage-eintragung:{zeile_nr}:bv-nr\", event)'
-                oninput='editText(\"abt1-grundlage-eintragung:{zeile_nr}:bv-nr\", event)'
-            />
             
-            <textarea rows='3' cols='25' style='margin-bottom:2px;{bv_geroetet}'
-                id='abt1-grundlage-eintragung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt1-grundlage-eintragung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt1-grundlage-eintragung:{zeile_nr}:text\", event)'
-            >{grundlage_der_eintragung}</textarea>
+            {bv_nr_textfield}
+            
+            {grundlage_der_eintragung_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1753,10 +1760,21 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
             </div>
             
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            bv_nr = abt1.bv_nr,
-            grundlage_der_eintragung = abt1.text,
+            
+            bv_nr_textfield = abt1.bv_nr.get_html_editable_textfield(
+                60, // px width
+                abt1.ist_geroetet(),
+                format!("abt1-grundlage-eintragung_{zeile_nr}_bv-nr"),
+                format!("abt1-grundlage-eintragung:{zeile_nr}:bv-nr"),
+            ),
+            
+            grundlage_der_eintragung_textfield = abt1.text.get_html_editable_textfield(
+                320, // px width
+                abt1.ist_geroetet(),
+                format!("abt1-grundlage-eintragung_{zeile_nr}_text"),
+                format!("abt1-grundlage-eintragung:{zeile_nr}:text"),
+            ),
         )
     })
     
@@ -1792,17 +1810,9 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt1-veraenderung_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt1-veraenderung:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt1-veraenderung:{zeile_nr}:lfd-nr\", event)'
-            />
+            {lfd_nr_textfield}
             
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt1-veraenderung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt1-veraenderung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt1-veraenderung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+            {text_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1811,10 +1821,19 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt1-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            lfd_nr = abt1_a.lfd_nr,
-            text = abt1_a.text,
+            lfd_nr_textfield = abt1_a.lfd_nr.get_html_editable_textfield(
+                90, // px width
+                abt1_a.ist_geroetet(),
+                format!("abt1-veraenderung_{zeile_nr}_lfd-nr"),
+                format!("abt1-veraenderung:{zeile_nr}:lfd-nr"),
+            ),
+            text_textfield = abt1_a.text.get_html_editable_textfield(
+                320, // px width
+                abt1_a.ist_geroetet(),
+                format!("abt1-veraenderung_{zeile_nr}_text"),
+                format!("abt1-veraenderung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -1847,16 +1866,10 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt1-loeschung_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt1-loeschung:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt1-loeschung:{zeile_nr}:lfd-nr\", event)'
-            />
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt1-loeschung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt1-loeschung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt1-loeschung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+
+            {lfd_nr_textfield}
+            
+            {text_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1865,10 +1878,19 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt1-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            lfd_nr = abt1_l.lfd_nr,
-            text = abt1_l.text,
+            lfd_nr_textfield = abt1_l.lfd_nr.get_html_editable_textfield(
+                90, // px width
+                abt1_l.ist_geroetet(),
+                format!("abt1-loeschung_{zeile_nr}_lfd-nr"),
+                format!("abt1-loeschung:{zeile_nr}:lfd-nr"),
+            ),
+            text_textfield = abt1_l.text.get_html_editable_textfield(
+                320, // px width
+                abt1_l.ist_geroetet(),
+                format!("abt1-loeschung_{zeile_nr}_text"),
+                format!("abt1-loeschung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -1909,17 +1931,9 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
                 oninput='editText(\"abt2:{zeile_nr}:lfd-nr\", event)'
             />
             
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{bv_nr}' 
-                id='abt2_{zeile_nr}_bv-nr'
-                onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:bv-nr\", event)'
-                oninput='editText(\"abt2:{zeile_nr}:bv-nr\", event)'
-            />
+            {bv_nr_textfield}
             
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt2_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt2:{zeile_nr}:text\", event)'
-            >{recht}</textarea>
+            {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1931,10 +1945,23 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
             bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt2.lfd_nr,
-            bv_nr = abt2.bv_nr,
-            recht = abt2.text,
+            
+            bv_nr_textfield = abt2.bv_nr.get_html_editable_textfield(
+                90, // px width
+                abt2.ist_geroetet(),
+                format!("abt2_{zeile_nr}_bv-nr"),
+                format!("abt2:{zeile_nr}:bv-nr"),
+            ),
+            recht_textfield = abt2.text.get_html_editable_textfield(
+                320, // px width
+                abt2.ist_geroetet(),
+                format!("abt2_{zeile_nr}_text"),
+                format!("abt2:{zeile_nr}:text"),
+            ),
         )
-    }).collect::<Vec<String>>().join("\r\n");
+    })
+    .collect::<Vec<String>>()
+    .join("\r\n");
     
     normalize_for_js(format!("
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2</h4>
@@ -1967,17 +1994,9 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt2-veraenderung_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt2-veraenderung:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt2-veraenderung:{zeile_nr}:lfd-nr\", event)'
-            />
+            {lfd_nr_textfield}
             
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt2-veraenderung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt2-veraenderung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt2-veraenderung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+            {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1986,10 +2005,20 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt2-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            lfd_nr = abt2_a.lfd_nr,
-            text = abt2_a.text,
+            
+            lfd_nr_textfield = abt2_a.lfd_nr.get_html_editable_textfield(
+                90, // px width
+                abt2_a.ist_geroetet(),
+                format!("abt2-veraenderung_{zeile_nr}_lfd-nr"),
+                format!("abt2-veraenderung:{zeile_nr}:lfd-nr"),
+            ),
+            recht_textfield = abt2_a.text.get_html_editable_textfield(
+                320, // px width
+                abt2_a.ist_geroetet(),
+                format!("abt2-veraenderung_{zeile_nr}_text"),
+                format!("abt2-veraenderung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -2022,16 +2051,10 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt2-loeschung_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt2-loeschung:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt2-loeschung:{zeile_nr}:lfd-nr\", event)'
-            />
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt2-loeschung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt2-loeschung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt2-loeschung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+
+            {lfd_nr_textfield}
+            
+            {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2040,10 +2063,19 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt2-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            lfd_nr = abt2_l.lfd_nr,
-            text = abt2_l.text,
+            lfd_nr_textfield = abt2_l.lfd_nr.get_html_editable_textfield(
+                90, // px width
+                abt2_l.ist_geroetet(),
+                format!("abt2-loeschung_{zeile_nr}_lfd-nr"),
+                format!("abt2-loeschung:{zeile_nr}:lfd-nr"),
+            ),
+            recht_textfield = abt2_l.text.get_html_editable_textfield(
+                320, // px width
+                abt2_l.ist_geroetet(),
+                format!("abt2-loeschung_{zeile_nr}_text"),
+                format!("abt2-loeschung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -2083,21 +2115,12 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
                 onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:lfd-nr\", event)' 
                 oninput='editText(\"abt3:{zeile_nr}:lfd-nr\", event)' 
             />
-            <input type='text' style='width: 60px;{bv_geroetet}' value='{bv_nr}'
-                id='abt3_{zeile_nr}_bv-nr'
-                onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:bv-nr\", event)' 
-                oninput='editText(\"abt3:{zeile_nr}:bv-nr\", event)' 
-            />
-            <input type='text' style='width: 120px;{bv_geroetet}' value='{betrag}' 
-                id='abt3_{zeile_nr}_betrag'
-                onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:betrag\", event)' 
-                oninput='editText(\"abt3:{zeile_nr}:betrag\", event)' 
-            />
-            <textarea rows='5' cols='40' style='{bv_geroetet}'
-                id='abt3_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt3:{zeile_nr}:text\", event)'
-            >{recht}</textarea>
+            
+            {bv_nr_textfield}
+            
+            {betrag_textfield}
+            
+            {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2109,9 +2132,27 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
             bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
             lfd_nr = abt3.lfd_nr,
-            bv_nr = abt3.bv_nr,
-            betrag = abt3.betrag,
-            recht = abt3.text,
+            
+            bv_nr_textfield = abt3.betrag.get_html_editable_textfield(
+                60, // px width
+                abt3.ist_geroetet(),
+                format!("abt3_{zeile_nr}_bv-nr"),
+                format!("abt3:{zeile_nr}:bv-nr"),
+            ),
+            
+            betrag_textfield = abt3.betrag.get_html_editable_textfield(
+                120, // px width
+                abt3.ist_geroetet(),
+                format!("abt3_{zeile_nr}_betrag"),
+                format!("abt3:{zeile_nr}:betrag"),
+            ),
+            
+            recht_textfield = abt3.betrag.get_html_editable_textfield(
+                120, // px width
+                abt3.ist_geroetet(),
+                format!("abt3_{zeile_nr}_text"),
+                format!("abt3:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -2146,23 +2187,11 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-abt3-eintrag' style='display:flex;'>
             
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt3-veraenderung_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt3-veraenderung:{zeile_nr}:lfd-nr\", event)'
-            />
+            {lfd_nr_textfield}
             
-            <input type='text' style='width: 120px;{bv_geroetet}' value='{betrag}' 
-                id='abt3-veraenderung_{zeile_nr}_betrag'
-                onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:betrag\", event)' 
-                oninput='editText(\"abt3-veraenderung:{zeile_nr}:betrag\", event)' 
-            />
+            {betrag_textfield}
             
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt3-veraenderung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt3-veraenderung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt3-veraenderung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+            {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2171,11 +2200,28 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt3-veraenderung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>",
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            betrag = abt3_a.betrag,
-            lfd_nr = abt3_a.lfd_nr,
-            text = abt3_a.text,
+            
+            lfd_nr_textfield = abt3_a.lfd_nr.get_html_editable_textfield(
+                90, // px width
+                abt3_a.ist_geroetet(),
+                format!("abt3-veraenderung_{zeile_nr}_lfd-nr"),
+                format!("abt3-veraenderung:{zeile_nr}:lfd-nr"),
+            ),
+            
+            betrag_textfield = abt3_a.betrag.get_html_editable_textfield(
+                120, // px width
+                abt3_a.ist_geroetet(),
+                format!("abt3-veraenderung_{zeile_nr}_betrag"),
+                format!("abt3-veraenderung:{zeile_nr}:betrag"),
+            ),
+            
+            recht_textfield = abt3_a.text.get_html_editable_textfield(
+                320, // px width
+                abt3_a.ist_geroetet(),
+                format!("abt3-veraenderung_{zeile_nr}_text"),
+                format!("abt3-veraenderung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
@@ -2209,23 +2255,12 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            <input type='text' style='width: 90px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt3-loeschung_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt3-loeschung:{zeile_nr}:lfd-nr\", event)'
-            />
-                        
-            <input type='text' style='width: 120px;{bv_geroetet}' value='{betrag}' 
-                id='abt3-loeschung_{zeile_nr}_betrag'
-                onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:betrag\", event)' 
-                oninput='editText(\"abt3-loeschung:{zeile_nr}:betrag\", event)' 
-            />
+
+            {lfd_nr_textfield}
             
-            <textarea rows='5' cols='45' style='{bv_geroetet}'
-                id='abt3-loeschung_{zeile_nr}_text'
-                onkeyup='inputOnKeyDown(\"abt3-loeschung:{zeile_nr}:text\", event)'
-                oninput='editText(\"abt3-loeschung:{zeile_nr}:text\", event)'
-            >{text}</textarea>
+            {betrag_textfield}
+            
+            {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2234,11 +2269,27 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt3-loeschung:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            betrag = abt3_l.betrag,
-            lfd_nr = abt3_l.lfd_nr,
-            text = abt3_l.text,
+            lfd_nr_textfield = abt3_l.lfd_nr.get_html_editable_textfield(
+                90, // px width
+                abt3_l.ist_geroetet(),
+                format!("abt3-loeschung_{zeile_nr}_lfd-nr"),
+                format!("abt3-loeschung:{zeile_nr}:lfd-nr"),
+            ),
+            
+            betrag_textfield = abt3_l.betrag.get_html_editable_textfield(
+                120, // px width
+                abt3_l.ist_geroetet(),
+                format!("abt3-loeschung_{zeile_nr}_betrag"),
+                format!("abt3-loeschung:{zeile_nr}:betrag"),
+            ),
+            
+            recht_textfield = abt3_l.text.get_html_editable_textfield(
+                320, // px width
+                abt3_l.ist_geroetet(),
+                format!("abt3-loeschung_{zeile_nr}_text"),
+                format!("abt3-loeschung:{zeile_nr}:text"),
+            ),
         )
     }).collect::<Vec<String>>().join("\r\n");
     
