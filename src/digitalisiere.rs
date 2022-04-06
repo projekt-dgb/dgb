@@ -2539,18 +2539,28 @@ pub enum StringOrLines {
     MultiLine(Vec<String>),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub enum TextInputType {
+    Text,
+    Number,
+}
+
 impl StringOrLines {
 
     // id: bv_{zeile_nr}_bezeichnung
     // width:
     // bv_geroetet
     // input_id: bv:{zeile_nr}:bezeichnung
-    pub fn get_html_editable_textfield(&self, width: usize, geroetet: bool, id: String, input_id: String) -> String {
+    pub fn get_html_editable_textfield(&self, width: usize, geroetet: bool, id: String, input_id: String, input_type: TextInputType) -> String {
         
         let lines = self.lines().iter()
             .map(|l| l.replace(" ", "\u{00a0}"))
             .map(|l| l.replace("\\", "&bsol;"))
-            .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+            .map(|l| if l.is_empty() { 
+                format!("<p style='font-family:monospace;font-size:16px;word-wrap:break-word;'>&nbsp;</p>") 
+            } else { 
+                format!("<p style='font-family:monospace;font-size:16px;word-wrap:break-word;'>{}</p>", l) 
+            })
             .collect::<Vec<String>>()
         .join("\r\n");
 
@@ -2560,11 +2570,22 @@ impl StringOrLines {
             "background:white;" 
         };
         
+        let width = if width == 0 {
+            format!("display:flex;flex-grow:1;")
+        } else {
+            format!("width: {width}px;min-width:{width}px;")
+        };
+        
+        let input_type = match input_type {
+            TextInputType::Text => "text",
+            TextInputType::Number => "number",
+        };
+        
         format!("
-            <div class='stringorlines-textfield' style='font-size:16px;min-width: {width}px;{bv_geroetet}' 
+            <div class='stringorlines-textfield' id='{id}'  data-textInputType='{input_type}'  focusable='true' 
+                style='font-size:16px;user-select: initial;-webkit-user-select: initial;flex-direction:column;{width}{bv_geroetet}' 
                 onkeydown='insertTabAtCaret(event);' 
-                oninput='editStringOrLines(event, input_id);' 
-                id='{id}' 
+                oninput='editStringOrLines(event, \"{input_id}\");' 
                 contenteditable='true'
             >{lines}</div>
         ")

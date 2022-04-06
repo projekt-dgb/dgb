@@ -749,7 +749,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
         },
         Cmd::EditText { path, new_value } => {
-            
+                        
             fn get_mut_or_insert_last<'a, T>(vec: &'a mut Vec<T>, index: usize, default_value: T) -> &'a mut T {
                 let vec_len = vec.len();
                 if index + 1 > vec_len {
@@ -763,6 +763,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             use crate::digitalisiere::FlurstueckGroesse;
             
+            let new_value = new_value
+                .lines()
+                .map(|l| l.replace("\u{00a0}", " "))
+                .collect::<Vec<_>>()
+                .join("\r\n");
+
             let split = path.split(":").collect::<Vec<_>>();
             
             let section = match split.get(0) {
@@ -1955,9 +1961,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         
             open_file.klassifikation_neu.insert(*seite, seiten_typ_neu);
             data.popover_state = None;            
-            
-            println!("{:#?}", open_file.klassifikation_neu);
-            
+                        
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
                 Some(s) => s,
                 None => return,

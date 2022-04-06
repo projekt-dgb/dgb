@@ -11,6 +11,8 @@ use crate::{
         Abt2Loeschung,
         Abt3Veraenderung,
         Abt3Loeschung,
+        TextInputType,
+        StringOrLines,
     },
 };
 
@@ -74,11 +76,11 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         None => return String::new(),
         Some(PopoverState::Info) => {
             format!("
-            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px;' onmousedown='event.stopPropagation();'>
+            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
                     <h2 style='font-size:24px;font-family:sans-serif;'>Digitales Grundbuch Version {version}</h2>
                     
                     <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:800px;'>
-                        <iframe width='100%' height='100%' src='data:text/html;base64,{license_base64}'></iframe>                       
+                        <iframe width='auto' height='auto' src='data:text/html;base64,{license_base64}' style='min-width:100%;min-height:100%;'></iframe>                       
                     </div>
                 </div>
             ",version = env!("CARGO_PKG_VERSION"),
@@ -86,7 +88,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         },
         Some(PopoverState::Help) => {
             format!("
-            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px;' onmousedown='event.stopPropagation();'>
+            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
                     <h2 style='font-size:24px;font-family:sans-serif;'>Anwenderhilfe</h2>
                     <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:800px;'>
                     </div>
@@ -95,7 +97,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         },
         Some(PopoverState::Configuration) => {
             format!("
-                <div style='pointer-events:unset;width:1200px;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:10px 100px;' onmousedown='event.stopPropagation();'>
+                <div style='pointer-events:unset;width:1200px;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
                     <h2 style='font-size:20px;padding-bottom:10px;font-family:sans-serif;'>Konfiguration</h2>
                     <p style='font-size:12px;padding-bottom:5px;'>Pfad: {konfig_pfad}</p>
                     
@@ -1074,8 +1076,8 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
         let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
     
         normalize_for_js(format!("
-                <div style='height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
-                    <div style='display:inline-block;width:50%;overflow:hidden;'>
+                <div style='display:flex;flex-direction:row;height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
+                    <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>Grundbuch</h4>
                             <div style='display:flex;flex-grow:1;'></div>
@@ -1086,7 +1088,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     </div>
                     {lefis_analyse}
                 </div>
-                <div style='display:flex;flex-grow:1;flex-direction:row;padding:0px;'>
+                <div style='display:flex;flex-grow:1;min-width:50%;flex-direction:row;padding:0px;'>
                     <div style='display:flex:flex-direction:column;flex-grow:1;overflow:scroll;max-height:525px;'>
                         <div id='__application-bestandsverzeichnis' style='margin:10px;'>{bestandsverzeichnis}</div>
                         <div id='__application-bestandsverzeichnis-veraenderungen' style='margin:10px;'>{bestandsverzeichnis_zuschreibungen}</div>
@@ -1108,7 +1110,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             lefis_analyse = if rpc_data.konfiguration.lefis_analyse_einblenden {
                 let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
                 format!("
-                    <div style='display:inline-block;width:50%;overflow:hidden;'>
+                    <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
                             <div style='padding:6px;'>
@@ -1119,7 +1121,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             } else {
                 let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
                 format!("
-                <div style='display:inline-block;width:50%;overflow:hidden;'>
+                <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                     <div style='display:flex;flex-direction:row;'>
                         <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
                         <div style='display:flex;flex-grow:1;'></div>
@@ -1149,7 +1151,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
             analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
                 format!("
-                    <div id='__application-analyse-grundbuch' style='display:inline-block;width:50%;overflow:scroll;max-height:525px;'>
+                    <div id='__application-analyse-grundbuch' style='display:flex;flex-grow:1;min-width:50%;overflow:scroll;max-height:525px;'>
                         {analyse}
                     </div>
                 ", analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false))
@@ -1173,7 +1175,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
     let gb_analysiert = crate::analysiere::analysiere_grundbuch(&open_file.analysiert, nb, konfiguration);
     
     normalize_for_js(format!("
-        <div style='margin:10px;'>
+        <div style='margin:10px;min-width:600px;'>
             {a2_header}
             {a2_analyse}
             {a3_header}
@@ -1195,7 +1197,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         {text_original}
                     </div>
                     <div style='flex-grow:1;'>
-                        <p style='font-family:sans-serif;font-style:italic'>{rechtsinhaber}</p>
+                        <p style='font-family:sans-serif;font-style:italic;display:flex;flex-grow:1;max-width:200px;'>{rechtsinhaber}</p>
                         {rangvermerk}
                         <div>{belastete_flurstuecke}</div>
                     </div>
@@ -1217,7 +1219,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                 rangvermerk = match a2a.rangvermerk.as_ref() {
                     Some(s) => format!("<span style='display:flex;align-items:center;'>
                         <img src='{warnung}' style='width:12px;height:12px;'/>
-                        <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>{rang}</p>
+                        <p style='font-family:sans-serif;display:flex;flex-grow:1;margin-left:10px;max-width:190px;'>{rang}</p>
                         </span>", 
                         warnung = warnung_str,
                         rang = s,
@@ -1229,7 +1231,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         use crate::digitalisiere::BvEintrag;
                         match belastet {
                             BvEintrag::Flurstueck(flst) => {
-                                format!("<span style='display:flex;align-items:center;'>
+                                format!("<span style='display:flex;align-items:center;max-width:200px;'>
                                     <img src='{pfeil}' style='width:12px;height:12px;'/>
                                     <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>BV-Nr. {bv_nr}: Fl. {flur}, Flst. {flurstueck}</p>
                                     </span>", 
@@ -1240,7 +1242,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                                 ) 
                             },
                             BvEintrag::Recht(recht) => {
-                                format!("<span style='display:flex;align-items:center;'>
+                                format!("<span style='display:flex;align-items:center;max-width:200px;'>
                                     <img src='{pfeil}' style='width:12px;height:12px;'/>
                                     <p style='font-family:sans-serif;display:inline-block;margin-left:10px;'>BV-Nr. {bv_nr}: Grundstücksgl. Recht</p>
                                     </span>", 
@@ -1425,7 +1427,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <option value='flst' selected='selected'>Flst.</option>
                         <option value='recht'>Recht</option>
                     </select>
-                    
+                
                     <input type='number' style='width: 60px;margin-left:10px;{bv_geroetet}' value='{lfd_nr}' 
                         id='bv_{zeile_nr}_lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
@@ -1477,20 +1479,22 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                     } else {
                         format!("
                             {beschreibung_textfield}
-                            
-                            <input type='number' style='width: 80px;margin-left:10px;{bv_geroetet}'  value='{groesse}' 
-                                id='bv_{zeile_nr}_groesse'
-                                onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:groesse\", event)'
-                                oninput='editText(\"bv:{zeile_nr}:groesse\", event)'
-                            />
-                            ", 
+                            {groesse_textfield}
+                        ", 
                             beschreibung_textfield = flst.bezeichnung.clone().unwrap_or_default().get_html_editable_textfield(
-                                320, // px width
+                                0, // px width
                                 bve.ist_geroetet(),
                                 format!("bv_{zeile_nr}_bezeichnung"),
                                 format!("bv:{zeile_nr}:bezeichnung"),
+                                TextInputType::Text
                             ),
-                            groesse = flst.groesse.get_m2(),
+                            groesse_textfield = StringOrLines::SingleLine(flst.groesse.get_m2().to_string()).get_html_editable_textfield(
+                                60, // px width
+                                bve.ist_geroetet(),
+                                format!("bv_{zeile_nr}_groesse"),
+                                format!("bv:{zeile_nr}:groesse"),
+                                TextInputType::Number
+                            ),
                         )
                     }
                 )
@@ -1531,12 +1535,14 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_zu-nr"),
                         format!("bv:{zeile_nr}:zu-nr"),
+                        TextInputType::Text
                     ),
                     text_recht_textfield = recht.text.clone().get_html_editable_textfield(
                         320, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_recht-text"),
                         format!("bv:{zeile_nr}:recht-text"),
+                        TextInputType::Text
                     ),
                     bisherige_lfd_nr = recht.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
                 )
@@ -1602,12 +1608,14 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
                 bvz.ist_geroetet(),
                 format!("bv-zuschreibung_{zeile_nr}_bv-nr"),
                 format!("bv-zuschreibung:{zeile_nr}:bv-nr"),
+                TextInputType::Text
             ),
             bv_veraenderung_text_textfield = bvz.text.clone().get_html_editable_textfield(
                 320, // px width
                 bvz.ist_geroetet(),
                 format!("bv-zuschreibung_{zeile_nr}_text"),
                 format!("bv-zuschreibung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -1656,12 +1664,14 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
                 bva.ist_geroetet(),
                 format!("bv-abschreibung_{zeile_nr}_text"),
                 format!("bv-abschreibung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
             bv_abschreibung_text_textfield = bva.text.clone().get_html_editable_textfield(
                 320, // px width
                 bva.ist_geroetet(),
                 format!("bv-abschreibung_{zeile_nr}_text"),
                 format!("bv-abschreibung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -1729,6 +1739,7 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
                 abt1.ist_geroetet(),
                 format!("abt1_{zeile_nr}_eigentuemer"),
                 format!("abt1:{zeile_nr}:eigentuemer"),
+                TextInputType::Text
             ),
         )
     })
@@ -1788,6 +1799,7 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
                 abt1.ist_geroetet(),
                 format!("abt1-grundlage-eintragung_{zeile_nr}_bv-nr"),
                 format!("abt1-grundlage-eintragung:{zeile_nr}:bv-nr"),
+                TextInputType::Text
             ),
             
             grundlage_der_eintragung_textfield = abt1.text.get_html_editable_textfield(
@@ -1795,6 +1807,7 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
                 abt1.ist_geroetet(),
                 format!("abt1-grundlage-eintragung_{zeile_nr}_text"),
                 format!("abt1-grundlage-eintragung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     })
@@ -1848,12 +1861,14 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
                 abt1_a.ist_geroetet(),
                 format!("abt1-veraenderung_{zeile_nr}_lfd-nr"),
                 format!("abt1-veraenderung:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
             ),
             text_textfield = abt1_a.text.get_html_editable_textfield(
                 320, // px width
                 abt1_a.ist_geroetet(),
                 format!("abt1-veraenderung_{zeile_nr}_text"),
                 format!("abt1-veraenderung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -1905,12 +1920,14 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
                 abt1_l.ist_geroetet(),
                 format!("abt1-loeschung_{zeile_nr}_lfd-nr"),
                 format!("abt1-loeschung:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
             ),
             text_textfield = abt1_l.text.get_html_editable_textfield(
                 320, // px width
                 abt1_l.ist_geroetet(),
                 format!("abt1-loeschung_{zeile_nr}_text"),
                 format!("abt1-loeschung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -1972,12 +1989,14 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
                 abt2.ist_geroetet(),
                 format!("abt2_{zeile_nr}_bv-nr"),
                 format!("abt2:{zeile_nr}:bv-nr"),
+                TextInputType::Text
             ),
             recht_textfield = abt2.text.get_html_editable_textfield(
                 320, // px width
                 abt2.ist_geroetet(),
                 format!("abt2_{zeile_nr}_text"),
                 format!("abt2:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     })
@@ -2033,12 +2052,14 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
                 abt2_a.ist_geroetet(),
                 format!("abt2-veraenderung_{zeile_nr}_lfd-nr"),
                 format!("abt2-veraenderung:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
             ),
             recht_textfield = abt2_a.text.get_html_editable_textfield(
                 320, // px width
                 abt2_a.ist_geroetet(),
                 format!("abt2-veraenderung_{zeile_nr}_text"),
                 format!("abt2-veraenderung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2090,12 +2111,14 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
                 abt2_l.ist_geroetet(),
                 format!("abt2-loeschung_{zeile_nr}_lfd-nr"),
                 format!("abt2-loeschung:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
             ),
             recht_textfield = abt2_l.text.get_html_editable_textfield(
                 320, // px width
                 abt2_l.ist_geroetet(),
                 format!("abt2-loeschung_{zeile_nr}_text"),
                 format!("abt2-loeschung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2137,11 +2160,11 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
                 oninput='editText(\"abt3:{zeile_nr}:lfd-nr\", event)' 
             />
             
-            {bv_nr_textfield}
-            
-            {betrag_textfield}
-            
-            {recht_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {bv_nr_textfield}
+                {betrag_textfield}
+                {recht_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2154,25 +2177,28 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
             zeile_nr = zeile_nr,
             lfd_nr = abt3.lfd_nr,
             
-            bv_nr_textfield = abt3.betrag.get_html_editable_textfield(
+            bv_nr_textfield = abt3.bv_nr.get_html_editable_textfield(
                 60, // px width
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_bv-nr"),
                 format!("abt3:{zeile_nr}:bv-nr"),
+                TextInputType::Text
             ),
             
             betrag_textfield = abt3.betrag.get_html_editable_textfield(
-                120, // px width
+                180, // px width
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_betrag"),
                 format!("abt3:{zeile_nr}:betrag"),
+                TextInputType::Text
             ),
             
-            recht_textfield = abt3.betrag.get_html_editable_textfield(
-                120, // px width
+            recht_textfield = abt3.text.get_html_editable_textfield(
+                0, // px width
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_text"),
                 format!("abt3:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2228,6 +2254,7 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 abt3_a.ist_geroetet(),
                 format!("abt3-veraenderung_{zeile_nr}_lfd-nr"),
                 format!("abt3-veraenderung:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
             ),
             
             betrag_textfield = abt3_a.betrag.get_html_editable_textfield(
@@ -2235,6 +2262,7 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 abt3_a.ist_geroetet(),
                 format!("abt3-veraenderung_{zeile_nr}_betrag"),
                 format!("abt3-veraenderung:{zeile_nr}:betrag"),
+                TextInputType::Text
             ),
             
             recht_textfield = abt3_a.text.get_html_editable_textfield(
@@ -2242,6 +2270,7 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 abt3_a.ist_geroetet(),
                 format!("abt3-veraenderung_{zeile_nr}_text"),
                 format!("abt3-veraenderung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2296,6 +2325,7 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 abt3_l.ist_geroetet(),
                 format!("abt3-loeschung_{zeile_nr}_lfd-nr"),
                 format!("abt3-loeschung:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
             ),
             
             betrag_textfield = abt3_l.betrag.get_html_editable_textfield(
@@ -2303,6 +2333,7 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 abt3_l.ist_geroetet(),
                 format!("abt3-loeschung_{zeile_nr}_betrag"),
                 format!("abt3-loeschung:{zeile_nr}:betrag"),
+                TextInputType::Text
             ),
             
             recht_textfield = abt3_l.text.get_html_editable_textfield(
@@ -2310,6 +2341,7 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 abt3_l.ist_geroetet(),
                 format!("abt3-loeschung_{zeile_nr}_text"),
                 format!("abt3-loeschung:{zeile_nr}:text"),
+                TextInputType::Text
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");

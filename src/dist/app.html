@@ -3128,6 +3128,21 @@ function copyToClipboardOnSelectChange(event) {
     }
 }
 
+function editStringOrLines(event, inputId) {
+    
+    // using innerText here because it preserves newlines
+    var innerText = event.target.innerText;
+    if (!innerText) {
+        return;
+    }
+    
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+
+    rpc.edit_text(inputId, innerText);    
+}
+
 // Init
 window.onload = function() { rpc.init(); };
 /*
