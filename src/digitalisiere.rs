@@ -2557,9 +2557,9 @@ impl StringOrLines {
             .map(|l| l.replace(" ", "\u{00a0}"))
             .map(|l| l.replace("\\", "&bsol;"))
             .map(|l| if l.is_empty() { 
-                format!("<p style='font-family:monospace;font-size:16px;word-wrap:break-word;'>&nbsp;</p>") 
+                format!("<div style='display:block;font-family:monospace;font-size:16px;word-wrap:break-word;max-width:500px;'>&nbsp;</div>") 
             } else { 
-                format!("<p style='font-family:monospace;font-size:16px;word-wrap:break-word;'>{}</p>", l) 
+                format!("<div style='display:block;font-family:monospace;font-size:16px;word-wrap:break-word;max-width:500px;'>{}</div>", l) 
             })
             .collect::<Vec<String>>()
         .join("\r\n");
@@ -2571,9 +2571,9 @@ impl StringOrLines {
         };
         
         let width = if width == 0 {
-            format!("display:flex;flex-grow:1;")
+            format!("display:flex;flex-grow:1;max-width:500px;")
         } else {
-            format!("width: {width}px;min-width:{width}px;")
+            format!("width: {width}px;min-width:{width}px;max-width:500px;")
         };
         
         let input_type = match input_type {

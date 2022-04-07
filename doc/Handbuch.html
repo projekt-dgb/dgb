@@ -1,0 +1,294 @@
+<body>
+    <p>
+Das Programm "Grundbuchdigitalisierung", "Digitales Grundbuch" oder kurz "dgb" ist ein Programm, um die Grundbuch-
+PDF-Dateien massenweise in maschinenlesbare Form zu digitalisieren. Die Daten sind dann im JSON-Format verfügbar 
+und können z.B. in eine Datenbank eingepflegt werden. Das Programm selbst beschäftigt sich nur mit dem 
+Digitalisieren und Prüfen der Grundbuch-Daten, zum Hochladen in LEFIS kann das Tool "LEFIS-Upload" verwendet 
+werden.</p>
+
+<h3>Übersicht der Funktionen</h3>
+<p>Nach dem Starten sind die meisten Funktionen sichtbar, aber 
+ausgegraut, da zunächst mindestens eine PDF-Datei geöffnet 
+werden muss. In der oberen Leiste können mit Klick auf "PDF 
+laden" eine oder mehrere Grundbuch-PDF-Dateien geladen 
+werden.</p>
+
+<p>Die Funktionen gliedern sich in vier Bereiche:</p>
+<ol>
+    <li><p>Digitalisierung der Daten (entweder automatisiert oder halbautomatisch)</p></li>
+    <li><p>Bearbeitung der digitalisierten Daten</p></li>
+    <li><p>Überprüfung mit verschiedenen Ansichten</p></li>
+    <li><p>Ausgabe in Dateien (PDF / JSON)</p></li>
+</ol>
+
+<p>
+Für jede .pdf-Datei entsteht bei der Bearbeitung eine .gbx-Datei, welche den abdigitalisierten Inhalt des Grundbuchs 
+enthält. Wenn diese Datei nicht vorhanden ist, fängt das Programm nach dem Öffnen der PDF-Datei (siehe Abb. A3) 
+damit an, das Grundbuch zunächst vollautomatisch auszuwerten. Da die vollautomatische Analyse aber nicht perfekt 
+ist, müssen die Daten danach noch einmal manuell überprüft werden.
+</p>
+
+<h3>Automatisches Klassifizieren von Seiten</h3>
+
+<p>
+Beim ersten Laden analysiert das Programm die Seite und versucht, das Formular (Spalten / Zeilen) anhand der 
+Überschrift zu erkennen. In den meisten Fällen läuft das richtig. Anhand der Farbe der Seite in der Seitenauswahl (siehe 
+Abb. A4) erkennt man den Typ der Seite: Bestandsverzeichnis (blau), Abteilung 1 (grün), Abteilung 2 (gelb) oder 
+Abteilung 3 (orange).
+</p>
+
+<p>
+Jeder Seitentyp entspricht einem Formular, damit das 
+Programm weiß, "wo" es im PDF nach z.B. der Flurstücksgröße 
+suchen soll. Über "Einstellungen bearbeiten" -> "Spalten 
+ausblenden" kann man die Formularspalten, die das Programm 
+pro Seite annimmt, ein- oder ausblenden. In der unteren Hälfte 
+der Oberfläche ist die Seite zu sehen (siehe Abb. A5).
+</p>
+
+<h3>Spalten und Zeilen setzen</h3>
+
+<p>Damit nicht jede Zeile / jeder Text manuell eingegeben werden muss, kann das Programm Texte aus der Seite 
+"ausschneiden", per OCR-Schrifterkennung den Text abschreiben / kopieren und in die richtigen Zellen setzen.</p>
+
+<p>
+Allerdings muss das Programm dafür die Spalten / Zeilen auf der Seite kennen. Per Rechtsklick auf die Seite kann der 
+Typ angepasst werden (vgl. Abb. A6), was zur Folge hat, dass sich die Spaltenanzahl und voreingestellte Breite / 
+Position ändert. Jeder "Seitentyp" entspricht einem voreingestellten Formular. Jede Spalte (blau) kann an den Ecken 
+angefasst und in Größe und Position verändert werden.
+</p>
+
+<p>
+Neben der Seite ist ein gestrichelter Rand zu sehen. Wenn der 
+Mauszeiger in diesen Bereich kommt, erscheint eine Vorschau, 
+wo das Programm einen Umbruch zwischen zwei Zeilen 
+einfügen soll. Mit einem Klick kann der Umbruch eingefügt, mit 
+einem Rechtsklick wieder entfernt werden. Sind auf einer Seite 
+keine Umbrüche zu finden, versucht das Programm, die 
+Zeilenumbrüche zu erraten, was allerdings oft misslingt.
+</p>
+
+<p>
+Mit einem Klick auf "Grundbuch neu analysieren" (vgl. Abb. 
+"Formular: Zeilen setzen, Spalten anpassen, hier: oben rechts 
+(3)") kann das gesamte Grundbuch neu geladen werden: 
+</p>
+
+<i><strong>
+Achtung: Es gehen hierbei alle manuell eingegebenen 
+Daten verloren, da das gesamte Grundbuch neu analysiert wird, d.h. die Zeilen / Spalten neu eingegeben 
+werden.</strong></i>
+
+<h3>Manuelle Bearbeitung der Einträge</h3>
+
+<p>
+Nachdem die Zellen automatisch gefüllt wurden, muss das nun 
+digitale Grundbuch auf Fehler überprüft werden (vgl. Abb. A7). 
+Gegebenenfalls müssen neue Rechte angelegt (grün), gerötet 
+(gelb) oder gelöscht (rot) werden. Auf der rechten Seite sieht 
+man die Analyse, wie sie in LEFIS übernommen werden wird.
+</p>
+
+<p>Tastenkürzel für das Bearbeiten der Datensätze sind hierfür:</p>
+
+<ul>
+    <li><p>STRG + ENTER = neuen Eintrag anlegen (grün)</p></li>
+    <li><p>STRG + LEERTASTE = Eintrag röten (gelb)</p></li>
+    <li><p>STRG + LÖSCHTASTE = Eintrag löschen (rot)</p></li>
+</ul>
+
+<p>
+Ebenso kann mit TAB (nächste Zelle) und SHIFT + TAB 
+(vorherige Zelle) in den Zeilen des Grundbuchs navigiert 
+werden.
+</p>
+
+<p>
+Die Eingabemaske für das Grundbuch ist relativ selbsterklärend, da sie 1:1 den bestehenden Formularen entspricht - 
+die einzige Ausnahme hier ist das Bestandsverzeichnis: "Flst." steht für ein reguläres Flurstück und "Recht" für einen 
+Herrschvermerk.
+</p>
+
+<p>
+Ein Bearbeiter sollte - Seite für Seite - noch einmal überprüfen, 
+ob die Digitalisierung korrekt war. <i>Notiz: Bei Seiten, die bereits 
+digital vorhanden waren (d.h. als kopierbarer Text im PDF, nicht 
+als Hintergrundbild), ist das zu fast 99% der Fall, d.h. man kann 
+einfach durch die Seite scrollen und nur die ersten und letzten 
+Einträge überprüfen.</i>
+</p>
+
+<p>
+Um zu vermeiden, dass lange Rechte abgetippt werden, hat das 
+Programm eine interaktive Schrifterkennung: Mit Klicken und 
+Ziehen kann über dem Bild der PDF-Seite ein grünes Rechteck 
+aufgezogen werden - beim Loslassen wird der Text unter dem 
+Rechteck in die Zwischenablage kopiert (siehe Abb. A8).
+</p>
+
+<h3>Überprüfen der digitalisierten Informationen</h3>
+
+<p>
+Nachdem die Informationen digitalisiert und ausgelesen wurden, kann es trotz alledem vorkommen, dass sich Fehler 
+eingeschlichen haben. Um diese Fehler zu erkennen, muss das Grundbuch nach der Digitalisierung und Analyse noch 
+einmal mit dem Original verglichen werden. Ebenso müssen verfahrensbezogene Nebenbeteiligten-IDs (Stamm- / 
+Unternummern) vergeben werden, um die Nebenbeteiligten in LEFIS einzupflegen.
+</p>
+
+<p>
+<i>Für die folgenden Schritte sollten zunächst alle Grundbuchblätter des Verfahrens geöffnet werden.</i> Um eine Liste der 
+Grundbuchblätter in einem Verfahren zu erhalten, folgen Sie bitte der Anleitung im Artikel LefisUpload-
+AlleGrundbuchblätterImVerfahrenInListeAusgeben.
+</p>
+
+<h4>Überprüfen der Nebenbeteiligten</h4>
+
+<p>
+Mit der Funktion "Nebenbeteiligte in CSV" können alle 
+Rechtsinhaber (= Nebenbeteiligte) des gesamten Verfahrens in 
+eine .tsv (tab-separated-values)-Datei exportiert werden (siehe 
+Abb. A9). Die Spalten dieser Datei enthalten:
+</p>
+
+<ul>
+    <li><p>
+    ORDNUNGSNUMMER : die Stammnummer des Beteiligten - hier 
+kann entweder eine existierende oder eine neue Nummer 
+eingetragen werden.
+    </p></li>
+        <li><p>
+    TYP : der "Typ" des Beteiligten: Beim Importieren der 
+    Nebenbeteiligten können Ordnungsnummern automatisch 
+    vergeben werden, aber nur wenn die Spalte 
+    ORDNUNGSNUMMER leer ist.
+        </p>
+        <ul>
+            <li><p>OEFFENTLICH : es wird eine Ordnungsnummer mit 810* vergeben, z.B. 8100001</p></li>
+            <li><p>BANK : es wird eine Ordnungsnummer mit 812* vergeben, z.B. 8120001</p></li>
+            <li><p>AGRAR : es wird eine Ordnungsnummer mit 813* vergeben, z.B. 8130001</p></li>
+            <li><p>JEW-EIGENT : es wird eine Ordnungsnummer mit 815* vergeben, z.B. 8150001</p></li>
+            <li><p>LEITUNG : es wird eine Ordnungsnummer mit 817* vergeben, z.B. 8170001</p></li>
+            <li><p>GMBH : es wird eine Ordnungsnummer mit 819* vergeben, z.B. 8190001</p></li>
+            <li><p>&lt;leer&gt;: es wird keine Ordnungsnummer automatisch vergeben</p></li>
+        </ul>
+    </li>
+    
+    <li><p>RECHT : die Rechte, bei dem der Nebenbeteiligte auftaucht</p></li>
+    <li><p>NAME (GRUNDBUCH) : Name (Text) des Nebenbeteiligten im Grundbuch</p></li>
+    <li>
+        <p>ANREDE : LEFIS-Attribut: wird beim Hochladen in LEFIS berücksichtigt.</p>
+        <ul>
+            <li><p>HERR</p></li>
+            <li><p>FRAU</p></li>
+            <li><p>FIRMA</p></li>
+        </ul>
+    </li>
+    <li><p>TITEL : LEFIS-Attribut: wird beim Hochladen in LEFIS berücksichtigt</p></li>
+    <li><p>VORNAME : LEFIS-Attribut: wird beim Hochladen in LEFIS berücksichtigt</p></li>
+    <li><p>NACHNAME_ODER_FIRMA : LEFIS-Attribut: wird beim Hochladen in LEFIS berücksichtigt - wenn diese Spalte leer ist, wird anstelle dessen die Spalte NAME (GRUNDBUCH) übernommen</p></li>
+    <li><p>GEBURTSNAME : LEFIS-Attribut: wird beim Hochladen in LEFIS berücksichtigt</p></li>
+    <li><p>GEBURTSDATUM : Geburtsdatum im Format DD.MM.YYYY, wird beim Hochladen in LEFIS berücksichtigt</p></li>
+    <li><p>WOHNORT : LEFIS-Attribut, wird beim Hochladen in LEFIS berücksichtigt</p></li>    
+</ul>
+
+<p>
+In der Tabelle kann man relativ einfach die Schreibweisen aller Nebenbeteiligten überprüfen. Da auch verschiedene 
+Formulierungen desselben Inhabers verschiedene Ordnungsnummern erhalten, ist es in Ordnung, wenn ein Name 
+mehrmals mit verschiedenen Schreibweisen vorhanden ist.
+</p>
+
+<p>
+Fehler kann man hier schnell erkennen, das zugehörige Recht in der Spalte RECHT finden, das Grundbuch öffnen und 
+den Fehler überprüfen / korrigieren.
+</p>
+
+<h4>Zuordnen von Nebenbeteiligten-IDs</h4>
+
+<p>
+Solange noch keine Nebenbeteiligten-IDs geladen sind, wird die 
+Warnung "Konnte keine Ordnungsnummer finden" unter dem 
+Recht in der Analyse angezeigt. Um diese Warnung aufzuheben, 
+müssen die soeben erstellten Ordnungsnummern zugewiesen 
+werden, was automatisch bei einer Übereinstimmung des 
+Rechtsinhabers mit dem Eintrag in der Spalte NAME 
+(GRUNDBUCH) geschieht. Mit der Funktion "Nebenbeteiligte 
+entfernen" können zunächst alte Nebenbeteiligten-IDs entfernt 
+werden, danach können neue Nebenbeteiligte mit 
+"Nebenbeteiligte importieren" neu aus der .tsv-Datei importiert 
+werden (siehe Abb. A10). Dabei können automatisch 
+Ordnungsnummern basierend auf dem Typ (siehe voriger 
+Abschnitt) vergeben werden.
+</p>
+
+<p>
+Wenn das Grundbuch keine Fehler aufweist und alle 
+Rechtsinhaber im Grundbuch eine Ordnungsnummer haben, 
+ändert sich die Farbe des Häkchens in der Spalte der offenen 
+Dateien von hellgrün auf dunkelgrün. Falls noch Fehler in der 
+Datei vorhanden sind, wird anstelle dessen ein gelbes Warn-
+Dreieck angezeigt. Nach der Zuweisung wird die neue 
+Ordnungsnummer vor dem Namen des Rechtsinhabers 
+angezeigt.
+</p>
+
+<h4>Überprüfen von Rötungen und Rechten</h4>
+
+<p>
+Um Rötungen zu überprüfen, ist es am besten, sich das gesamte Verfahren noch einmal auszudrucken und - auf Papier 
+- mit dem Original-Grundbuch zu vergleichen. Mit der Funktion "Export als PDF" können alle momentan geladenen 
+Grundbuchblätter in ein PDF ausgegeben werden, sodass man nicht jedes Grundbuchblatt einzeln drucken muss.
+</p>
+
+<h4>Überprüfen von Teilbelastungen</h4>
+
+<p>
+Da die Funktion "Abteilung 2 und 3: Belastete Flurstücke auslesen" viele verschieden Formulierungen ("nur lastend an 
+...", "lastend nur an ...", "bezüglich ... lastet an ...") auswerten muss, kann es sein, dass verschiedene Belastungen nicht 
+richtig erfasst wurden. Um die Belastungen zu überprüfen, kann man über die Funktion "Alle Teilbelastungen speichern 
+unter" alle Rechte im Verfahren, die eine Teilbelastung haben, in eine .html-Datei ausgeben und überprüfen.
+</p>
+
+<h4>Überprüfen von Kurztext und Rangvermerken</h4>
+
+<p>
+Genauso wie die Teilbelastungen können auch alle Rechte (im gesamten Verfahren) in eine .html-Datei gespeichert 
+werden. In dieser Übersicht sieht man sowohl den Original-Text als auch den gekürzten Text und den ausgelesenen 
+Rangvermerk.
+</p>
+
+<h4>Ausgeben von Fehlerberichten</h4>
+
+<p>
+Bei schwerwiegenden Fehlern (z.B. ein Recht referenziert ein Flurstück, das nicht im Bestandsverzeichnis vorhanden 
+ist), sowie Exception s in den Funktionen der Konfiguration, zeigt das Programm einen Fehler (in rot) unter dem Recht 
+an und ändert das Icon in der ersten Spalte auf ein gelbes Warn-Dreieck. Um eine Übersicht aller noch zu 
+korrigierenden Fehler im Verfahren zu erhalten, kann man die Funktion "alle Fehler speichern unter" benutzen, um die 
+Fehler in eine .html-Datei auszugeben.
+</p>
+
+<h4>Überprüfen von Abteilung 1 / Legitimation</h4>
+
+<p>
+Die Abteilung 1 ist wichtig, um später Eigentümer über das Grundbuch zu legitimieren. Mit der Funktion "alle Abt. 1 
+speichern unter" werden alle Einträge der geladenen Dateien in eine .tsv-Tabelle ausgegeben.
+</p>
+
+<h3>Export und Weiterverarbeitung</h3>
+
+<p>
+Wenn alle Daten bereinigt, geprüft und Ordnungsnummern zugewiesen sind, kann das Endergebnis aller 
+Grundbuchblätter in eine ".lefis"-JSON-Datei ausgegeben werden. Diese Datei enthält nicht mehr die Original-Daten, 
+sondern nur noch ein Abbild der ausgelesenen und ausgewerteten Informationen und kann vom Programm LEFIS-
+Upload in die DHK eingespielt oder von anderen externen Programmen übernommen werden.
+</p>
+
+<h3>Rechtliche Informationen</h3>
+
+<p>
+Das Programm selbst steht unter der MIT-Lizenz und wurde ursprünglich von Felix Schütt &lt;Felix.Schuett@vlf-
+brandenburg.de&gt; geschrieben. Icons wurden bereitgestellt von <a href="https://icons8.com/">https://icons8.com/</a>.
+</p>
+
+<p>Bitte schreiben Sie mich bei Problemen oder Fragen zu dem Programm an.</p>
+
+</body>

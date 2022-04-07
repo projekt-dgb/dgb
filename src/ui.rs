@@ -62,7 +62,7 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
 
 pub fn render_popover_content(rpc_data: &RpcData) -> String {
 
-    const ICON_CLOSE: &[u8] = include_bytes!("./img/icons8-close-48.png");
+    const ICON_CLOSE: &[u8] = include_bytes!("./img/icons8-close-96.png");
 
     let application_popover_color = if !rpc_data.is_context_menu_open() {
         "rgba(0, 0, 0, 0.5)"
@@ -72,34 +72,49 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     
     let icon_close_base64 = base64::encode(ICON_CLOSE);
     
+    let close_button = format!("
+    <div style='position:absolute;top:50px;z-index:9999;right:-25px;background:white;border-radius:10px;box-shadow: 0px 0px 10px #cccccc88;cursor:pointer;' onmouseup='closePopOver()'>
+        <img src='data:image/png;base64,{icon_close_base64}' style='width:50px;height:50px;' />
+    </div>");
+    
     let pc = match rpc_data.popover_state {
         None => return String::new(),
         Some(PopoverState::Info) => {
             format!("
-            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
-                    <h2 style='font-size:24px;font-family:sans-serif;'>Digitales Grundbuch Version {version}</h2>
-                    
-                    <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:800px;'>
-                        <iframe width='auto' height='auto' src='data:text/html;base64,{license_base64}' style='min-width:100%;min-height:100%;'></iframe>                       
-                    </div>
+            <div style='width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
+                
+                {close_button}
+                
+                <h2 style='font-size:24px;font-family:sans-serif;'>Digitales Grundbuch Version {version}</h2>
+                
+                <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:800px;'>
+                    <iframe width='auto' height='auto' src='data:text/html;base64,{license_base64}' style='min-width:100%;min-height:100%;'></iframe>                       
                 </div>
+            </div>
             ",version = env!("CARGO_PKG_VERSION"),
             license_base64 = base64::encode(include_bytes!("../licenses.html")))
         },
-        Some(PopoverState::Help) => {
+        Some(PopoverState::Help) => {            
+            static DOKU: &str = include_str!("../doc/Handbuch.html");
+            let base64_dok = base64::encode(DOKU);
             format!("
-            <div style='width:800px;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
-                    <h2 style='font-size:24px;font-family:sans-serif;'>Anwenderhilfe</h2>
-                    <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:800px;'>
-                    </div>
+            <div style='width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
+                
+                {close_button}
+                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Benutzerhandbuch</h2>
+                <div style='padding:5px 0px;display:flex;flex-grow:1;line-height:1.5;min-height:800px;'>
+                    <iframe src='data:text/html;base64,{base64_dok}' width='100%' height='100%' style='min-width:100%;min-height:800px;display:flex;flex-grow:1;'/>
                 </div>
-            ")
+            </div>")
         },
         Some(PopoverState::Configuration) => {
             format!("
-                <div style='pointer-events:unset;width:1200px;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
-                    <h2 style='font-size:20px;padding-bottom:10px;font-family:sans-serif;'>Konfiguration</h2>
-                    <p style='font-size:12px;padding-bottom:5px;'>Pfad: {konfig_pfad}</p>
+                <div style='pointer-events:unset;width:1200px;position:relative;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
+                
+                    {close_button}
+                    
+                    <h2 style='font-size:24px;padding-bottom:25px;font-family:sans-serif;'>Konfiguration</h2>
+                    <p style='font-size:12px;padding-bottom:10px;'>Pfad: {konfig_pfad}</p>
                     
                     <div style='padding:5px 0px;'>
                             <div style='display:flex;flex-direction:row;'>
@@ -523,11 +538,12 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 if cm.seite_ausgewaehlt > 20 { "transform:translateY(-100%);" } else { "" }, 
                 seite = cm.seite_ausgewaehlt
             )
-        }
+        },
+        
     };
     
     let pc = format!("
-        <div style='background:{application_popover_color};width: 100%;height: 100%;min-height: 100%;z-index:1001;pointer-events:all;{overflow}' onmousedown='closePopOver()'>
+        <div style='background:{application_popover_color};width: 100%;height: 100%;min-height: 100%;z-index:1001;pointer-events:all;{overflow}' onmouseup='closePopOver()'>
             {pc}
         </div>", 
         overflow = if rpc_data.is_context_menu_open() { "" } else { "overflow:scroll;" }, 
@@ -1428,37 +1444,14 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <option value='recht'>Recht</option>
                     </select>
                 
-                    <input type='number' style='width: 60px;margin-left:10px;{bv_geroetet}' value='{lfd_nr}' 
-                        id='bv_{zeile_nr}_lfd-nr'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
-                        oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
-                    />
-                    
-                    <input type='number' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
-                        id='bv_{zeile_nr}_bisherige-lfd-nr'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
-                        oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
-                    />
-                    
-                    <input type='text' style='width: 160px;{bv_geroetet}'  value='{gemarkung}' 
-                        id='bv_{zeile_nr}_gemarkung'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:gemarkung\", event)'
-                        oninput='editText(\"bv:{zeile_nr}:gemarkung\", event)'
-                    />
-                    
-                    <input type='number' style='width: 80px;{bv_geroetet}'  value='{flur}' 
-                        id='bv_{zeile_nr}_flur'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flur\", event)'
-                        oninput='editText(\"bv:{zeile_nr}:flur\", event)'
-                    />
-                    
-                    <input type='text' style='width: 80px;{bv_geroetet}'  value='{flurstueck}' 
-                        id='bv_{zeile_nr}_flurstueck'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:flurstueck\", event)'
-                        oninput='editText(\"bv:{zeile_nr}:flurstueck\", event)'
-                    />
-
-                    {input_beschreibung_textfield}
+                    <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;margin-left:10px;'>
+                        {lfd_nr_textfield}
+                        {bisherige_lfd_nr_textfield}
+                        {gemarkung_textfield}
+                        {flur_textfield}
+                        {flurstueck_textfield}
+                        {input_beschreibung_textfield}
+                    </div>
 
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
@@ -1467,13 +1460,42 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
                     </div>
                 </div>",
-                    bv_geroetet = bv_geroetet,
                     zeile_nr = zeile_nr,
-                    lfd_nr = format!("{}", flst.lfd_nr),
-                    bisherige_lfd_nr = flst.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
-                    flur = format!("{}", flst.flur),
-                    flurstueck = format!("{}", flst.flurstueck),
-                    gemarkung = flst.gemarkung.clone().unwrap_or_default(),
+                    lfd_nr_textfield = StringOrLines::SingleLine(flst.lfd_nr.to_string()).get_html_editable_textfield(
+                        60, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_lfd-nr"),
+                        format!("bv:{zeile_nr}:lfd-nr"),
+                        TextInputType::Number
+                    ),
+                    bisherige_lfd_nr_textfield = StringOrLines::SingleLine(flst.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default()).get_html_editable_textfield(
+                        60, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_bisherige-lfd-nr"),
+                        format!("bv:{zeile_nr}:bisherige-lfd-nr"),
+                        TextInputType::Number
+                    ),
+                    gemarkung_textfield = StringOrLines::SingleLine(flst.gemarkung.clone().unwrap_or_default()).get_html_editable_textfield(
+                        150, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_gemarkung"),
+                        format!("bv:{zeile_nr}:gemarkung"),
+                        TextInputType::Text
+                    ),
+                    flur_textfield = StringOrLines::SingleLine(flst.flur.to_string()).get_html_editable_textfield(
+                        60, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_flur"),
+                        format!("bv:{zeile_nr}:flur"),
+                        TextInputType::Number
+                    ),
+                    flurstueck_textfield = StringOrLines::SingleLine(flst.flurstueck.clone()).get_html_editable_textfield(
+                        60, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_flurstueck"),
+                        format!("bv:{zeile_nr}:flurstueck"),
+                        TextInputType::Text
+                    ),
                     input_beschreibung_textfield = if konfiguration.lefis_analyse_einblenden {
                         String::new()
                     } else {
@@ -1489,7 +1511,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                                 TextInputType::Text
                             ),
                             groesse_textfield = StringOrLines::SingleLine(flst.groesse.get_m2().to_string()).get_html_editable_textfield(
-                                60, // px width
+                                90, // px width
                                 bve.ist_geroetet(),
                                 format!("bv_{zeile_nr}_groesse"),
                                 format!("bv:{zeile_nr}:groesse"),
@@ -1506,11 +1528,13 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <option value='flst'>Flst.</option>
                         <option value='recht' selected='selected'>Recht</option>
                     </select>
+                    
                     <input type='number' style='margin-left:10px;width: 30px;{bv_geroetet}' value='{lfd_nr}' 
                         id='bv_{zeile_nr}_lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
                         oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
                     />
+                    
                     <input type='number' placeholder='Bisherige lfd. Nr.' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
                         id='bv_{zeile_nr}_bisherige-lfd-nr'
                         onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
@@ -1553,13 +1577,13 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis</h4>
         
-        <div class='__application-table-header'>
+        <div class='__application-table-header' style='display:flex;flex-direction:row;'>
             <p style='width: 60px;'>Typ</p>
             <p style='width: 60px;'>Nr.</p>
-            <p style='width: 80px;'>Nr. (alt)</p>
-            <p style='width: 160px;'>Gemarkung</p>
-            <p style='width: 80px;'>Flur</p>
-            <p style='width: 80px;'>Flurstück</p>
+            <p style='width: 60px;'>Nr. (alt)</p>
+            <p style='width: 150px;'>Gemarkung</p>
+            <p style='width: 60px;'>Flur</p>
+            <p style='width: 60px;'>Flst.</p>
             {p_bezeichnung}
         </div>
         {bv}
@@ -1569,8 +1593,8 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
             "" 
         } else { 
             "
-            <p style='width: 320px;'>Bezeichnung</p>
-            <p style='width: 80px;'>Größe (m2)</p>
+            <p style='flex-grow:1;display:flex;'>Bezeichnung</p>
+            <p style='width: 90px;margin-right:162px;'>Größe (m2)</p>
             " 
         }
     ))
@@ -1593,8 +1617,12 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            {bv_nr_textfield}
-            {bv_veraenderung_text_textfield}
+        
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {bv_nr_textfield}
+                {bv_veraenderung_text_textfield}
+            </div>
+            
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
                 <button onclick='eintragNeu(\"bv-zuschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1611,7 +1639,7 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
                 TextInputType::Text
             ),
             bv_veraenderung_text_textfield = bvz.text.clone().get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 bvz.ist_geroetet(),
                 format!("bv-zuschreibung_{zeile_nr}_text"),
                 format!("bv-zuschreibung:{zeile_nr}:text"),
@@ -1623,9 +1651,9 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis - Zuschreibungen</h4>
         
-        <div class='__application-table-header'>
+        <div class='__application-table-header' style='display:flex;flex-direction:row;'>
             <p style='width: 90px;'>BV-Nr.</p>
-            <p style='width: 160px;'>Text</p>
+            <p style='display:flex;flex-grow:1;'>Text</p>
         </div>
         
         {bv}
@@ -1649,8 +1677,12 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
         
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
-            {bv_nr_textfield}
-            {bv_abschreibung_text_textfield}
+        
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {bv_nr_textfield}
+                {bv_abschreibung_text_textfield}
+            </div>
+            
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
                 <button onclick='eintragNeu(\"bv-abschreibung:{zeile_nr}\")' tabindex='-1' class='btn btn_neu' >neu</button>
@@ -1667,7 +1699,7 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
                 TextInputType::Text
             ),
             bv_abschreibung_text_textfield = bva.text.clone().get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 bva.ist_geroetet(),
                 format!("bv-abschreibung_{zeile_nr}_text"),
                 format!("bv-abschreibung:{zeile_nr}:text"),
@@ -1679,14 +1711,13 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis - Abschreibungen</h4>
         
-        <div class='__application-table-header'>
+        <div class='__application-table-header' style='display:flex;flex-direction:row;'>
             <p style='width: 90px;'>BV-Nr.</p>
-            <p style='width: 160px;'>Text</p>
+            <p style='display:flex;flex-grow:1;'>Text</p>
         </div>
         
         {bv}
     ", bv = bv))
-
 }
 
 pub fn render_abt_1(open_file: &PdfFile) -> String {
@@ -1714,14 +1745,11 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
         
         format!("
         <div class='__application-abt1-eintrag' style='display:flex;margin-top:5px;'>
-        
-            <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt1_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt1:{zeile_nr}:lfd-nr\", event)'
-                oninput='editText(\"abt1:{zeile_nr}:lfd-nr\", event)'
-            />
             
-            {eigentuemer_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {eigentuemer_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1731,11 +1759,16 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
             </div>
             
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            lfd_nr = abt1.lfd_nr,
+            lfd_nr_textfield = StringOrLines::SingleLine(abt1.lfd_nr.to_string()).get_html_editable_textfield(
+                90, // px width
+                abt1.ist_geroetet(),
+                format!("abt1_{zeile_nr}_lfd-nr"),
+                format!("abt1:{zeile_nr}:lfd-nr"),
+                TextInputType::Number
+            ),
             eigentuemer_textfield = abt1.eigentuemer.get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 abt1.ist_geroetet(),
                 format!("abt1_{zeile_nr}_eigentuemer"),
                 format!("abt1:{zeile_nr}:eigentuemer"),
@@ -1743,22 +1776,22 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
             ),
         )
     })
-    
     .collect::<Vec<String>>()
     .join("\r\n");
     
     normalize_for_js(format!("
-           <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1</h4>
-          
-          <div class='__application-table-header'>
-            <p style='width: 30px;'>Nr.</p>
-            <p style='width: 160px;'>Eigentümer</p>
-          </div>
-          
-          {abt1}", abt1 = abt1))
+    <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1</h4>
+    
+    <div class='__application-table-header' style='display:flex;flex-grow:1;'>
+    <p style='width: 90px;'>Nr.</p>
+    <p style='display:flex;flex-grow:1'>Eigentümer</p>
+    </div>
+    
+    {abt1}", abt1 = abt1))
 }
 
 pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
+    
     use crate::digitalisiere::Abt1GrundEintragung;
     
     let mut abt1_eintraege = open_file.analysiert.abt1.grundlagen_eintragungen.clone();
@@ -1780,9 +1813,10 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-abt1-grundlage-eintragung' style='display:flex;margin-top:5px;'>
             
-            {bv_nr_textfield}
-            
-            {grundlage_der_eintragung_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {bv_nr_textfield}
+                {grundlage_der_eintragung_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1803,7 +1837,7 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
             ),
             
             grundlage_der_eintragung_textfield = abt1.text.get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 abt1.ist_geroetet(),
                 format!("abt1-grundlage-eintragung_{zeile_nr}_text"),
                 format!("abt1-grundlage-eintragung:{zeile_nr}:text"),
@@ -1818,9 +1852,9 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
     normalize_for_js(format!("
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Grundlagen der Eintragungen</h4>
           
-          <div class='__application-table-header'>
+          <div class='__application-table-header' style='display:flex;flex-direction:row;flex-grow:1;'>
             <p style='width: 60px;'>BV-Nr.</p>
-            <p style='width: 160px;'>Grundlage d. Eintragung</p>
+            <p style='display:flex;flex-grow:1;'>Grundlage d. Eintragung</p>
           </div>
           
           {abt1}", abt1 = abt1))
@@ -1844,9 +1878,10 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
-            {lfd_nr_textfield}
-            
-            {text_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {text_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1864,7 +1899,7 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
                 TextInputType::Text
             ),
             text_textfield = abt1_a.text.get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 abt1_a.ist_geroetet(),
                 format!("abt1-veraenderung_{zeile_nr}_text"),
                 format!("abt1-veraenderung:{zeile_nr}:text"),
@@ -1876,9 +1911,9 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Veränderungen</h4>
         
-        <div class='__application-table-header'>
+        <div class='__application-table-header' style='display:flex;flex-grow:1;'>
             <p style='width: 90px;'>lfd. Nr.</p>
-            <p style='width: 160px;'>Text</p>
+            <p style='flex-grow:1;'>Text</p>
         </div>
         
         {abt1_veraenderungen}
@@ -1903,9 +1938,10 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
 
-            {lfd_nr_textfield}
-            
-            {text_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {text_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1923,7 +1959,7 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
                 TextInputType::Text
             ),
             text_textfield = abt1_l.text.get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 abt1_l.ist_geroetet(),
                 format!("abt1-loeschung_{zeile_nr}_text"),
                 format!("abt1-loeschung:{zeile_nr}:text"),
@@ -1935,9 +1971,9 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Löschungen</h4>
         
-        <div class='__application-table-header'>
+        <div class='__application-table-header' style='display:flex;'>
             <p style='width: 90px;'>lfd. Nr.</p>
-            <p style='width: 160px;'>Text</p>
+            <p style='flex-grow:1;display:flex;'>Text</p>
         </div>
         
         {abt1_loeschungen}
@@ -1963,15 +1999,11 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-abt2-eintrag' style='display:flex;margin-top:5px;'>
             
-            <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt2_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt2:{zeile_nr}:lfd-nr\", event)'
-                oninput='editText(\"abt2:{zeile_nr}:lfd-nr\", event)'
-            />
-            
-            {bv_nr_textfield}
-            
-            {recht_textfield}
+            <div class='__application-table-header' style='display:flex;'>
+                {lfd_nr_textfield}
+                {bv_nr_textfield}
+                {recht_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -1980,10 +2012,14 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
                 <button onclick='eintragLoeschen(\"abt2:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>", 
-            bv_geroetet = bv_geroetet,
             zeile_nr = zeile_nr,
-            lfd_nr = abt2.lfd_nr,
-            
+            lfd_nr_textfield =  StringOrLines::SingleLine(abt2.lfd_nr.to_string()).get_html_editable_textfield(
+                90, // px width
+                abt2.ist_geroetet(),
+                format!("abt2_{zeile_nr}_lfd-nr"),
+                format!("abt2:{zeile_nr}:lfd-nr"),
+                TextInputType::Text
+            ),
             bv_nr_textfield = abt2.bv_nr.get_html_editable_textfield(
                 90, // px width
                 abt2.ist_geroetet(),
@@ -1992,7 +2028,7 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
                 TextInputType::Text
             ),
             recht_textfield = abt2.text.get_html_editable_textfield(
-                320, // px width
+                0, // px width
                 abt2.ist_geroetet(),
                 format!("abt2_{zeile_nr}_text"),
                 format!("abt2:{zeile_nr}:text"),
@@ -2006,10 +2042,10 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
     normalize_for_js(format!("
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2</h4>
           
-          <div class='__application-table-header'>
-            <p style='width: 30px;'>Nr.</p>
+          <div class='__application-table-header' style='display:flex;flex-grow:1;'>
+            <p style='width: 90px;'>Nr.</p>
             <p style='width: 90px;'>BV-Nr.</p>
-            <p style='width: 160px;'>Recht</p>
+            <p style='flex-grow:1;'>Recht</p>
           </div>
           
           {abt2}", abt2 = abt2))
@@ -2035,7 +2071,6 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
             {lfd_nr_textfield}
-            
             {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
@@ -2095,7 +2130,6 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
 
             {lfd_nr_textfield}
-            
             {recht_textfield}
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
