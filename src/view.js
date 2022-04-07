@@ -7,6 +7,8 @@ let rpc = {
   init: function() { rpc.invoke({ cmd: 'init' }); },
   
   load_pdf: function() { rpc.invoke({ cmd : 'load_pdf' }); },
+  create_new_grundbuch: function() { rpc.invoke({ cmd : 'create_new_grundbuch' }); },
+      
   undo:  function() { rpc.invoke({ cmd : 'undo' }); },
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
@@ -25,6 +27,8 @@ let rpc = {
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
   open_help: function() { rpc.invoke({ cmd : 'open_help' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
+  set_configuration_view: function(section_id) { rpc.invoke({ cmd : 'set_configuration_view', section_id: section_id }); },
+  
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
       cmd : 'select_ocr', 
@@ -94,6 +98,7 @@ let rpc = {
 
 let tab_functions = {
     load_new_pdf: function(event) { rpc.load_pdf(); },
+    create_new_grundbuch: function(event) { rpc.create_new_grundbuch(); },
     undo: function(event) { rpc.undo() },
     redo: function(event) { rpc.redo() },
     export_nb: function(event) { rpc.export_nb() },
@@ -1254,6 +1259,11 @@ function editStringOrLines(event, inputId) {
     }
 
     rpc.edit_text(inputId, innerText);    
+}
+function activateConfigurationView(event, section_id) {
+    event.stopPropagation();
+    event.preventDefault();
+    rpc.set_configuration_view(section_id);
 }
 
 // Init

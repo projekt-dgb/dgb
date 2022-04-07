@@ -295,3 +295,57 @@ img {
 .stringorlines-textfield:hover {
     border: 1px solid rgba(25, 25, 25, 1);
 }
+
+.__application_configuration_sidebar_section {
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: white;
+    transition: color 1s, background 1s, border 1s;
+    display:flex;
+    color: #ccc;
+    flex-direction:row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 6px;
+    cursor:pointer;
+    margin-top:5px;
+    cursor: pointer;
+}
+
+.__application_configuration_sidebar_section p {
+    text-align: right;
+    font-style: italic;
+    color: #444;
+    cursor: pointer;
+    transition: color 1s, background 1s, border 1s;
+}
+
+.__application_configuration_sidebar_section img {
+    width: 25px;
+    height:25pc;
+    margin-right:10px;
+    background: white;
+    padding: 4px;
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+.__application_configuration_sidebar_section:hover {
+    color: #9d00ff;
+    border: 1px solid #9d00ff;
+}
+
+.__application_configuration_sidebar_section:hover p {
+    color: #9d00ff;
+}
+
+.__application_configuration_sidebar_section.active {
+    border: 1px solid white;
+    background: #9d00ff;
+    color: white;
+}
+
+
+.__application_configuration_sidebar_section.active p {
+    color: white;
+}

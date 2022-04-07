@@ -62,8 +62,26 @@ impl RpcData {
 pub enum PopoverState {
     ContextMenu(ContextMenuData),
     Info,
-    Configuration,
+    CreateNewGrundbuch,
+    Configuration(ConfigurationView),
     Help,
+}
+
+#[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
+pub enum ConfigurationView {
+    Allgemein,
+    RegEx,
+    TextSaubern,
+    Abkuerzungen,
+    FlstAuslesen,
+    KlassifizierungRechteArt,
+    RechtsinhaberAuslesenAbt2,
+    RangvermerkAuslesenAbt2,
+    TextKuerzenAbt2,
+    BetragAuslesenAbt3,
+    KlassifizierungSchuldenArtAbt3,
+    RechtsinhaberAuslesenAbt3,
+    TextKuerzenAbt3,
 }
 
 #[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
@@ -378,6 +396,8 @@ pub enum Cmd {
     // Open file dialog for file(s) to load
     #[serde(rename = "load_pdf")]
     LoadPdf,
+    #[serde(rename = "create_new_grundbuch")]
+    CreateNewGrundbuch,
     #[serde(rename = "undo")]
     Undo,
     #[serde(rename = "redo")]
@@ -402,6 +422,8 @@ pub enum Cmd {
     ExportPdf,
     #[serde(rename = "open_configuration")]
     OpenConfiguration,
+    #[serde(rename = "set_configuration_view")]
+    SetConfigurationView { section_id: String },
     #[serde(rename = "open_info")]
     OpenInfo,
     #[serde(rename = "open_help")]
@@ -674,6 +696,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
                         
             digitalisiere_dateien(pdf_zu_laden);
+        },
+        Cmd::CreateNewGrundbuch => {
+            data.popover_state = Some(PopoverState::CreateNewGrundbuch);
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO
@@ -1143,7 +1169,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Ok(json) = serde_json::to_string_pretty(&open_file) {
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             }
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
+            open_file.icon = None;
+            if data.konfiguration.lefis_analyse_einblenden {
+                webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
+            }
         },
         Cmd::BvEintragTypAendern { path, value } => {
         
@@ -1584,7 +1613,26 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenConfiguration => {
-            data.popover_state = Some(PopoverState::Configuration);
+            data.popover_state = Some(PopoverState::Configuration(ConfigurationView::Allgemein));
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+        },
+        Cmd::SetConfigurationView { section_id } => {
+            data.popover_state = Some(PopoverState::Configuration(match section_id.as_str() {
+                "allgemein" => ConfigurationView::Allgemein,
+                "regex" => ConfigurationView::RegEx,
+                "text-saubern" => ConfigurationView::TextSaubern,
+                "abkuerzungen" => ConfigurationView::Abkuerzungen,
+                "flst-auslesen" => ConfigurationView::FlstAuslesen,
+                "klassifizierung-rechteart-abt2" => ConfigurationView::KlassifizierungRechteArt,
+                "rechtsinhaber-auslesen-abt2" => ConfigurationView::RechtsinhaberAuslesenAbt2,
+                "rangvermerk-auslesen-abt2" => ConfigurationView::RangvermerkAuslesenAbt2,
+                "text-kuerzen-abt2" => ConfigurationView::TextKuerzenAbt2,
+                "betrag-auslesen-abt3" => ConfigurationView::BetragAuslesenAbt3,
+                "klassifizierung-schuldenart-abt3" => ConfigurationView::KlassifizierungSchuldenArtAbt3,
+                "rechtsinhaber-auslesen-abt3" => ConfigurationView::RechtsinhaberAuslesenAbt3,
+                "text-kuerzen-abt3" => ConfigurationView::TextKuerzenAbt3,
+                _ => { return; }
+            }));
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenInfo => {
@@ -1980,7 +2028,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
         },
         Cmd::ClosePopOver { } => {
-            if data.popover_state == Some(PopoverState::Configuration) {
+            if let Some(PopoverState::Configuration(_)) = data.popover_state {
                 for (k, v) in data.loaded_files.iter_mut() {
                     v.icon = None;
                 }

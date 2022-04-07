@@ -1884,6 +1884,60 @@ img {
 .stringorlines-textfield:hover {
     border: 1px solid rgba(25, 25, 25, 1);
 }
+
+.__application_configuration_sidebar_section {
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: white;
+    transition: color 1s, background 1s, border 1s;
+    display:flex;
+    color: #ccc;
+    flex-direction:row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 6px;
+    cursor:pointer;
+    margin-top:5px;
+    cursor: pointer;
+}
+
+.__application_configuration_sidebar_section p {
+    text-align: right;
+    font-style: italic;
+    color: #444;
+    cursor: pointer;
+    transition: color 1s, background 1s, border 1s;
+}
+
+.__application_configuration_sidebar_section img {
+    width: 25px;
+    height:25pc;
+    margin-right:10px;
+    background: white;
+    padding: 4px;
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+.__application_configuration_sidebar_section:hover {
+    color: #9d00ff;
+    border: 1px solid #9d00ff;
+}
+
+.__application_configuration_sidebar_section:hover p {
+    color: #9d00ff;
+}
+
+.__application_configuration_sidebar_section.active {
+    border: 1px solid white;
+    background: #9d00ff;
+    color: white;
+}
+
+
+.__application_configuration_sidebar_section.active p {
+    color: white;
+}
 </style>
         <script type="text/javascript">
 "use strict";
@@ -1894,6 +1948,8 @@ let rpc = {
   init: function() { rpc.invoke({ cmd: 'init' }); },
   
   load_pdf: function() { rpc.invoke({ cmd : 'load_pdf' }); },
+  create_new_grundbuch: function() { rpc.invoke({ cmd : 'create_new_grundbuch' }); },
+      
   undo:  function() { rpc.invoke({ cmd : 'undo' }); },
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
@@ -1912,6 +1968,8 @@ let rpc = {
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
   open_help: function() { rpc.invoke({ cmd : 'open_help' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
+  set_configuration_view: function(section_id) { rpc.invoke({ cmd : 'set_configuration_view', section_id: section_id }); },
+  
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
       cmd : 'select_ocr', 
@@ -1981,6 +2039,7 @@ let rpc = {
 
 let tab_functions = {
     load_new_pdf: function(event) { rpc.load_pdf(); },
+    create_new_grundbuch: function(event) { rpc.create_new_grundbuch(); },
     undo: function(event) { rpc.undo() },
     redo: function(event) { rpc.redo() },
     export_nb: function(event) { rpc.export_nb() },
@@ -3141,6 +3200,11 @@ function editStringOrLines(event, inputId) {
     }
 
     rpc.edit_text(inputId, innerText);    
+}
+function activateConfigurationView(event, section_id) {
+    event.stopPropagation();
+    event.preventDefault();
+    rpc.set_configuration_view(section_id);
 }
 
 // Init

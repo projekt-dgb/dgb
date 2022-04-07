@@ -1,3 +1,9 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+</head>
 <body>
     <p>
 Das Programm "Grundbuchdigitalisierung", "Digitales Grundbuch" oder kurz "dgb" ist ein Programm, um die Grundbuch-
@@ -7,11 +13,15 @@ Digitalisieren und Prüfen der Grundbuch-Daten, zum Hochladen in LEFIS kann das 
 werden.</p>
 
 <h3>Übersicht der Funktionen</h3>
+
 <p>Nach dem Starten sind die meisten Funktionen sichtbar, aber 
 ausgegraut, da zunächst mindestens eine PDF-Datei geöffnet 
 werden muss. In der oberen Leiste können mit Klick auf "PDF 
 laden" eine oder mehrere Grundbuch-PDF-Dateien geladen 
 werden.</p>
+
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_1$$"></img>
+<i>A3: Grundbuchblatt öffnen</i>
 
 <p>Die Funktionen gliedern sich in vier Bereiche:</p>
 <ol>
@@ -37,6 +47,9 @@ Abb. A4) erkennt man den Typ der Seite: Bestandsverzeichnis (blau), Abteilung 1 
 Abteilung 3 (orange).
 </p>
 
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_2$$"></img>
+<i>A4: Auswählen von Blatt / Seite</i>
+
 <p>
 Jeder Seitentyp entspricht einem Formular, damit das 
 Programm weiß, "wo" es im PDF nach z.B. der Flurstücksgröße 
@@ -45,6 +58,9 @@ ausblenden" kann man die Formularspalten, die das Programm
 pro Seite annimmt, ein- oder ausblenden. In der unteren Hälfte 
 der Oberfläche ist die Seite zu sehen (siehe Abb. A5).
 </p>
+
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_3$$"></img>
+<i>A5: Formularseite klassifizieren</i>
 
 <h3>Spalten und Zeilen setzen</h3>
 
@@ -58,6 +74,9 @@ Position ändert. Jeder "Seitentyp" entspricht einem voreingestellten Formular. 
 angefasst und in Größe und Position verändert werden.
 </p>
 
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_4$$"></img>
+<i>A6: Formular: Zeilen setzen, Spalten anpasen</i>
+
 <p>
 Neben der Seite ist ein gestrichelter Rand zu sehen. Wenn der 
 Mauszeiger in diesen Bereich kommt, erscheint eine Vorschau, 
@@ -69,15 +88,12 @@ Zeilenumbrüche zu erraten, was allerdings oft misslingt.
 </p>
 
 <p>
-Mit einem Klick auf "Grundbuch neu analysieren" (vgl. Abb. 
-"Formular: Zeilen setzen, Spalten anpassen, hier: oben rechts 
-(3)") kann das gesamte Grundbuch neu geladen werden: 
-</p>
-
-<i><strong>
+Mit einem Klick auf "Grundbuch neu analysieren" (vgl. Abb. A6, 
+hier: oben rechts (3)") kann das gesamte Grundbuch neu geladen werden: <i><strong>
 Achtung: Es gehen hierbei alle manuell eingegebenen 
 Daten verloren, da das gesamte Grundbuch neu analysiert wird, d.h. die Zeilen / Spalten neu eingegeben 
 werden.</strong></i>
+</p>
 
 <h3>Manuelle Bearbeitung der Einträge</h3>
 
@@ -88,6 +104,9 @@ Gegebenenfalls müssen neue Rechte angelegt (grün), gerötet
 (gelb) oder gelöscht (rot) werden. Auf der rechten Seite sieht 
 man die Analyse, wie sie in LEFIS übernommen werden wird.
 </p>
+
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_5$$"></img>
+<i>A7: Einträge manuell bearbeiten</i>
 
 <p>Tastenkürzel für das Bearbeiten der Datensätze sind hierfür:</p>
 
@@ -126,6 +145,9 @@ aufgezogen werden - beim Loslassen wird der Text unter dem
 Rechteck in die Zwischenablage kopiert (siehe Abb. A8).
 </p>
 
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_6$$"></img>
+<i>A8: Interaktive Schrifterkennung: Klicken und Ziehen, um Text in Zwischenablage zu kopieren</i>
+
 <h3>Überprüfen der digitalisierten Informationen</h3>
 
 <p>
@@ -147,7 +169,7 @@ AlleGrundbuchblätterImVerfahrenInListeAusgeben.
 Mit der Funktion "Nebenbeteiligte in CSV" können alle 
 Rechtsinhaber (= Nebenbeteiligte) des gesamten Verfahrens in 
 eine .tsv (tab-separated-values)-Datei exportiert werden (siehe 
-Abb. A9). Die Spalten dieser Datei enthalten:
+Abb. A10). Die Spalten dieser Datei enthalten:
 </p>
 
 <ul>
@@ -191,6 +213,9 @@ eingetragen werden.
     <li><p>WOHNORT : LEFIS-Attribut, wird beim Hochladen in LEFIS berücksichtigt</p></li>    
 </ul>
 
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_7$$"></img>
+<i>A10: Nebenbeteiligte aus Verfahren in CSV-Datei exportieren</i>
+
 <p>
 In der Tabelle kann man relativ einfach die Schreibweisen aller Nebenbeteiligten überprüfen. Da auch verschiedene 
 Formulierungen desselben Inhabers verschiedene Ordnungsnummern erhalten, ist es in Ordnung, wenn ein Name 
@@ -215,10 +240,13 @@ Rechtsinhabers mit dem Eintrag in der Spalte NAME
 entfernen" können zunächst alte Nebenbeteiligten-IDs entfernt 
 werden, danach können neue Nebenbeteiligte mit 
 "Nebenbeteiligte importieren" neu aus der .tsv-Datei importiert 
-werden (siehe Abb. A10). Dabei können automatisch 
+werden (siehe Abb. A11). Dabei können automatisch 
 Ordnungsnummern basierend auf dem Typ (siehe voriger 
 Abschnitt) vergeben werden.
 </p>
+
+<img style='max-width:100%;' src="data:image/png;base64,$$DATA_IMG_8$$"></img>
+<i>A11: Nebenbeteiligte / Rechtsinhaber löschen und neu importieren</i>
 
 <p>
 Wenn das Grundbuch keine Fehler aufweist und alle 
@@ -285,10 +313,10 @@ Upload in die DHK eingespielt oder von anderen externen Programmen übernommen w
 <h3>Rechtliche Informationen</h3>
 
 <p>
-Das Programm selbst steht unter der MIT-Lizenz und wurde ursprünglich von Felix Schütt &lt;Felix.Schuett@vlf-
-brandenburg.de&gt; geschrieben. Icons wurden bereitgestellt von <a href="https://icons8.com/">https://icons8.com/</a>.
+Das Programm selbst steht unter der MIT-Lizenz und wurde ursprünglich von Felix Schütt &lt;Felix.Schuett@vlf-brandenburg.de&gt; geschrieben. Icons wurden bereitgestellt von <a href="https://icons8.com/">https://icons8.com/</a>.
 </p>
 
 <p>Bitte schreiben Sie mich bei Problemen oder Fragen zu dem Programm an.</p>
 
 </body>
+</html>

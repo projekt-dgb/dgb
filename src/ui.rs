@@ -74,288 +74,243 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     
     let close_button = format!("
     <div style='position:absolute;top:50px;z-index:9999;right:-25px;background:white;border-radius:10px;box-shadow: 0px 0px 10px #cccccc88;cursor:pointer;' onmouseup='closePopOver()'>
-        <img src='data:image/png;base64,{icon_close_base64}' style='width:50px;height:50px;' />
+        <img src='data:image/png;base64,{icon_close_base64}' style='width:50px;height:50px;cursor:pointer;' />
     </div>");
     
     let pc = match rpc_data.popover_state {
         None => return String::new(),
-        Some(PopoverState::Info) => {
+        Some(PopoverState::CreateNewGrundbuch) => {
             format!("
-            <div style='width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
                 {close_button}
+
+                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Neues Grundbuchblatt anlegen</h2>
                 
+                <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Land</label>
+                        <input type='text' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Amtsgericht</label>
+                        <input type='text' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Gemarkung</label>
+                        <input type='text' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Blatt-Nr.</label>
+                        <input type='number' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Datei speichern unter</label>
+                        <input type='file' class='btn btn_neu'></input>
+                    </div>
+                    <br/>
+                    <button onclick='grundbuchAnlegen(event)' class='btn btn_neu' style='font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;'>
+                        Speichern
+                    </button>
+                </div>
+            </div>
+            ")
+        },
+        Some(PopoverState::Info) => {
+            format!("
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+                
+                {close_button}
+
                 <h2 style='font-size:24px;font-family:sans-serif;'>Digitales Grundbuch Version {version}</h2>
                 
-                <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:800px;'>
+                <div style='padding:5px 0px;display:flex;flex-grow:1;min-height:750px;'>
                     <iframe width='auto' height='auto' src='data:text/html;base64,{license_base64}' style='min-width:100%;min-height:100%;'></iframe>                       
                 </div>
+                                
             </div>
             ",version = env!("CARGO_PKG_VERSION"),
             license_base64 = base64::encode(include_bytes!("../licenses.html")))
         },
         Some(PopoverState::Help) => {            
+            
             static DOKU: &str = include_str!("../doc/Handbuch.html");
-            let base64_dok = base64::encode(DOKU);
+            
+            static IMG_1: &[u8] = include_bytes!("../doc/IMG_1.png");
+            static IMG_2: &[u8] = include_bytes!("../doc/IMG_2.png");
+            static IMG_3: &[u8] = include_bytes!("../doc/IMG_3.png");
+            static IMG_4: &[u8] = include_bytes!("../doc/IMG_4.png");
+            static IMG_5: &[u8] = include_bytes!("../doc/IMG_5.png");
+            static IMG_6: &[u8] = include_bytes!("../doc/IMG_6.png");
+            static IMG_7: &[u8] = include_bytes!("../doc/IMG_7.png");
+            static IMG_8: &[u8] = include_bytes!("../doc/IMG_8.png");
+
+            let base64_dok = base64::encode(DOKU
+                .replace("$$DATA_IMG_1$$", &base64::encode(IMG_1))
+                .replace("$$DATA_IMG_2$$", &base64::encode(IMG_2))
+                .replace("$$DATA_IMG_3$$", &base64::encode(IMG_3))
+                .replace("$$DATA_IMG_4$$", &base64::encode(IMG_4))
+                .replace("$$DATA_IMG_5$$", &base64::encode(IMG_5))
+                .replace("$$DATA_IMG_6$$", &base64::encode(IMG_6))
+                .replace("$$DATA_IMG_7$$", &base64::encode(IMG_7))
+                .replace("$$DATA_IMG_8$$", &base64::encode(IMG_8))
+            );
+            
             format!("
-            <div style='width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
-                
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+
                 {close_button}
+                
                 <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Benutzerhandbuch</h2>
-                <div style='padding:5px 0px;display:flex;flex-grow:1;line-height:1.5;min-height:800px;'>
-                    <iframe src='data:text/html;base64,{base64_dok}' width='100%' height='100%' style='min-width:100%;min-height:800px;display:flex;flex-grow:1;'/>
+                <div style='padding:5px 0px;display:flex;flex-grow:1;line-height:1.5;min-height:750px;'>
+                    <iframe src='data:text/html;base64,{base64_dok}' width='100%' height='100%' style='min-width:100%;min-height:750px;display:flex;flex-grow:1;'/>
                 </div>
+
             </div>")
         },
-        Some(PopoverState::Configuration) => {
-            format!("
-                <div style='pointer-events:unset;width:1200px;position:relative;overflow:scroll;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;' onmousedown='event.stopPropagation();'>
-                
-                    {close_button}
-                    
-                    <h2 style='font-size:24px;padding-bottom:25px;font-family:sans-serif;'>Konfiguration</h2>
-                    <p style='font-size:12px;padding-bottom:10px;'>Pfad: {konfig_pfad}</p>
-                    
-                    <div style='padding:5px 0px;'>
-                            <div style='display:flex;flex-direction:row;'>
-                            <input type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_ausblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
-                            <label for='__application_konfiguration_spalten_ausblenden'>Spalten ausblenden</label>
-                            </div>
-                            
-                            <div style='display:flex;flex-direction:row;'>
-                            <input type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
-                            <label for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
-                            </div>
-                            
-                            <div style='display:flex;flex-direction:row;'>
-                            <input type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
-                            <label for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
-                            </div>
-                    </div>
-                    <div style='padding:5px 0px;'>
+        Some(PopoverState::Configuration(cw)) => {
+        
+            use crate::ConfigurationView::*;
+            
+            static IMG_SETTINGS: &[u8] = include_bytes!("./img/icons8-settings-system-daydream-96.png");
+            let img_settings = base64::encode(IMG_SETTINGS);
+            
+            static IMG_REGEX: &[u8] = include_bytes!("./img/icons8-select-96.png");
+            let img_regex = base64::encode(IMG_REGEX);
+            
+            static IMG_CLEAN: &[u8] = include_bytes!("./img/icons8-broom-96.png");
+            let img_clean = base64::encode(IMG_CLEAN);
+            
+            static IMG_ABK: &[u8] = include_bytes!("./img/icons8-shortcut-96.png");
+            let img_abk = base64::encode(IMG_ABK);
+                        
+            static IMG_FX: &[u8] = include_bytes!("./img/icons8-formula-fx-96.png");
+            let img_fx = base64::encode(IMG_FX);
+            
+            let active_allgemein = if cw == Allgemein { " active" } else { "" };
+            let active_regex = if cw == RegEx { " active" } else { "" };
+            let active_text_saubern = if cw == TextSaubern { " active" } else { "" };
+            let active_abkuerzungen = if cw == Abkuerzungen { " active" } else { "" };
+            let active_flst_auslesen = if cw == FlstAuslesen { " active" } else { "" };
+            let active_klassifizierung_rechteart = if cw == KlassifizierungRechteArt { " active" } else { "" };
+            let active_rechtsinhaber_auslesen_abt2 = if cw == RechtsinhaberAuslesenAbt2 { " active" } else { "" };
+            let active_rangvermerk_auslesen_abt2 = if cw == RangvermerkAuslesenAbt2 { " active" } else { "" };
+            let active_text_kuerzen_abt2 = if cw == TextKuerzenAbt2 { " active" } else { "" };
+            let active_betrag_auslesen_abt3 = if cw == BetragAuslesenAbt3 { " active" } else { "" };
+            let active_klassifizierung_schuldenart_abt3 = if cw == KlassifizierungSchuldenArtAbt3 { " active" } else { "" };
+            let active_rechtsinhaber_auslesen_abt3 = if cw == RechtsinhaberAuslesenAbt3 { " active" } else { "" };
+            let active_text_kuerzen_abt3 = if cw == TextKuerzenAbt3 { " active" } else { "" };
 
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Reguläre Ausdrücke</p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;overflow-y:scroll;'>
-                        {regex}
-                        </div>
-
-                        <div style='display:flex;flex-direction:row;'>
-                        <input id='__application_konfiguration_regex_id' style='border-radius:5px;padding:5px;border:1px solid #efefef;' style='flex-grow:1;margin-right:10px;' placeholder='Regex ID'></input>
-                            <textarea id='__application_konfiguration_regex_test_text' style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='testeRegex(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_regex_test_output' style='flex-grow:1;' placeholder='Regex Ausgabe'></textarea>
-                        </div>
-                    </div>
+            let sidebar = format!("
+                <div class='__application_configuration_sidebar' style='display:flex;flex-direction:column;width:160px;min-height:750px;'>
                     
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Abkürzungen</p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def abkuerzungen() -> [String]:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editAbkuerzungenScript(event);'>{konfig_abkuerzungen_script}</div>
-                        </div>
-                    </div>
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Text säubern</p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def text_säubern(recht: String) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextSaubernScript(event);'>{konfig_text_saubern_script}</div>
-                        </div>
-                    </div>                    
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>Flurstücke aus Spalte 1 auslesen</p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def flurstuecke_auslesen(spalte_1: String, text: String, re: Mapping[String, Regex]) -> [Spalte1Eintrag]:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editFlurstueckeAuslesenScript(event);'>{konfig_flurstuecke_auslesen_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <input type='text' id='__application_konfiguration_flurstueck_auslesen_bv_nr' placeholder='BV-Nr. (Spalte 1) eingeben...' />
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='flurstueckAuslesenScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_flurstueck_auslesen_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
-                    </div>     
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Klassifizierung RechteArt (Abteilung 2)
-                            </p>                        
-                        </div>
-                        <div>{rechteart_select}</div>
-
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_rechteart_abt2(saetze: [String], re: Mapping[String, Regex]) -> RechteArt:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechteArtScript(event);'>{konfig_rechteart_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechteArtScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechteart_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
-                    </div>
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Rechtsinhaber auslesen (Abteilung 2)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def rechtsinhaber_auslesen_abt2(saetze: [String], re: Mapping[String, Regex], recht_id: String) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechtsinhaberAbt2Script(event);'>{konfig_rechtsinhaber_abt2_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechtsinhaberAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
-                    </div>
-                                
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-faspalten_ausblendenmily:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Rangvermerk auslesen (Abteilung 2)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def rangvermerk_auslesen_abt2(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRangvermerkAuslesenAbt2Script(event);'>{konfig_rangvermerk_abt2_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rangvermerkAuslesenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rangvermerk_auslesen_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
-                    </div>
-                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Text kürzen (Abteilung 2)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt2(saetze: [String], rechtsinhaber: String, rangvermerk: String, re: Mapping[String, Regex]) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt2Script(event);'>{konfig_text_kuerzen_abt2_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt2_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt2()'></textarea>
-                        </div>
+                    <div class='__application_configuration_sidebar_section{active_allgemein}' onmouseup='activateConfigurationView(event, \"allgemein\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_settings}'></img>
+                        <p>Allgemein</p>
                     </div>
                     
                     <hr/>
                     
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Betrag auslesen (Abteilung 3)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def betrag_auslesen(saetze: [String], re: Mapping[String, Regex]) -> Betrag:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editBetragAuslesenScript(event);'>{konfig_betrag_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='betragAuslesenScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_betrag_auslesen_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
-                    </div>
-                                                                    
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Klassifizierung SchuldenArt (Abteilung 3)
-                            </p>
-                        </div>
-                        <div>{schuldenart_select}</div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_schuldenart_abt3(saetze: [String], re: Mapping[String, Regex]) -> SchuldenArt:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editSchuldenArtScript(event);'>{konfig_schuldenart_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='schuldenArtScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_schuldenart_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
+                    <div class='__application_configuration_sidebar_section{active_regex}' onmouseup='activateConfigurationView(event, \"regex\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_regex}'></img>
+                        <p>Reguläre Ausdrücke</p>
                     </div>
                     
-                    <div style='padding:5px 0px;'>
-                    
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Rechtsinhaber auslesen (Abteilung 3)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def rechtsinhaber_auslesen_abt3(saetze: [String], re: Mapping[String, Regex], recht_id: String) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechtsinhaberAbt3Script(event);'>{konfig_rechtsinhaber_abt3_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechtsinhaberAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt3_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion'></textarea>
-                        </div>
+                    <div class='__application_configuration_sidebar_section{active_text_saubern}' onmouseup='activateConfigurationView(event, \"text-saubern\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_clean}'></img>
+                        <p>Text säubern</p>
                     </div>
                     
+                    <div class='__application_configuration_sidebar_section{active_abkuerzungen}' onmouseup='activateConfigurationView(event, \"abkuerzungen\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_abk}'></img>
+                        <p>Abkürzungen</p>
+                    </div>
                     
-                    <div style='padding:5px 0px;'>
+                    <div class='__application_configuration_sidebar_section{active_flst_auslesen}' onmouseup='activateConfigurationView(event, \"flst-auslesen\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Flurstücke auslesen</p>
+                    </div>
                     
-                        <div>
-                            <p style='font-family:sans-serif;font-weight:bold;font-size:16px;padding-bottom:10px;'>
-                                Text kürzen (Abteilung 3)
-                            </p>                        
-                        </div>
-                        
-                        <div style='background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;max-height:200px;overflow-y:scroll;'>
-                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], betrag: String, schuldenart: String, rechtsinhaber: String, re: Mapping[String, Regex]) -> String:</p>
-                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt3Script(event);'>{konfig_text_kuerzen_abt3_script}</div>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
-                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt3_test' style='flex-grow:1;' placeholder='Test Ausgabe der Funktion text_kuerzen_abt3()'></textarea>
-                        </div>
+                    <hr/>
+
+                    <div class='__application_configuration_sidebar_section{active_klassifizierung_rechteart}' onmouseup='activateConfigurationView(event, \"klassifizierung-rechteart-abt2\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Klassifizierung RechteArt (Abt. 2)</p>
+                    </div>
+                    
+                    <div class='__application_configuration_sidebar_section{active_rechtsinhaber_auslesen_abt2}' onmouseup='activateConfigurationView(event, \"rechtsinhaber-auslesen-abt2\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Rechtsinhaber auslesen (Abt. 2)</p>
+                    </div>
+                    
+                    <div class='__application_configuration_sidebar_section{active_rangvermerk_auslesen_abt2}' onmouseup='activateConfigurationView(event, \"rangvermerk-auslesen-abt2\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Rangvermerk auslesen (Abt. 2)</p>
+                    </div>
+                    
+                    <div class='__application_configuration_sidebar_section{active_text_kuerzen_abt2}' onmouseup='activateConfigurationView(event, \"text-kuerzen-abt2\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Text kürzen (Abt. 2)</p>
+                    </div>
+                    
+                    <hr/>
+
+                    <div class='__application_configuration_sidebar_section{active_betrag_auslesen_abt3}' onmouseup='activateConfigurationView(event, \"betrag-auslesen-abt3\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Betrag auslesen (Abt. 3)</p>
+                    </div>
+                    <div class='__application_configuration_sidebar_section{active_klassifizierung_schuldenart_abt3}' onmouseup='activateConfigurationView(event, \"klassifizierung-schuldenart-abt3\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Klassifizierung SchuldenArt (Abt. 3)</p>
+                    </div>
+                    <div class='__application_configuration_sidebar_section{active_rechtsinhaber_auslesen_abt3}' onmouseup='activateConfigurationView(event, \"rechtsinhaber-auslesen-abt3\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Rechtsinhaber auslesen (Abt. 3)</p>
+                    </div>
+                    <div class='__application_configuration_sidebar_section{active_text_kuerzen_abt3}' onmouseup='activateConfigurationView(event, \"text-kuerzen-abt3\")'>
+                        <img style='width:25px;height:25px;' src='data:image/png;base64,{img_fx}'></img>
+                        <p>Text kürzen (Abt. 3)</p>
                     </div>
                 </div>
-            ", 
-                konfig_pfad = Konfiguration::konfiguration_pfad(),
-                
-                vorschau_ohne_geroetet = if rpc_data.konfiguration.vorschau_ohne_geroetet { "checked" } else { "" },
-                spalten_ausblenden = if rpc_data.konfiguration.spalten_ausblenden { "checked" } else { "" },
-                zeilenumbrueche_in_ocr_text = if rpc_data.konfiguration.zeilenumbrueche_in_ocr_text { "checked" } else { "" },
-                
+            ");
+            
+            let main_content = match cw {
+                Allgemein => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        <div style='display:flex;flex-direction:row;'>
+                            <input type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_einblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
+                            <label for='__application_konfiguration_spalten_ausblenden'>Formularspalten einblenden</label>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <input type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
+                            <label for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:row;'>
+                            <input type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
+                            <label for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
+                        </div>
+                    </div>
+                ",
+                    vorschau_ohne_geroetet = if rpc_data.konfiguration.vorschau_ohne_geroetet { "checked" } else { "" },
+                    spalten_einblenden = if !rpc_data.konfiguration.spalten_ausblenden { "checked" } else { "" },
+                    zeilenumbrueche_in_ocr_text = if rpc_data.konfiguration.zeilenumbrueche_in_ocr_text { "checked" } else { "" },
+                ),
+                RegEx => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        
+                        <div style='display:block;max-height:450px;flex-grow:1;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;overflow-y:scroll;width:700px;'>
+                        {regex}
+                        </div>
+
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <input id='__application_konfiguration_regex_id' style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;flex-grow:1;margin-right:10px;' placeholder='Regex ID'></input>
+                            <textarea id='__application_konfiguration_regex_test_text' style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='testeRegex(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_regex_test_output' style='flex-grow:1;' placeholder='Regex Ausgabe'></textarea>
+                        </div>
+                    </div>
+                ",    
                 regex = {
                     
                     let r = if rpc_data.konfiguration.regex.is_empty() {
@@ -368,109 +323,273 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     };
                     
                     r.iter().enumerate().map(|(idx, (k, v))| format!("
-                        <div style='display:flex;'>
-                            <div id='__application_konfiguration_regex_key_{idx}' style='display:inline;min-width:250px;caret-color: #4a4e6a;' contenteditable='true' data-regex-key='{k}' oninput='editRegexKey(event);' onkeydown='neueRegexOnEnter(event);' data-key-id='__application_konfiguration_regex_key_{idx}'>{k}</div>
-                            <p style='display:inline;color:#4a4e6a;user-select:none;'>&nbsp;= re.compile(\"</p>
-                            <div id='__application_konfiguration_regex_value_{idx}' data-key-id='__application_konfiguration_regex_key_{idx}' style='display:inline;caret-color: #4a4e6a;' onkeydown='neueRegexOnEnter(event);' contenteditable='true' oninput='editRegexValue(event);'>{v}</div>
-                            <p style='display:inline;color:#4a4e6a;user-select:none;'>\")</p>
+                        <div style='display:flex;flex-direction:row;'>
+                            <div id='__application_konfiguration_regex_key_{idx}' style='display:inline;width:220px;caret-color: #4a4e6a;' contenteditable='true' data-regex-key='{k}' oninput='editRegexKey(event);' onkeydown='neueRegexOnEnter(event);' data-key-id='__application_konfiguration_regex_key_{idx}'>{k}</div>
+                            
+                            <p style='display:inline;color:#4a4e6a;user-select:none;'>&nbsp;=&nbsp;</p>
+                            
+                            <div id='__application_konfiguration_regex_value_{idx}' data-key-id='__application_konfiguration_regex_key_{idx}' style='display:inline;caret-color: #4a4e6a;width:400px;' onkeydown='neueRegexOnEnter(event);' contenteditable='true' oninput='editRegexValue(event);'>{v}</div>
+                            
                             <div style='display:inline-flex;flex-grow:1;'></div>
+                            
                             <img style='width:16px;height:16px;cursor:pointer;' data-key-id='__application_konfiguration_regex_key_{idx}' onclick='regexLoeschen(event);' src='data:image/png;base64,{icon_close_base64}'>
                         </div>
                     ", k = k, v = v.replace("\\", "&bsol;"), idx = idx, icon_close_base64 = icon_close_base64))
                     .collect::<Vec<_>>()
                     .join("\r\n")
-                },
-                
-                rechteart_select = render_rechteart_select(),
-                schuldenart_select = render_schuldenart_select(),
-                
-                konfig_rangvermerk_abt2_script = 
-                rpc_data.konfiguration.rangvermerk_auslesen_abt2_script.iter()
-                .map(|l| l.replace(" ", "\u{00a0}"))
-                .map(|l| l.replace("\\", "&bsol;"))
-                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_rechtsinhaber_abt3_script = 
-                rpc_data.konfiguration.rechtsinhaber_auslesen_abt3_script.iter()
-                .map(|l| l.replace(" ", "\u{00a0}"))
-                .map(|l| l.replace("\\", "&bsol;"))
-                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_rechtsinhaber_abt2_script = 
-                rpc_data.konfiguration.rechtsinhaber_auslesen_abt2_script.iter()
-                .map(|l| l.replace(" ", "\u{00a0}"))
-                .map(|l| l.replace("\\", "&bsol;"))
-                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_betrag_script = 
-                rpc_data.konfiguration.betrag_auslesen_script.iter()
-                .map(|l| l.replace(" ", "\u{00a0}"))
-                .map(|l| l.replace("\\", "&bsol;"))
-                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_schuldenart_script = 
-                rpc_data.konfiguration.klassifiziere_schuldenart.iter()
-                .map(|l| l.replace(" ", "\u{00a0}"))
-                .map(|l| l.replace("\\", "&bsol;"))
-                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_rechteart_script = 
-                rpc_data.konfiguration.klassifiziere_rechteart.iter()
-                .map(|l| l.replace(" ", "\u{00a0}"))
-                .map(|l| l.replace("\\", "&bsol;"))
-                .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_abkuerzungen_script = 
-                    rpc_data.konfiguration.abkuerzungen_script.iter()
-                    .map(|l| l.replace(" ", "\u{00a0}"))
-                    .map(|l| l.replace("\\", "&bsol;"))
-                    .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
-                    .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_text_saubern_script = 
+                }),
+                TextSaubern => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:650px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_säubern(recht: String) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextSaubernScript(event);'>{konfig_text_saubern_script}</div>
+                        </div>
+                    </div>              
+                ", konfig_text_saubern_script = 
                     rpc_data.konfiguration.text_saubern_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
                     .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_flurstuecke_auslesen_script = 
+                    .join("\r\n"),
+                ),
+                Abkuerzungen => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:650px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def abkuerzungen() -> [String]:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editAbkuerzungenScript(event);'>{konfig_abkuerzungen_script}</div>
+                        </div>
+                    </div>
+                ", konfig_abkuerzungen_script = 
+                        rpc_data.konfiguration.abkuerzungen_script.iter()
+                        .map(|l| l.replace(" ", "\u{00a0}"))
+                        .map(|l| l.replace("\\", "&bsol;"))
+                        .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                        .collect::<Vec<String>>()
+                    .join("\r\n"),
+                ),
+                FlstAuslesen => format!("
+                    
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                    
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def flurstuecke_auslesen(spalte_1: String, text: String, re: Mapping[String, Regex]) -> [Spalte1Eintrag]:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editFlurstueckeAuslesenScript(event);'>{konfig_flurstuecke_auslesen_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <input type='text' style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;flex-grow:1;margin-right:10px;' id='__application_konfiguration_flurstueck_auslesen_bv_nr' placeholder='BV-Nr. (Spalte 1) eingeben...' />
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;'  rows='5' cols='45' oninput='flurstueckAuslesenScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_flurstueck_auslesen_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>     
+                ", konfig_flurstuecke_auslesen_script = 
                     rpc_data.konfiguration.flurstuecke_auslesen_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
                     .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
-                .join("\r\n"),
+                    .join("\r\n")
+                ),
+                KlassifizierungRechteArt => format!("
                 
-                konfig_text_kuerzen_abt2_script = 
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                    
+                        <div>{rechteart_select}</div>
+
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_rechteart_abt2(saetze: [String], re: Mapping[String, Regex]) -> RechteArt:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechteArtScript(event);'>{konfig_rechteart_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechteArtScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechteart_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", 
+                    rechteart_select = render_rechteart_select(),
+                    konfig_rechteart_script = 
+                        rpc_data.konfiguration.klassifiziere_rechteart.iter()
+                        .map(|l| l.replace(" ", "\u{00a0}"))
+                        .map(|l| l.replace("\\", "&bsol;"))
+                        .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                        .collect::<Vec<String>>()
+                        .join("\r\n")
+                ),
+                RechtsinhaberAuslesenAbt2 => format!("
+                
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def rechtsinhaber_auslesen_abt2(saetze: [String], re: Mapping[String, Regex], recht_id: String) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechtsinhaberAbt2Script(event);'>{konfig_rechtsinhaber_abt2_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechtsinhaberAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt2_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", konfig_rechtsinhaber_abt2_script = 
+                    rpc_data.konfiguration.rechtsinhaber_auslesen_abt2_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
+                    .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
+                ),
+                RangvermerkAuslesenAbt2 => format!("
+                                    
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+        
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def rangvermerk_auslesen_abt2(saetze: [String], re: Mapping[String, Regex]) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRangvermerkAuslesenAbt2Script(event);'>{konfig_rangvermerk_abt2_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rangvermerkAuslesenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rangvermerk_auslesen_abt2_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", konfig_rangvermerk_abt2_script = 
+                    rpc_data.konfiguration.rangvermerk_auslesen_abt2_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
+                    .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
+                ),
+                TextKuerzenAbt2 => format!("
+                    
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt2(saetze: [String], rechtsinhaber: String, rangvermerk: String, re: Mapping[String, Regex]) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;'contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt2Script(event);'>{konfig_text_kuerzen_abt2_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea  style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt2ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt2_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", konfig_text_kuerzen_abt2_script = 
                     rpc_data.konfiguration.text_kuerzen_abt2_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
                     .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
-                .join("\r\n"),
-                
-                konfig_text_kuerzen_abt3_script = 
+                    .join("\r\n")
+                ),
+                BetragAuslesenAbt3 => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def betrag_auslesen(saetze: [String], re: Mapping[String, Regex]) -> Betrag:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editBetragAuslesenScript(event);'>{konfig_betrag_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea  style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='betragAuslesenScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_betrag_auslesen_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ",  konfig_betrag_script = 
+                    rpc_data.konfiguration.betrag_auslesen_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
+                    .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),                
+                ),
+                KlassifizierungSchuldenArtAbt3 => format!("               
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                    
+                        <div>{schuldenart_select}</div>
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def klassifiziere_schuldenart_abt3(saetze: [String], re: Mapping[String, Regex]) -> SchuldenArt:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editSchuldenArtScript(event);'>{konfig_schuldenart_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='schuldenArtScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_schuldenart_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", konfig_schuldenart_script = 
+                    rpc_data.konfiguration.klassifiziere_schuldenart.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
+                    .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),
+                    schuldenart_select = render_schuldenart_select(),
+                ),
+                RechtsinhaberAuslesenAbt3 => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+            
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def rechtsinhaber_auslesen_abt3(saetze: [String], re: Mapping[String, Regex], recht_id: String) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editRechtsinhaberAbt3Script(event);'>{konfig_rechtsinhaber_abt3_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='rechtsinhaberAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_rechtsinhaber_abt3_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", konfig_rechtsinhaber_abt3_script = 
+                    rpc_data.konfiguration.rechtsinhaber_auslesen_abt3_script.iter()
+                    .map(|l| l.replace(" ", "\u{00a0}"))
+                    .map(|l| l.replace("\\", "&bsol;"))
+                    .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
+                    .collect::<Vec<String>>()
+                    .join("\r\n"),                
+                ),
+                TextKuerzenAbt3 => format!("
+                    <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;min-height:200px;max-height:450px;overflow-y:scroll;'>
+                            <p style='color:#4a4e6a;user-select:none;'>def text_kuerzen_abt3(saetze: [String], betrag: String, schuldenart: String, rechtsinhaber: String, re: Mapping[String, Regex]) -> String:</p>
+                            <div style='padding-left:34px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editTextKuerzenAbt3Script(event);'>{konfig_text_kuerzen_abt3_script}</div>
+                        </div>
+                        
+                        <div style='display:flex;flex-direction:column;margin-top:10px;'>
+                            <textarea style='margin-bottom:5px;border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' oninput='textKuerzenAbt3ScriptTesten(event);'style='flex-grow:1;margin-right:10px;' placeholder='Test Eingabe...'></textarea>
+                            <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_text_kuerzen_abt3_test' style='flex-grow:1;' placeholder='Ausgabe der Funktion'></textarea>
+                        </div>
+                    </div>
+                ", konfig_text_kuerzen_abt3_script = 
                     rpc_data.konfiguration.text_kuerzen_abt3_script.iter()
                     .map(|l| l.replace(" ", "\u{00a0}"))
                     .map(|l| l.replace("\\", "&bsol;"))
                     .map(|l| if l.is_empty() { format!("<div>&nbsp;</div>") } else { format!("<div>{}</div>", l) })
                     .collect::<Vec<String>>()
-                .join("\r\n"),
+                    .join("\r\n"),
+                ),
+            };
+            
+            let main = format!("<div style='display:flex;flex-grow:1;padding:0px 20px;line-height: 1.2;'>{main_content}</div>");
+            
+            format!("
+                <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1000px;position:relative;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+                
+                    {close_button}
+                    
+                    <h2 style='font-size:24px;margin-bottom:15px;font-family:sans-serif;'>Konfiguration</h2>
+                    <p style='font-size:12px;padding-bottom:10px;'>Pfad: {konfig_pfad}</p>
+                    
+                    <div style='display:flex;flex-direction:row;flex-grow:1;width:100%;'>
+                        {sidebar}
+                        {main}
+                    </div>
+                </div>
+            ", 
+                konfig_pfad = Konfiguration::konfiguration_pfad(),
             )
         },
         Some(PopoverState::ContextMenu(cm)) => {
@@ -539,14 +658,13 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 seite = cm.seite_ausgewaehlt
             )
         },
-        
     };
     
     let pc = format!("
         <div style='background:{application_popover_color};width: 100%;height: 100%;min-height: 100%;z-index:1001;pointer-events:all;{overflow}' onmouseup='closePopOver()'>
             {pc}
         </div>", 
-        overflow = if rpc_data.is_context_menu_open() { "" } else { "overflow:scroll;" }, 
+        overflow = if rpc_data.is_context_menu_open() { "" } else { "overflow:auto;" }, 
         application_popover_color = application_popover_color,
         pc = pc,
     );
@@ -694,6 +812,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_FEHLER_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-high-priority-96.png");
     static ICON_ABT1_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-person-96.png");
     static ICON_TEILBELASTUNGEN_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-pass-fail-96.png");
+    static ICON_NEU: &[u8] = include_bytes!("./img/icons8-add-file-96.png");
     
     let ribbon_body = format!("
         <div class='__application-ribbon-body'>
@@ -707,6 +826,17 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                             <div>
                                 <p>PDF</p>
                                 <p>laden</p>
+                            </div>
+                        </label>
+                    </div>
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.create_new_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon' src='data:image/png;base64,{icon_neu_base64}'>
+                            </div>
+                            <div>
+                                <p>Neues</p>
+                                <p>Grundbuch</p>
                             </div>
                         </label>
                     </div>
@@ -914,6 +1044,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         ", 
         disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" },
         icon_open_base64 = base64::encode(ICON_GRUNDBUCH_OEFFNEN),
+        icon_neu_base64 = base64::encode(ICON_NEU),
         icon_back_base64 = base64::encode(ICON_ZURUECK),
         icon_forward_base64 = base64::encode(ICON_VORWAERTS),
         icon_settings_base64 = base64::encode(ICON_EINSTELLUNGEN),
