@@ -26,6 +26,7 @@ let rpc = {
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
   open_info: function() { rpc.invoke({ cmd : 'open_info' }); },
   open_help: function() { rpc.invoke({ cmd : 'open_help' }); },
+  open_export_pdf: function() { rpc.invoke({ cmd : 'open_export_pdf' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
   set_configuration_view: function(section_id) { rpc.invoke({ cmd : 'set_configuration_view', section_id: section_id }); },
   
@@ -113,6 +114,7 @@ let tab_functions = {
     open_configuration: function(event) { rpc.open_configuration() },
     open_help: function(event) { rpc.open_help() },
     open_info: function(event) { rpc.open_info() },
+    open_export_pdf: function(event) { rpc.open_export_pdf() },
 };
 
 let files_to_check = {};

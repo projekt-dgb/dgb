@@ -116,6 +116,61 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             </div>
             ")
         },
+        Some(PopoverState::ExportPdf) => {
+            format!("
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+                
+                {close_button}
+
+                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>PDF-Export</h2>
+                
+                <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Exportiere:</label>
+                        
+                        <select onchange='' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
+                            <option value='offen'>Offenes Grundbuch</option>
+                            <option value='alle-offen'>Alle offenen, digitalisierten Grundbücher</option>
+                            <option value='alle-offen'>Alle offenen Grundbücher</option>
+                            <option value='alle-original'>Alle Original-PDFs</option>
+                        </select>
+                    </div>
+
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Exportiere Abteilungen:</label>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label for='export-pdf-bv' style='font-size:16px;margin-left:10px;'>Bestandsverzeichnis</label>
+                        <input id='export-pdf-bv' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label for='export-pdf-abt-1' style='font-size:16px;margin-left:10px;'>Abteilung 1</label>
+                        <input id='export-pdf-abt-1' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label for='export-pdf-abt-2' style='font-size:16px;margin-left:10px;'>Abteilung 2</label>
+                        <input id='export-pdf-abt-2' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label for='export-pdf-abt-3' style='font-size:16px;margin-left:10px;'>Abteilung 3</label>
+                        <input id='export-pdf-abt-3' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>
+                    </div>
+                    <br/>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <input id='export-pdf-leere-seite' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
+                        <label style='font-size:20px;font-style:italic;'>Leere Seite nach Titelblatt einfügen</label>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <input id='export-pdf-leere-seite' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
+                        <label style='font-size:20px;font-style:italic;'>Gerötete Einträge ausgeben</label>
+                    </div>
+                    <button onclick='pdfExportieren(event)' class='btn btn_neu' style='font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;'>
+                        Speichern
+                    </button>
+                </div>
+            </div>
+            ")
+        },
         Some(PopoverState::Info) => {
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
@@ -278,18 +333,18 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 Allgemein => format!("
                     <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
                         <div style='display:flex;flex-direction:row;'>
-                            <input type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_einblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
-                            <label for='__application_konfiguration_spalten_ausblenden'>Formularspalten einblenden</label>
+                            <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_einblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
+                            <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_spalten_ausblenden'>Formularspalten einblenden</label>
                         </div>
                         
                         <div style='display:flex;flex-direction:row;'>
-                            <input type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
-                            <label for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
+                            <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
+                            <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
                         </div>
                         
                         <div style='display:flex;flex-direction:row;'>
-                            <input type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
-                            <label for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
+                            <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
+                            <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
                         </div>
                     </div>
                 ",
@@ -315,7 +370,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                         </div>
                     </div>
                 ",
-                next_regex_id = format!("A_{}", 9999999.wrapping_sub(rpc_data.konfiguration.regex.len())),
+                next_regex_id = format!("A_{}", 9999999_usize.wrapping_sub(rpc_data.konfiguration.regex.len())),
                 regex = {
                     
                     let r = if rpc_data.konfiguration.regex.is_empty() {
@@ -987,7 +1042,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     
                     
                     <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_pdf(event)' class='__application-ribbon-action-vertical-large'>
+                        <label onmouseup='tab_functions.open_export_pdf(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
                                 <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
                             </div>

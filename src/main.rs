@@ -62,6 +62,7 @@ impl RpcData {
 pub enum PopoverState {
     ContextMenu(ContextMenuData),
     Info,
+    ExportPdf,
     CreateNewGrundbuch,
     Configuration(ConfigurationView),
     Help,
@@ -428,6 +429,8 @@ pub enum Cmd {
     OpenInfo,
     #[serde(rename = "open_help")]
     OpenHelp,
+    #[serde(rename = "open_export_pdf")]
+    OpenExportPdf,
     #[serde(rename = "close_file")]
     CloseFile { file_name: String },
     #[serde(rename = "klassifiziere_seite_neu")]
@@ -1641,6 +1644,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::OpenHelp => {
             data.popover_state = Some(PopoverState::Help);
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+        },
+        Cmd::OpenExportPdf => {
+            if data.loaded_files.is_empty() { return; }
+            data.popover_state = Some(PopoverState::ExportPdf);
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::CloseFile { file_name } => {
