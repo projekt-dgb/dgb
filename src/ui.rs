@@ -300,6 +300,10 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 RegEx => format!("
                     <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
                         
+                        <div style='display:block;'>
+                            <button class='btn-grad' data-regex-id='{next_regex_id}' onclick='insertRegexFromButton(event)'>Neuen regulären Ausdruck anlegen</button>
+                        </div>
+                        
                         <div style='display:block;max-height:450px;flex-grow:1;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:10px;overflow-y:scroll;width:700px;'>
                         {regex}
                         </div>
@@ -310,7 +314,8 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             <textarea style='border-radius:5px;padding:5px;border:1px solid #efefef;' rows='5' cols='45' id='__application_konfiguration_regex_test_output' style='flex-grow:1;' placeholder='Regex Ausgabe'></textarea>
                         </div>
                     </div>
-                ",    
+                ",
+                next_regex_id = format!("A_{}", 9999999.wrapping_sub(rpc_data.konfiguration.regex.len())),
                 regex = {
                     
                     let r = if rpc_data.konfiguration.regex.is_empty() {
@@ -1293,7 +1298,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_2_zuschreibungen = render_abt_2_veraenderungen(open_file),
             abt_2_abschreibungen = render_abt_2_loeschungen(open_file),
             
-            abt_3 = render_abt_3(open_file),
+            abt_3 = render_abt_3(open_file, rpc_data.konfiguration.lefis_analyse_einblenden),
             abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
             analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
@@ -2130,7 +2135,7 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-abt2-eintrag' style='display:flex;margin-top:5px;'>
             
-            <div class='__application-table-header' style='display:flex;'>
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
                 {lfd_nr_textfield}
                 {bv_nr_textfield}
                 {recht_textfield}
@@ -2201,8 +2206,10 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
             
-            {lfd_nr_textfield}
-            {recht_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {recht_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2260,8 +2267,10 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
 
-            {lfd_nr_textfield}
-            {recht_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {recht_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2300,7 +2309,7 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
     ", abt2_loeschungen = abt2_loeschungen))
 }
 
-pub fn render_abt_3(open_file: &PdfFile) -> String {
+pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
     use crate::digitalisiere::Abt3Eintrag;
 
     let mut abt3_eintraege = open_file.analysiert.abt3.eintraege.clone();
@@ -2343,7 +2352,7 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
             lfd_nr = abt3.lfd_nr,
             
             bv_nr_textfield = abt3.bv_nr.get_html_editable_textfield(
-                60, // px width
+                if show_lefis { 40 } else { 60 }, // px width
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_bv-nr"),
                 format!("abt3:{zeile_nr}:bv-nr"),
@@ -2351,7 +2360,7 @@ pub fn render_abt_3(open_file: &PdfFile) -> String {
             ),
             
             betrag_textfield = abt3.betrag.get_html_editable_textfield(
-                180, // px width
+                if show_lefis { 90 } else { 180 }, // px width
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_betrag"),
                 format!("abt3:{zeile_nr}:betrag"),
@@ -2399,11 +2408,11 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-abt3-eintrag' style='display:flex;'>
             
-            {lfd_nr_textfield}
-            
-            {betrag_textfield}
-            
-            {recht_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {betrag_textfield}
+                {recht_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>
@@ -2471,11 +2480,11 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
 
-            {lfd_nr_textfield}
-            
-            {betrag_textfield}
-            
-            {recht_textfield}
+            <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
+                {betrag_textfield}
+                {recht_textfield}
+            </div>
             
             <div style='display:flex;flex-direction:row;flex-grow:1;'>
                 <div style='display:flex;flex-grow:1'></div>

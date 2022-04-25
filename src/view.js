@@ -552,6 +552,16 @@ function neueRegexOnEnter(event) {
     }
 }
 
+function insertRegexFromButton(event) {
+
+    let regex_key = event.target.getAttribute("data-regex-id");
+    if (!regex_key) { 
+        return; 
+    }
+    
+    rpc.insert_regex(regex_key);
+}
+
 function insertTabAtCaret(event){
    if(event.keyCode === 9){
        event.preventDefault();
