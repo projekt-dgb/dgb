@@ -898,7 +898,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                                 <img class='icon' src='data:image/png;base64,{icon_open_base64}'>
                             </div>
                             <div>
-                                <p>PDF</p>
+                                <p>Grundbuch</p>
                                 <p>laden</p>
                             </div>
                         </label>
@@ -1147,16 +1147,25 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 
     normalize_for_js(format!("
         <div id='__application-file-list'>{file_list}</div>
-        <div id='__application-page-list'>{page_list}</div>
+        {page_list}
         <div style='display:flex;flex-direction:column;flex-grow:1;'>
-            <div id='__application-main-container'>{main_container}</div>
-            <div id='__application-pdf-page-image'>{pdf_image}</div>
+            <div id='__application-main-container' style='{height}'>{main_container}</div>
+            {pdf_image}
         </div>
     ",
         file_list = render_file_list(rpc_data),
-        page_list = render_page_list(rpc_data),
+        page_list = if rpc_data.loaded_file_has_no_pdf() {
+            String::new()
+        } else {
+            format!("<div id='__application-page-list'>{page_list}</div>", page_list = render_page_list(rpc_data))
+        },
+        height = if rpc_data.loaded_file_has_no_pdf() { "" } else { "height: 600px;" },
         main_container = render_main_container(rpc_data),
-        pdf_image = render_pdf_image(rpc_data),
+        pdf_image = if rpc_data.loaded_file_has_no_pdf() {
+            String::new()
+        } else {
+            format!("<div id='__application-pdf-page-image'>{pdf_image}</div>", pdf_image = render_pdf_image(rpc_data))
+        }
     ))
 }
 
@@ -1279,7 +1288,9 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
 }
 
 pub fn render_main_container(rpc_data: &mut RpcData) -> String {
-            
+    
+    let has_no_pdf = rpc_data.loaded_file_has_no_pdf();
+
     let open_file = match rpc_data.open_page.as_mut().and_then(|of| rpc_data.loaded_files.get_mut(&of.0)) {
         Some(s) => s,
         None => return String::new(),
@@ -1297,7 +1308,6 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             ",
         ))
     } else {
-        
         let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
     
         normalize_for_js(format!("
@@ -1306,15 +1316,13 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>Grundbuch</h4>
                             <div style='display:flex;flex-grow:1;'></div>
-                            <div style='padding:6px;'>
-                                <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
-                            </div>
+                            {reload_grundbuch_button}
                         </div>
                     </div>
                     {lefis_analyse}
                 </div>
-                <div style='display:flex;flex-grow:1;min-width:50%;flex-direction:row;padding:0px;'>
-                    <div style='display:flex:flex-direction:column;flex-grow:1;overflow:scroll;max-height:525px;'>
+                <div style='max-height:calc(100% - 43px);display:flex;flex-grow:1;min-width:50%;flex-direction:row;padding:0px;'>
+                    <div style='display:flex:flex-direction:column;flex-grow:1;overflow:scroll;{max_height}'>
                         <div id='__application-bestandsverzeichnis' style='margin:10px;'>{bestandsverzeichnis}</div>
                         <div id='__application-bestandsverzeichnis-veraenderungen' style='margin:10px;'>{bestandsverzeichnis_zuschreibungen}</div>
                         <div id='__application-bestandsverzeichnis-loeschungen' style='margin:10px;'>{bestandsverzeichnis_abschreibungen}</div>
@@ -1332,10 +1340,16 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     {analyse_grundbuch}
                 </div>
             ",
+            max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
+            reload_grundbuch_button = if has_no_pdf { String::new() } else { format!("
+                <div style='padding:6px;'>
+                    <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
+                </div>
+            ", reload_icon = reload_str) },
             lefis_analyse = if rpc_data.konfiguration.lefis_analyse_einblenden {
                 let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
                 format!("
-                    <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
+                    <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
                             <div style='padding:6px;'>
@@ -1346,7 +1360,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             } else {
                 let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
                 format!("
-                <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
+                <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                     <div style='display:flex;flex-direction:row;'>
                         <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
                         <div style='display:flex;flex-grow:1;'></div>
@@ -1357,7 +1371,6 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                 </div>")
             },
             
-            reload_icon = reload_str,
             bestandsverzeichnis = render_bestandsverzeichnis(open_file, &rpc_data.konfiguration),
             bestandsverzeichnis_zuschreibungen = render_bestandsverzeichnis_zuschreibungen(open_file),
             bestandsverzeichnis_abschreibungen = render_bestandsverzeichnis_abschreibungen(open_file),
@@ -1376,10 +1389,13 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
             analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
                 format!("
-                    <div id='__application-analyse-grundbuch' style='display:flex;flex-grow:1;min-width:50%;overflow:scroll;max-height:525px;'>
+                    <div id='__application-analyse-grundbuch' style='display:flex;flex-grow:1;min-width:50%;overflow:scroll;{max_height}'>
                         {analyse}
                     </div>
-                ", analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false))
+                ", 
+                    max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
+                    analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false)
+                )
             } else {
                 format!("")
             }

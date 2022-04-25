@@ -57,6 +57,15 @@ impl RpcData {
             _ => false,
         }
     }
+    
+    pub fn loaded_file_has_no_pdf(&self) -> bool {
+        let open_file = match self.open_page.clone().and_then(|(file, _)| self.loaded_files.get(&file)) { 
+            Some(s) => s,
+            None => return true,
+        };
+        
+        open_file.datei.is_none()
+    }
 }
 
 #[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
@@ -614,7 +623,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let file_dialog_result = tinyfiledialogs::open_file_dialog_multi(
                 "Grundbuchblatt-PDF Datei(en) auswählen", 
                 "~/", 
-                Some((&["*.pdf"], "Grundbuchblatt")),
+                Some((&["*.pdf", "*.gbx"], "Grundbuchblatt")),
             ); 
             
             let dateien = match file_dialog_result {
@@ -622,12 +631,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            // Nur PDF-Dateien laden
+            // Nur PDF-oder GBX-Dateien laden
             let dateien = dateien
             .iter()
             .filter_map(|dateipfad| {
                 let dateiendung = Path::new(dateipfad).extension()?;
-                if dateiendung == "pdf" {
+                if dateiendung == "pdf" || dateiendung == "gbx" {
                     Some(dateipfad)
                 } else {
                     None
@@ -646,76 +655,100 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     }
                 };
                 
-                let mut seitenzahlen = match digitalisiere::lese_seitenzahlen(&datei_bytes) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        continue;
-                    },
-                };
-                
-                let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
+                if let Some(mut pdf_parsed) = String::from_utf8(datei_bytes.clone()).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
+                    
+                    let file_name = format!("{}_{}", pdf_parsed.titelblatt.grundbuch_von, pdf_parsed.titelblatt.blatt);
 
-                let titelblatt = match digitalisiere::lese_titelblatt(&datei_bytes) {
-                    Ok(o) => o,
-                    Err(_) => {
-                        continue;
-                    },
-                };
-
-                let default_parent = Path::new("/");
-                let output_parent = Path::new(&d).parent().unwrap_or(&default_parent).to_path_buf();
-                let file_name = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
-                let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-                let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-                
-                // Lösche Titelblattseite von Seiten, die gerendert werden müssen
-                seitenzahlen.remove(0);
-                
-                let datei_bytes_clone = datei_bytes.clone();
-                let titelblatt_clone = titelblatt.clone();
-                let seitenzahlen_clone = seitenzahlen.clone();
-                
-                let mut pdf_parsed = PdfFile {
-		            datei: Some(d.to_string()),
-		            gbx_datei_pfad: None,
-		            titelblatt,
-                    icon: None,
-                    land: None,
-		            seiten_ocr_text: BTreeMap::new(),
-		            seitenzahlen: seitenzahlen.clone(),
-                    klassifikation_neu: BTreeMap::new(),
-                    pdftotext_layout: PdfToTextLayout::default(),
-		            geladen: BTreeMap::new(),
-		            analysiert: Grundbuch::default(),
-		            nebenbeteiligte_dateipfade: Vec::new(),
-		            anpassungen_seite: BTreeMap::new(),
-		            seiten_versucht_geladen: BTreeSet::new(),
-		        };
-		                        
-                if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
-                    pdf_parsed = cached_pdf;
-                }
-                if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
-                    pdf_parsed = target_pdf;
-                }
-            
-                for nb_datei in pdf_parsed.nebenbeteiligte_dateipfade.iter() {
-                    if let Some(mut nb) = std::fs::read_to_string(&nb_datei).ok().map(|fs| parse_nb(&fs)) {
-                        data.loaded_nb.append(&mut nb);
-                        data.loaded_nb.sort_by(|a, b| a.name.cmp(&b.name));
-                        data.loaded_nb.dedup();
-                        data.loaded_nb_paths.push(nb_datei.clone());
-                        data.loaded_nb_paths.sort();
-                        data.loaded_nb_paths.dedup();
+                    for nb_datei in pdf_parsed.nebenbeteiligte_dateipfade.iter() {
+                        if let Some(mut nb) = std::fs::read_to_string(&nb_datei).ok().map(|fs| parse_nb(&fs)) {
+                            data.loaded_nb.append(&mut nb);
+                            data.loaded_nb.sort_by(|a, b| a.name.cmp(&b.name));
+                            data.loaded_nb.dedup();
+                            data.loaded_nb_paths.push(nb_datei.clone());
+                            data.loaded_nb_paths.sort();
+                            data.loaded_nb_paths.dedup();
+                        }
                     }
-                }
-                                
-                let json = match serde_json::to_string_pretty(&pdf_parsed) { Ok(o) => o, Err(_) => continue, };
-                let _ = std::fs::write(&cache_output_path, json.as_bytes());
-                data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
-                pdf_zu_laden.push(pdf_parsed);  
-                if data.open_page.is_none() {
-                    data.open_page = Some((file_name.clone(), 2));
+                                    
+                    data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
+                    pdf_zu_laden.push(pdf_parsed);  
+                    if data.open_page.is_none() {
+                        data.open_page = Some((file_name.clone(), 2));
+                    }
+                } else {
+                
+                    let mut seitenzahlen = match digitalisiere::lese_seitenzahlen(&datei_bytes) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            continue;
+                        },
+                    };
+                    
+                    let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
+
+                    let titelblatt = match digitalisiere::lese_titelblatt(&datei_bytes) {
+                        Ok(o) => o,
+                        Err(_) => {
+                            continue;
+                        },
+                    };
+
+                    let default_parent = Path::new("/");
+                    let output_parent = Path::new(&d).parent().unwrap_or(&default_parent).to_path_buf();
+                    let file_name = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
+                    let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
+                    let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+                    
+                    // Lösche Titelblattseite von Seiten, die gerendert werden müssen
+                    seitenzahlen.remove(0);
+                    
+                    let datei_bytes_clone = datei_bytes.clone();
+                    let titelblatt_clone = titelblatt.clone();
+                    let seitenzahlen_clone = seitenzahlen.clone();
+                    
+                    let mut pdf_parsed = PdfFile {
+                        datei: Some(d.to_string()),
+                        gbx_datei_pfad: None,
+                        titelblatt,
+                        icon: None,
+                        land: None,
+                        seiten_ocr_text: BTreeMap::new(),
+                        seitenzahlen: seitenzahlen.clone(),
+                        klassifikation_neu: BTreeMap::new(),
+                        pdftotext_layout: PdfToTextLayout::default(),
+                        geladen: BTreeMap::new(),
+                        analysiert: Grundbuch::default(),
+                        nebenbeteiligte_dateipfade: Vec::new(),
+                        anpassungen_seite: BTreeMap::new(),
+                        seiten_versucht_geladen: BTreeSet::new(),
+                    };
+                                    
+                    if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                        pdf_parsed = cached_pdf;
+                    }
+                    
+                    if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                        pdf_parsed = target_pdf;
+                    }
+                
+                    for nb_datei in pdf_parsed.nebenbeteiligte_dateipfade.iter() {
+                        if let Some(mut nb) = std::fs::read_to_string(&nb_datei).ok().map(|fs| parse_nb(&fs)) {
+                            data.loaded_nb.append(&mut nb);
+                            data.loaded_nb.sort_by(|a, b| a.name.cmp(&b.name));
+                            data.loaded_nb.dedup();
+                            data.loaded_nb_paths.push(nb_datei.clone());
+                            data.loaded_nb_paths.sort();
+                            data.loaded_nb_paths.dedup();
+                        }
+                    }
+                                    
+                    let json = match serde_json::to_string_pretty(&pdf_parsed) { Ok(o) => o, Err(_) => continue, };
+                    let _ = std::fs::write(&cache_output_path, json.as_bytes());
+                    data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
+                    pdf_zu_laden.push(pdf_parsed);  
+                    if data.open_page.is_none() {
+                        data.open_page = Some((file_name.clone(), 2));
+                    }
                 }
             }
             
@@ -772,7 +805,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             pdf_parsed.speichern();
             data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
-
+            if data.open_page.is_none() {
+                data.open_page = Some((file_name.clone(), 2));
+            }
             data.popover_state = None;
             webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
             webview.eval("startCheckingForPdfErrors()");
