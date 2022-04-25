@@ -1978,7 +1978,7 @@ let rpc = {
   
   load_pdf: function() { rpc.invoke({ cmd : 'load_pdf' }); },
   create_new_grundbuch: function() { rpc.invoke({ cmd : 'create_new_grundbuch' }); },
-      
+  grundbuch_anlegen: function(land, grundbuch_von, amtsgericht, blatt) { rpc.invoke({ cmd : 'grundbuch_anlegen', land: land, grundbuch_von: grundbuch_von, amtsgericht: amtsgericht, blatt: blatt }); },
   undo:  function() { rpc.invoke({ cmd : 'undo' }); },
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
@@ -3246,6 +3246,30 @@ function activateConfigurationView(event, section_id) {
     event.stopPropagation();
     event.preventDefault();
     rpc.set_configuration_view(section_id);
+}
+
+function grundbuchAnlegen(event) {
+    event.preventDefault();
+    
+    let land = document.getElementById("__application_grundbuch_anlegen_land");
+    if (!land)
+        return;
+    
+    let amtsgericht = document.getElementById("__application_grundbuch_anlegen_amtsgericht");
+    if (!amtsgericht)
+        return;
+    
+    let grundbuch_von = document.getElementById("__application_grundbuch_anlegen_grundbuch_von");
+    if (!grundbuch_von)
+        return;
+    
+    let blatt = document.getElementById("__application_grundbuch_anlegen_blatt_nr");
+    if (!blatt)
+        return;
+    
+    rpc.grundbuch_anlegen(land.value, grundbuch_von.value, amtsgericht.value, parseInt(blatt.value));
+    
+    return false;
 }
 
 // Init

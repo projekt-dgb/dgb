@@ -5,6 +5,7 @@ use std::path::Path;
 use std::fs;
 use std::sync::Mutex;
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use urlencoding::encode;
 use web_view::*;
@@ -164,7 +165,13 @@ impl Default for RpcData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdfFile {
-    datei: String,
+    // Pfad der zugehörigen .pdf-Datei
+    datei: Option<String>,
+    // Some(pfad) wenn Datei digital angelegt wurde
+    #[serde(default)]
+    gbx_datei_pfad: Option<String>,
+    #[serde(default)]
+    land: Option<String>,
     titelblatt: Titelblatt,
     seitenzahlen: Vec<u32>,
     geladen: BTreeMap<u32, SeiteParsed>,
@@ -229,12 +236,29 @@ impl Rect {
 }
 
 impl PdfFile {
+    pub fn get_gbx_datei_parent(&self) -> PathBuf {
+        let default_parent = Path::new("/");
+        match (self.datei.as_ref(), self.gbx_datei_pfad.as_ref()) {
+            (Some(pdf), None) | (Some(pdf), Some(_)) => {
+                Path::new(&pdf).clone().parent().unwrap_or(&default_parent).to_path_buf()
+            },
+            (None, Some(gbx)) => {
+                Path::new(&gbx).to_path_buf()
+            },
+            (None, None) => {
+                default_parent.to_path_buf()
+            }
+        }
+    }
+    
+    pub fn get_gbx_datei_pfad(&self) -> PathBuf {
+        let file_name = format!("{}_{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt);
+        self.get_gbx_datei_parent()
+        .join(&format!("{}.gbx", file_name))
+    }
 
     pub fn speichern(&self) {
-        let file_name = format!("{}_{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt);
-        let default_parent = Path::new("/");
-        let output_parent = Path::new(&self.datei).clone().parent().unwrap_or(&default_parent).to_path_buf();
-        let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+        let target_output_path = self.get_gbx_datei_pfad();
         let json = match serde_json::to_string_pretty(&self) { Ok(o) => o, Err(_) => return, };
         let _ = std::fs::write(&target_output_path, json.as_bytes());
     }
@@ -399,6 +423,13 @@ pub enum Cmd {
     LoadPdf,
     #[serde(rename = "create_new_grundbuch")]
     CreateNewGrundbuch,
+    #[serde(rename = "grundbuch_anlegen")]
+    GrundbuchAnlegen { 
+        land: String,
+        grundbuch_von: String, 
+        amtsgericht: String, 
+        blatt: usize, 
+    },
     #[serde(rename = "undo")]
     Undo,
     #[serde(rename = "redo")]
@@ -645,9 +676,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let seitenzahlen_clone = seitenzahlen.clone();
                 
                 let mut pdf_parsed = PdfFile {
-		            datei: d.to_string(),
+		            datei: Some(d.to_string()),
+		            gbx_datei_pfad: None,
 		            titelblatt,
                     icon: None,
+                    land: None,
 		            seiten_ocr_text: BTreeMap::new(),
 		            seitenzahlen: seitenzahlen.clone(),
                     klassifikation_neu: BTreeMap::new(),
@@ -691,8 +724,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval("startCheckingForPdfErrors()");
 
             for pdf_parsed in &pdf_zu_laden {
-                let default_parent = Path::new("/");
-                let output_parent = Path::new(&pdf_parsed.datei).parent().unwrap_or(&default_parent).to_path_buf();
+                let output_parent = pdf_parsed.get_gbx_datei_parent();
                 let file_name = format!("{}_{}", pdf_parsed.titelblatt.grundbuch_von, pdf_parsed.titelblatt.blatt);
                 let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
                 webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
@@ -703,6 +735,47 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+        },
+        Cmd::GrundbuchAnlegen { land, grundbuch_von, amtsgericht, blatt } => {
+
+            let file_dialog_result = tinyfiledialogs::select_folder_dialog(
+                ".gbx-Datei speichern unter...", 
+                "~/",
+            );
+            
+            let gbx_folder = match file_dialog_result {
+                Some(f) => f,
+                None => return,
+            };
+            
+            let file_name = format!("{}_{}", grundbuch_von, blatt);
+
+            let mut pdf_parsed = PdfFile {
+                datei: None,
+                gbx_datei_pfad: Some(gbx_folder),
+                titelblatt: Titelblatt {
+                    amtsgericht: amtsgericht.trim().to_string().clone(),
+                    grundbuch_von: grundbuch_von.trim().to_string().clone(),
+                    blatt: blatt.clone(),
+                },
+                icon: None,
+                land: Some(land.trim().to_string()),
+                seiten_ocr_text: BTreeMap::new(),
+                seitenzahlen: Vec::new(),
+                klassifikation_neu: BTreeMap::new(),
+                pdftotext_layout: PdfToTextLayout::default(),
+                geladen: BTreeMap::new(),
+                analysiert: Grundbuch::default(),
+                nebenbeteiligte_dateipfade: Vec::new(),
+                anpassungen_seite: BTreeMap::new(),
+                seiten_versucht_geladen: BTreeSet::new(),
+            };
+            pdf_parsed.speichern();
+            data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
+
+            data.popover_state = None;
+            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+            webview.eval("startCheckingForPdfErrors()");
         },
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO
@@ -738,13 +811,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             if !pdftoppm_output_path.exists() {
-                if let Ok(o) = std::fs::read(&file.datei) {
-                    let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
-                        &o, 
-                        &[open_file.1], 
-                        &file.titelblatt, 
-                        !data.konfiguration.vorschau_ohne_geroetet
-                    );
+                if let Some(pdf) = file.datei.as_ref() {
+                    if let Ok(o) = std::fs::read(&pdf) {
+                        let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
+                            &o, 
+                            &[open_file.1], 
+                            &file.titelblatt, 
+                            !data.konfiguration.vorschau_ohne_geroetet
+                        );
+                    }
                 }
             }
         
@@ -1164,14 +1239,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 
                 _ => { return; }
             }
-                                    
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            
+            open_file.speichern();
             open_file.icon = None;
             if data.konfiguration.lefis_analyse_einblenden {
                 webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
@@ -1221,13 +1290,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
             
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
@@ -1317,13 +1380,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
                        
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
@@ -1577,13 +1634,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
 
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
     
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
@@ -2024,13 +2075,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
                         
             webview.eval(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
 
@@ -2077,6 +2122,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     return;
                 }
             };
+                        
+            if file.datei.as_ref().is_none() {
+                return;
+            }
             
             let temp_ordner = std::env::temp_dir()
             .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
@@ -2086,8 +2135,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(*page as u32, max_seitenzahl)));
             
             if !Path::new(&pdftoppm_output_path).exists() {
-                if let Ok(o) = std::fs::read(&file.datei) {
-                    let _ = crate::digitalisiere::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], max_seitenzahl, &file.titelblatt);
+                if let Some(pdf) = file.datei.as_ref() {
+                    if let Ok(o) = std::fs::read(&pdf) {
+                        let _ = crate::digitalisiere::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], max_seitenzahl, &file.titelblatt);
+                    }
                 }
             }
             
@@ -2216,9 +2267,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
                 
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
             let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let output_parent = open_file.get_gbx_datei_parent();
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
             let _ = reload_grundbuch(open_file.clone());
             
@@ -2259,13 +2309,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
             
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
         },
         Cmd::ZeileLoeschen { file, page, zeilen_id } => {
         
@@ -2295,13 +2339,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
         },
         Cmd::ResizeColumn {
             direction,
@@ -2392,13 +2430,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let new_y = new_column.min_y.min(new_column.max_y) / page_height * img_ui_height;
 
             // speichern
-            let default_parent = Path::new("/");
-            let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-            if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            }
+            open_file.speichern();
         
             webview.eval(&format!("adjustColumn(`{}`,`{}`,`{}`,`{}`,`{}`)", column_id, new_width, new_height, new_x, new_y));
         },
@@ -2468,14 +2500,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 open_file.nebenbeteiligte_dateipfade.push(f_name.clone());
                 open_file.nebenbeteiligte_dateipfade.sort();
                 open_file.nebenbeteiligte_dateipfade.dedup();
-                
-                let default_parent = Path::new("/");
-                let output_parent = Path::new(&open_file.datei).parent().unwrap_or(&default_parent).to_path_buf();
-                let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
-                let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-                if let Ok(json) = serde_json::to_string_pretty(&open_file) {
-                    let _ = std::fs::write(&target_output_path, json.as_bytes());
-                }
+                open_file.speichern();
             }
             
             // Nochmal speichern, nachdem Ordnungsnummern neu vergeben wurden
@@ -2777,24 +2802,27 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let titelblatt = open_file.titelblatt.clone();
             let seitenzahlen = open_file.pdftotext_layout.seiten.keys().copied().collect::<Vec<_>>();
-            let pdf_bytes = match std::fs::read(&open_file.datei) {
-                Ok(o) => o,
-                Err(_) => return,
-            };
-
-            rayon::spawn(move || {
-
-                use crate::digitalisiere::konvertiere_pdf_seiten_zu_png;
+            if let Some(pdf) = open_file.datei.as_ref() {
     
-                let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
+                let pdf_bytes = match std::fs::read(&pdf) {
+                    Ok(o) => o,
+                    Err(_) => return,
+                };
 
-                let _ = konvertiere_pdf_seiten_zu_png(
-                    &pdf_bytes, 
-                    &seitenzahlen, 
-                    max_sz,
-                    &titelblatt,
-                );
-            });
+                rayon::spawn(move || {
+
+                    use crate::digitalisiere::konvertiere_pdf_seiten_zu_png;
+        
+                    let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
+
+                    let _ = konvertiere_pdf_seiten_zu_png(
+                        &pdf_bytes, 
+                        &seitenzahlen, 
+                        max_sz,
+                        &titelblatt,
+                    );
+                });
+            }
             
             webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
@@ -3132,25 +3160,36 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
 }
 
 fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
+    
     std::thread::spawn(move || {
         for mut pdf in pdfs {
+        
+            let output_parent = pdf.get_gbx_datei_parent();
+            let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
+            let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
+            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
             
+            let pdf_datei_pfad = match pdf.datei.clone() {
+                None => {
+                    pdf.analysiert.abt1.migriere_v2();
+                    let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
+                    let _ = std::fs::write(&target_output_path, json.as_bytes());
+                    continue;
+                },
+                Some(pfad) => pfad,
+            };
+    
             rayon::spawn(move || {
             
                 let mut pdf = pdf;
                 
-                let datei_bytes = match fs::read(&pdf.datei).ok() {
+                let datei_bytes = match fs::read(&pdf_datei_pfad).ok() {
                     Some(s) => s,
                     None => return,
                 };
                 
                 let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
                 
-                let default_parent = Path::new("/");
-                let output_parent = Path::new(&pdf.datei).clone().parent().unwrap_or(&default_parent).to_path_buf();
-                let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
-                let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-                let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
 
                 if let Some(mut cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
                     cached_pdf.analysiert.abt1.migriere_v2();
@@ -3309,10 +3348,15 @@ fn reload_grundbuch(pdf: PdfFile) {
 }
 
 fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
-        
-    let datei_bytes = match fs::read(&pdf.datei) {
+    
+    let pdf_datei = match pdf.datei.clone() {
+        Some(s) => s,
+        None => { return Ok(()); }
+    };
+    
+    let datei_bytes = match fs::read(&pdf_datei) {
         Ok(s) => s,
-        Err(e) => return Err(Fehler::Io(pdf.datei.clone(), e)),
+        Err(e) => return Err(Fehler::Io(pdf_datei.clone(), e)),
     };
         
     let seitenzahlen_zu_laden = pdf.seitenzahlen.clone();
@@ -3322,8 +3366,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
     pdf.geladen.clear();
     pdf.analysiert = Grundbuch::default();
     
-    let default_parent = Path::new("/");
-    let output_parent = Path::new(&pdf.datei).clone().parent().unwrap_or(&default_parent).to_path_buf();
+    let output_parent = pdf.get_gbx_datei_parent();
     let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
     let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
     let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));

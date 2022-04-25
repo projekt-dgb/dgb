@@ -88,30 +88,43 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Neues Grundbuchblatt anlegen</h2>
                 
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <form onsubmit='grundbuchAnlegen(event)' action=''>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Land</label>
-                        <input type='text' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                        <select id='__application_grundbuch_anlegen_land' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
+                            <option value='Baden-Württemberg'>Baden-Württemberg</option>
+                            <option value='Bayern'>Bayern</option>
+                            <option value='Berlin'>Berlin</option>
+                            <option value='Brandenburg' selected='selected'>Brandenburg</option>
+                            <option value='Bremen'>Bremen</option>
+                            <option value='Hamburg'>Hamburg</option>
+                            <option value='Hessen'>Hessen</option>
+                            <option value='Mecklenburg-Vorpommern'>Mecklenburg-Vorpommern</option>
+                            <option value='Niedersachsen'>Niedersachsen</option>
+                            <option value='Nordrhein-Westfalen'>Nordrhein-Westfalen</option>
+                            <option value='Rheinland-Pfalz'>Rheinland-Pfalz</option>
+                            <option value='Saarland'>Saarland</option>
+                            <option value='Sachsen'>Sachsen</option>
+                            <option value='Sachsen-Anhalt'>Sachsen-Anhalt</option>
+                            <option value='Schleswig-Holstein'>Schleswig-Holstein</option>
+                            <option value='Thüringen'>Thüringen</option>
+                        </select>
                     </div>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Amtsgericht</label>
-                        <input type='text' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                        <input type='text' id='__application_grundbuch_anlegen_amtsgericht' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
                     </div>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
-                        <label style='font-size:20px;font-style:italic;'>Gemarkung</label>
-                        <input type='text' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                        <label style='font-size:20px;font-style:italic;'>Grundbuch von</label>
+                        <input type='text' id='__application_grundbuch_anlegen_grundbuch_von' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
                     </div>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Blatt-Nr.</label>
-                        <input type='number' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
-                    </div>
-                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
-                        <label style='font-size:20px;font-style:italic;'>Datei speichern unter</label>
-                        <input type='file' class='btn btn_neu'></input>
+                        <input type='number' id='__application_grundbuch_anlegen_blatt_nr' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
                     </div>
                     <br/>
-                    <button onclick='grundbuchAnlegen(event)' class='btn btn_neu' style='font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;'>
-                        Speichern
-                    </button>
+                    <input type='submit' value='Speichern' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
+                    </form>
                 </div>
             </div>
             ")
@@ -125,10 +138,11 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>PDF-Export</h2>
                 
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <form onclick='pdfExportieren(event)'  action=''>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Exportiere:</label>
                         
-                        <select onchange='' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
+                        <select style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
                             <option value='offen'>Offenes Grundbuch</option>
                             <option value='alle-offen'>Alle offenen, digitalisierten Grundbücher</option>
                             <option value='alle-offen'>Alle offenen Grundbücher</option>
@@ -164,9 +178,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                         <input id='export-pdf-leere-seite' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
                         <label style='font-size:20px;font-style:italic;'>Gerötete Einträge ausgeben</label>
                     </div>
-                    <button onclick='pdfExportieren(event)' class='btn btn_neu' style='font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;'>
-                        Speichern
-                    </button>
+                    <input type='submit' value='Speichern' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
+                        
+                    </form>
                 </div>
             </div>
             ")
@@ -1199,6 +1213,10 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
         Some(s) => s,
         None => return String::new(),
     };
+    
+    if open_file.datei.is_none() {
+        return String::new();
+    }
     
     let pages_div = open_file.seitenzahlen.iter().map(|page_num| {
     
@@ -2599,6 +2617,10 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         Some(s) => s,
         None => { return String::new() },
     };
+    
+    if file.datei.is_none() {
+        return String::new();
+    }
     
     let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
     
