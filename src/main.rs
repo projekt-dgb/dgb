@@ -2859,10 +2859,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 });
             }
             
-            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
             webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
+            webview.eval(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
         },
         Cmd::SetOpenPage { active_page } => {
             

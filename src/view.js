@@ -364,6 +364,12 @@ function replaceBestandsverzeichnis(s) {
         e.innerHTML = s;
 }
 
+function replaceMainNoFiles(s) {
+    let e = document.getElementById("__application-main-no-files");
+    if (e)
+        e.innerHTML = s;
+}
+
 function replaceBestandsverzeichnisZuschreibungen(s) {
     let e = document.getElementById("__application-bestandsverzeichnis-veraenderungen");
     if (e)

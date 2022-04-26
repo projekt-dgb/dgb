@@ -1147,13 +1147,23 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 
     normalize_for_js(format!("
         <div id='__application-file-list'>{file_list}</div>
+        <div id='__application-main-no-files' style='display:flex;width:100%;height:100%;flex-direction:row;'>
+            {main_no_files}
+        </div>
+    ",
+        file_list = render_file_list(rpc_data),
+        main_no_files = render_application_main_no_files(rpc_data),
+    ))
+}
+
+pub fn render_application_main_no_files(rpc_data: &mut RpcData) -> String {
+    format!("
         {page_list}
         <div style='display:flex;flex-direction:column;flex-grow:1;'>
             <div id='__application-main-container' style='{height}'>{main_container}</div>
             {pdf_image}
         </div>
     ",
-        file_list = render_file_list(rpc_data),
         page_list = if rpc_data.loaded_file_has_no_pdf() {
             String::new()
         } else {
@@ -1166,7 +1176,7 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
         } else {
             format!("<div id='__application-pdf-page-image'>{pdf_image}</div>", pdf_image = render_pdf_image(rpc_data))
         }
-    ))
+    )
 }
 
 pub fn render_file_list(rpc_data: &RpcData) -> String {
