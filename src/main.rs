@@ -459,8 +459,16 @@ pub enum Cmd {
     ExportAlleAbt1,
     #[serde(rename = "export_alle_teilbelastungen")]
     ExportAlleTeilbelastungen,    
-    #[serde(rename = "export_pdf")]
-    ExportPdf,
+    #[serde(rename = "grundbuch_exportieren")]
+    GrundbuchExportieren {
+        was_exportieren: String, 
+        exportiere_bv: bool,
+        exportiere_abt_1: bool,
+        exportiere_abt_2: bool,
+        exportiere_abt_3: bool,
+        exportiere_pdf_leere_seite: bool,
+        exportiere_in_eine_einzelne_datei: bool,
+    },
     #[serde(rename = "open_configuration")]
     OpenConfiguration,
     #[serde(rename = "set_configuration_view")]
@@ -2576,8 +2584,18 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let _ = std::fs::write(&f, tsv.as_bytes());
             
         },
-        Cmd::ExportPdf => {
+        Cmd::GrundbuchExportieren {
+            was_exportieren, 
+            exportiere_bv,
+            exportiere_abt_1,
+            exportiere_abt_2,
+            exportiere_abt_3,
+            exportiere_pdf_leere_seite,
+            exportiere_in_eine_einzelne_datei,
+        } => {
             
+            println!("{:?}", arg);
+
             if data.loaded_files.is_empty() {
                 return;
             }

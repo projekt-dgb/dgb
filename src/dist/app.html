@@ -1982,6 +1982,19 @@ let rpc = {
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
   export_pdf: function() { rpc.invoke({ cmd : 'export_pdf' }); },
+  grundbuch_exportieren: function(was_exportieren, exportiere_bv, exportiere_abt_1, exportiere_abt_2, exportiere_abt_3, exportiere_pdf_leere_seite, exportiere_in_eine_einzelne_datei) {
+      rpc.invoke({ 
+          cmd : 'grundbuch_exportieren', 
+          was_exportieren: was_exportieren,
+          exportiere_bv: exportiere_bv,
+          exportiere_abt_1: exportiere_abt_1,
+          exportiere_abt_2: exportiere_abt_2,
+          exportiere_abt_3: exportiere_abt_3,
+          exportiere_pdf_leere_seite: exportiere_pdf_leere_seite,
+          exportiere_in_eine_einzelne_datei: exportiere_in_eine_einzelne_datei,
+    });
+  },
+  
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
@@ -3256,19 +3269,19 @@ function activateConfigurationView(event, section_id) {
 function grundbuchAnlegen(event) {
     event.preventDefault();
     
-    let land = document.getElementById("__application_grundbuch_anlegen_land");
+    var land = document.getElementById("__application_grundbuch_anlegen_land");
     if (!land)
         return;
     
-    let amtsgericht = document.getElementById("__application_grundbuch_anlegen_amtsgericht");
+    var amtsgericht = document.getElementById("__application_grundbuch_anlegen_amtsgericht");
     if (!amtsgericht)
         return;
     
-    let grundbuch_von = document.getElementById("__application_grundbuch_anlegen_grundbuch_von");
+    var grundbuch_von = document.getElementById("__application_grundbuch_anlegen_grundbuch_von");
     if (!grundbuch_von)
         return;
     
-    let blatt = document.getElementById("__application_grundbuch_anlegen_blatt_nr");
+    var blatt = document.getElementById("__application_grundbuch_anlegen_blatt_nr");
     if (!blatt)
         return;
     
@@ -3276,6 +3289,51 @@ function grundbuchAnlegen(event) {
     
     return false;
 }
+
+function grundbuchExportieren(event) {
+    event.preventDefault();
+        
+    var was_exportieren = document.getElementById("__application_export-pdf-was-exportieren");
+    if (!was_exportieren)
+        return;
+    
+    var exportiere_bv = document.getElementById("export-pdf-bv");
+    if (!exportiere_bv)
+        return;
+    
+    var exportiere_abt_1 = document.getElementById("export-pdf-abt-1");
+    if (!exportiere_abt_1)
+        return;
+        
+    var exportiere_abt_2 = document.getElementById("export-pdf-abt-2");
+    if (!exportiere_abt_2)
+        return;
+    
+    var exportiere_abt_3 = document.getElementById("export-pdf-abt-3");
+    if (!exportiere_abt_3)
+        return;
+    
+    var exportiere_pdf_leere_seite = document.getElementById("export-pdf-leere-seite");
+    if (!exportiere_pdf_leere_seite)
+        return;
+    
+    var exportiere_in_eine_einzelne_datei = document.getElementById("export-pdf-eine-datei");
+    if (!exportiere_in_eine_einzelne_datei)
+        return;
+        
+    rpc.grundbuch_exportieren(
+        was_exportieren.value,
+        exportiere_bv.checked,
+        exportiere_abt_1.checked,
+        exportiere_abt_2.checked,
+        exportiere_abt_3.checked,
+        exportiere_pdf_leere_seite.checked,
+        exportiere_in_eine_einzelne_datei.checked,
+    );
+    
+    return false;
+}
+
 
 // Init
 window.onload = function() { rpc.init(); };

@@ -138,11 +138,12 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>PDF-Export</h2>
                 
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
-                    <form onclick='pdfExportieren(event)'  action=''>
+                    <form onsubmit='grundbuchExportieren(event)'  action=''>
+                    
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Exportiere:</label>
                         
-                        <select style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
+                        <select id='__application_export-pdf-was-exportieren' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
                             <option value='offen'>Offenes Grundbuch</option>
                             <option value='alle-offen'>Alle offenen, digitalisierten Grundbücher</option>
                             <option value='alle-offen'>Alle offenen Grundbücher</option>
@@ -172,11 +173,15 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     <br/>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <input id='export-pdf-leere-seite' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
-                        <label style='font-size:20px;font-style:italic;'>Leere Seite nach Titelblatt einfügen</label>
+                        <label for='export-pdf-leere-seite' style='font-size:20px;font-style:italic;'>Leere Seite nach Titelblatt einfügen</label>
                     </div>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
-                        <input id='export-pdf-leere-seite' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
-                        <label style='font-size:20px;font-style:italic;'>Gerötete Einträge ausgeben</label>
+                        <input id='export-pdf-geroetete-eintraege' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
+                        <label for='export-pdf-geroetete-eintraege' style='font-size:20px;font-style:italic;'>Gerötete Einträge ausgeben</label>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <input id='export-pdf-eine-datei' type='checkbox' style='width:20px;height:20px;cursor:pointer;' checked='checked'/>                        
+                        <label for='export-pdf-eine-datei' style='font-size:20px;font-style:italic;'>Als ein PDF ausgeben</label>
                     </div>
                     <input type='submit' value='Speichern' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
                         
