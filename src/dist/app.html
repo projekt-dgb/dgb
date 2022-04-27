@@ -1982,7 +1982,7 @@ let rpc = {
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
   export_pdf: function() { rpc.invoke({ cmd : 'export_pdf' }); },
-  grundbuch_exportieren: function(was_exportieren, exportiere_bv, exportiere_abt_1, exportiere_abt_2, exportiere_abt_3, exportiere_pdf_leere_seite, exportiere_in_eine_einzelne_datei) {
+  grundbuch_exportieren: function(was_exportieren, exportiere_bv, exportiere_abt_1, exportiere_abt_2, exportiere_abt_3, exportiere_pdf_leere_seite, exportiere_geroetete_eintraege, exportiere_in_eine_einzelne_datei) {
       rpc.invoke({ 
           cmd : 'grundbuch_exportieren', 
           was_exportieren: was_exportieren,
@@ -1991,6 +1991,7 @@ let rpc = {
           exportiere_abt_2: exportiere_abt_2,
           exportiere_abt_3: exportiere_abt_3,
           exportiere_pdf_leere_seite: exportiere_pdf_leere_seite,
+          exportiere_geroetete_eintraege: exportiere_geroetete_eintraege,
           exportiere_in_eine_einzelne_datei: exportiere_in_eine_einzelne_datei,
     });
   },
@@ -3317,6 +3318,10 @@ function grundbuchExportieren(event) {
     if (!exportiere_pdf_leere_seite)
         return;
     
+    var exportiere_geroetete_eintraege = document.getElementById("export-pdf-geroetete-eintraege");
+    if (!exportiere_geroetete_eintraege)
+        return;
+        
     var exportiere_in_eine_einzelne_datei = document.getElementById("export-pdf-eine-datei");
     if (!exportiere_in_eine_einzelne_datei)
         return;
@@ -3328,6 +3333,7 @@ function grundbuchExportieren(event) {
         exportiere_abt_2.checked,
         exportiere_abt_3.checked,
         exportiere_pdf_leere_seite.checked,
+        exportiere_geroetete_eintraege.checked,
         exportiere_in_eine_einzelne_datei.checked,
     );
     

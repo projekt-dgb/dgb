@@ -145,7 +145,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                         
                         <select id='__application_export-pdf-was-exportieren' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
                             <option value='offen'>Offenes Grundbuch</option>
-                            <option value='alle-offen'>Alle offenen, digitalisierten Grundbücher</option>
+                            <option value='alle-offen-digitalisiert'>Alle offenen, digitalisierten Grundbücher</option>
                             <option value='alle-offen'>Alle offenen Grundbücher</option>
                             <option value='alle-original'>Alle Original-PDFs</option>
                         </select>

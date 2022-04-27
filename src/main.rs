@@ -466,6 +466,7 @@ pub enum Cmd {
         exportiere_abt_1: bool,
         exportiere_abt_2: bool,
         exportiere_abt_3: bool,
+        exportiere_geroetete_eintraege: bool,
         exportiere_pdf_leere_seite: bool,
         exportiere_in_eine_einzelne_datei: bool,
     },
@@ -2591,28 +2592,125 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             exportiere_abt_2,
             exportiere_abt_3,
             exportiere_pdf_leere_seite,
+            exportiere_geroetete_eintraege,
             exportiere_in_eine_einzelne_datei,
         } => {
+            use crate::pdf::{GrundbuchExportConfig, PdfExportTyp, GenerateGrundbuchConfig};
+            use tinyfiledialogs::MessageBoxIcon;
             
-            println!("{:?}", arg);
-
             if data.loaded_files.is_empty() {
                 return;
             }
             
-            let file_dialog_result = tinyfiledialogs::select_folder_dialog(
-                "PDF Dateien speichern unter", 
-                "~/", 
-            );
-            
-            let f = match file_dialog_result {
-                Some(f) => f,
-                None => return,
+            let target = match exportiere_in_eine_einzelne_datei {
+                true => {
+                    let file_dialog_result = tinyfiledialogs::save_file_dialog(
+                        "PDF Datei speichern unter", 
+                        "~/",
+                    );
+                    
+                    let f = match file_dialog_result {
+                        Some(f) => f,
+                        None => return,
+                    };
+                    
+                    GenerateGrundbuchConfig::EinzelneDatei {
+                        datei: f,
+                        exportiere_bv: *exportiere_bv,
+                        exportiere_abt1: *exportiere_abt_1,
+                        exportiere_abt2: *exportiere_abt_2,
+                        exportiere_abt3: *exportiere_abt_3,
+                        leere_seite_nach_titelblatt: *exportiere_pdf_leere_seite,
+                        mit_geroeteten_eintraegen: *exportiere_geroetete_eintraege,
+                    }
+                },
+                false => {
+                    let file_dialog_result = tinyfiledialogs::select_folder_dialog(
+                        "PDF Dateien speichern unter", 
+                        "~/", 
+                    );
+                    
+                    let f = match file_dialog_result {
+                        Some(f) => f,
+                        None => return,
+                    };
+                    
+                    GenerateGrundbuchConfig::MehrereDateien {
+                        ordner: f,
+                        exportiere_bv: *exportiere_bv,
+                        exportiere_abt1: *exportiere_abt_1,
+                        exportiere_abt2: *exportiere_abt_2,
+                        exportiere_abt3: *exportiere_abt_3,
+                        leere_seite_nach_titelblatt: *exportiere_pdf_leere_seite,
+                        mit_geroeteten_eintraegen: *exportiere_geroetete_eintraege,
+                    }
+                },
             };
             
-            for file in data.loaded_files.values() {
-                let pdf = pdf::generate_grundbuch_pdf(&file.analysiert);
-                let _ = std::fs::write(&format!("{}/{}_{}.pdf", f, file.analysiert.titelblatt.grundbuch_von, file.analysiert.titelblatt.blatt), &pdf);
+            let source = match was_exportieren.as_str() {
+                "offen" => {
+
+                    let (file_id, page) = match data.open_page.clone() {
+                        Some((file, page)) => (file.clone(), page as usize),
+                        None => return,
+                    };
+                    
+                    let mut open_file = match data.loaded_files.get(&file_id) { 
+                        Some(s) => s.clone(),
+                        None => return,
+                    };
+                    
+                    open_file.analysiert.titelblatt = open_file.titelblatt.clone();
+                    PdfExportTyp::OffenesGrundbuch(open_file.analysiert.clone())
+                },
+                "alle-offen-digitalisiert" => {
+                
+                    let files = data.loaded_files.values()
+                    .filter_map(|f| {
+                        if f.datei.is_none() { return None; }
+                        Some(f.clone())
+                    })
+                    .map(|mut f| {
+                        f.analysiert.titelblatt = f.titelblatt.clone();
+                        f.analysiert
+                    })
+                    .collect::<Vec<_>>();
+                    
+                    PdfExportTyp::AlleOffenDigitalisiert(files)
+                },
+                "alle-offen" => {
+                    let files = data.loaded_files.values().map(|f| {
+                        f.clone()
+                    })
+                    .map(|mut f| {
+                        f.analysiert.titelblatt = f.titelblatt.clone();
+                        f.analysiert
+                    }).collect::<Vec<_>>();
+                    
+                    PdfExportTyp::AlleOffen(files)
+                },
+                "alle-original" => {
+                    
+                    let files = data.loaded_files.values()
+                    .filter_map(|f| f.datei.clone())
+                    .collect::<Vec<_>>();
+                    
+                    PdfExportTyp::AlleOriginalPdf(files)
+                },
+                _ => { return; },
+            };
+            
+            let result =  pdf::export_grundbuch(GrundbuchExportConfig {
+                exportiere: source,
+                optionen: target,
+            });
+            
+            if let Err(r) = result {
+                let file_dialog_result = tinyfiledialogs::message_box_ok(
+                    "Fehler beim Exportieren des PDFs", 
+                    &r, 
+                    MessageBoxIcon::Error,
+                ); 
             }
         },
         Cmd::ExportAlleRechte => {
