@@ -3,9 +3,10 @@ use crate::digitalisiere::BvEintrag;
 use printpdf::{
     BuiltinFont, PdfDocument, Mm, IndirectFontRef,
     PdfDocumentReference, PdfLayerReference,
-    Line, Point, Color, Cmyk
+    Line, Point, Color, Cmyk, Pt,
 };
 use std::path::Path;
+use std::collections::BTreeMap;
 
 pub struct GrundbuchExportConfig {
     pub exportiere: PdfExportTyp,
@@ -138,7 +139,11 @@ fn export_grundbuch_single_file(options: PdfGrundbuchOptions, source: &PdfExport
             let titelblatt = format!("{}_{}", gb.titelblatt.grundbuch_von, gb.titelblatt.blatt);
             let fonts = PdfFonts::new(&mut doc);
             
-            write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &gb.titelblatt, &options);
+            write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &gb.titelblatt);
+            if options.leere_seite_nach_titelblatt {
+                // Leere Seite 2
+                let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+            }
             write_grundbuch(&mut doc, &gb, &fonts, &options);
             
             let bytes = doc.save_to_bytes().unwrap_or_default();
@@ -152,7 +157,11 @@ fn export_grundbuch_single_file(options: PdfGrundbuchOptions, source: &PdfExport
             let fonts = PdfFonts::new(&mut doc);
             
             for f in gb {
-                write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &f.titelblatt, &options);
+                write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &f.titelblatt);
+                if options.leere_seite_nach_titelblatt {
+                    // Leere Seite 2
+                    let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+                }
                 write_grundbuch(&mut doc, &f, &fonts, &options);
             }
             
@@ -192,7 +201,11 @@ fn export_grundbuch_multi_files(
             let target_path = Path::new(&ordner).join(&format!("{titelblatt}.pdf"));
             let fonts = PdfFonts::new(&mut doc);
             
-            write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &gb.titelblatt, &options);
+            write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &gb.titelblatt);
+            if options.leere_seite_nach_titelblatt {
+                // Leere Seite 2
+                let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+            }
             write_grundbuch(&mut doc, &gb, &fonts, &options);
             
             let bytes = doc.save_to_bytes().unwrap_or_default();
@@ -212,7 +225,11 @@ fn export_grundbuch_multi_files(
                 let target_path = Path::new(&ordner).join(&format!("{titelblatt}.pdf"));
                 let fonts = PdfFonts::new(&mut doc);
             
-                write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &f.titelblatt, &options);
+                write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &f.titelblatt);          
+                if options.leere_seite_nach_titelblatt {
+                    // Leere Seite 2
+                    let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+                }
                 write_grundbuch(&mut doc, &f, &fonts, &options);
                 
                 let bytes = doc.save_to_bytes().unwrap_or_default();
@@ -230,7 +247,6 @@ fn write_titelblatt(
     current_layer: &mut PdfLayerReference, 
     fonts: &PdfFonts,
     titelblatt: &Titelblatt,
-    options: &PdfGrundbuchOptions,
 ) {
     let grundbuch_von = titelblatt.grundbuch_von.clone();
     let blatt =  titelblatt.blatt;
@@ -257,11 +273,6 @@ fn write_titelblatt(
         
     current_layer.use_text(&blatt_nr, 16.0, Mm(25.0), start - Mm(12.0), &fonts.times);
     current_layer.use_text(&amtsgericht, 16.0, Mm(25.0), start - Mm(18.0), &fonts.times);
-    
-    if options.leere_seite_nach_titelblatt {
-        // Leere Seite 2
-        let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
-    }
 }
 
 fn write_grundbuch(
@@ -270,9 +281,9 @@ fn write_grundbuch(
     fonts: &PdfFonts,
     options: &PdfGrundbuchOptions
 ) {
-    let grundbuch_von = titelblatt.grundbuch_von.clone();
-    let blatt =  titelblatt.blatt;
-    let amtsgericht = titelblatt.amtsgericht.clone();
+    let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+    let blatt =  grundbuch.titelblatt.blatt;
+    let amtsgericht = grundbuch.titelblatt.amtsgericht.clone();
     
     let gb = format!("Grundbuch von {grundbuch_von}");
     let blatt_nr = format!("Blatt {blatt}");
@@ -305,10 +316,12 @@ impl PdfTextRow {
             let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
             text_broken_lines.lines().count() as f32 * EXTENT_PER_LINE
         })
+        .map(|s| (s * 1000.0).round() as usize)
         .max()
+        .unwrap_or(0) as f32 / 1000.0_f32
     }
     
-    pub fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts, xy_start: (f32, f32), max_width_mm: f32) {
+    fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts, y_start: f32) {
         
         if self.geroetet {
             layer.set_fill_color(Color::Cmyk(RED));
@@ -319,19 +332,26 @@ impl PdfTextRow {
         layer.set_font(&fonts.courier_bold, 10.0);
         layer.set_line_height(10.0);
 
+        let max_width_mm = self.header.get_max_width_mm();
+        
+        let x_start_mm = self.header.get_starting_x_spalte_mm(0);
+        
         for (col_id, text) in self.texts.iter().enumerate() {
             let max_col_width_for_column = self.header.get_max_col_width(col_id);
             let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
             
             layer.begin_text_section();
-            layer.set_text_cursor();
+            layer.set_text_cursor(
+                Mm((self.header.get_starting_x_spalte_mm(col_id) + 1.0) as f64),
+                Mm(y_start as f64),
+            );
             
             for line in text_broken_lines.lines() {
-                text_layer.write_text(line.clone(), &fonts.courier_bold);
-                text_layer.add_line_break();
+                layer.write_text(line.clone(), &fonts.courier_bold);
+                layer.add_line_break();
             }
             
-            text_layer.end_text_section();
+            layer.end_text_section();
         }
         
         if self.geroetet {
@@ -340,10 +360,10 @@ impl PdfTextRow {
             
             layer.add_shape(Line {
                 points: vec![
-                    (Point::new(Mm(xy_start.0 as f64), Mm(xy_start.1 as f64) - Mm(1.0)), false),
-                    (Point::new(Mm(xy_start.0 + max_width_mm as f64), Mm(xy_start.1 as f64) - Mm(1.0)), false),
-                    (Point::new(Mm(xy_start.0 as f64), Mm((xy_start.1 + self_height) as f64) + Mm(1.0)), false),
-                    (Point::new(Mm(xy_start.0 + max_width_mm as f64), Mm((xy_start.1 + self_height) as f64) + Mm(1.0)), false),
+                    (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64) - Mm(1.0)), false),
+                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64) - Mm(1.0)), false),
+                    (Point::new(Mm(x_start_mm as f64), Mm((y_start + self_height) as f64) + Mm(1.0)), false),
+                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + self_height) as f64) + Mm(1.0)), false),
                 ],
                 is_closed: false,
                 has_fill: false,
@@ -363,26 +383,25 @@ pub enum PdfHeader {
     Abteilung2,
     Abteilung3,
 }
-´
+
+fn pt_to_mm(pt: Pt) -> Mm { pt.into() }
+
 impl PdfHeader {
+
     pub fn get_max_col_width(&self, col_id: usize) -> usize {
         use self::PdfHeader::*;
-        match (self, col_id) {
-            (Bestandsverzeichnis, 0) => 7, // Spalte "lfd. Nr."
-            (Bestandsverzeichnis, 1) => 7, // Spalte "bisherige lfd. Nr."
-            (Bestandsverzeichnis, 2) => 30, // Spalte "Gemarkung"
-            (Bestandsverzeichnis, 3) => 7, // Spalte "Flur"
-            (Bestandsverzeichnis, 4) => 7, // Spalte "Flurstück"
-            (Bestandsverzeichnis, 5) => 7, // Spalte "Flur"
-            (Bestandsverzeichnis, 6) => 50, // Spalte "Bezeichnung"
-            (Bestandsverzeichnis, 7) => 7, // Spalte "ha"
-            (Bestandsverzeichnis, 8) => 7, // Spalte "a"
-            (Bestandsverzeichnis, 9) => 7, // Spalte "m2"
-            _ => 3,
-        }
+        let spalten_lines = self.get_spalten_lines();
+        ((if col_id == spalten_lines.len() - 1 {
+            self.get_starting_x_spalte_mm(0) + 
+            self.get_max_width_mm() - 
+            self.get_starting_x_spalte_mm(col_id)
+        } else {
+            self.get_starting_x_spalte_mm(col_id + 1) -
+            self.get_starting_x_spalte_mm(col_id)
+        } / EXTENT_PER_LINE).floor() as usize).max(3)
     }
     
-    pub fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts) {
+    fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts) {
         match self {
             PdfHeader::Bestandsverzeichnis => {
             
@@ -395,11 +414,11 @@ impl PdfHeader {
                 );
         
                 let text_1 = &[
-                    ("Laufende", 13.0_f64, 297.0_f64 - 21.0), 
-                    ("Nummer", 13.5, 297.0 - 23.5),
-                    ("der", 15.5, 297.0 - 26.0), 
-                    ("Grund-", 14.0, 297.0 - 28.5), 
-                    ("stücke", 14.0, 297.0 - 31.0),
+                    ("Laufende",    13.0_f64, 297.0_f64 - 21.0), 
+                    ("Nummer",      13.5,     297.0 - 23.5),
+                    ("der",         15.5,     297.0 - 26.0), 
+                    ("Grund-",      14.0,     297.0 - 28.5), 
+                    ("stücke",      14.0,     297.0 - 31.0),
                 ];
                 
                 let text_1_header = Line {
@@ -415,7 +434,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(text_1_header)
+                layer.add_shape(text_1_header);
                 
                 for (t, x, y) in text_1.iter() {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
@@ -436,7 +455,58 @@ impl PdfHeader {
         }
     }
     
-    pub fn add_columns_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts) {
+    pub fn get_starting_x_spalte_mm(&self, spalte_idx: usize) -> f32 {
+        self.get_spalten_lines()
+        .get(spalte_idx)
+        .and_then(|line| Some(line.points.get(0)?.0.x.0 as f32))
+        .unwrap_or(0.0)
+    }
+    
+    pub fn get_max_width_mm(&self) -> f32 {
+        let start_erste_spalte = self.get_starting_x_spalte_mm(0);
+        
+        let letzte_spalte_x = self.get_spalten_lines()
+        .last()
+        .map(|last| {
+            last.points.iter()
+            .map(|(p, _)| { (pt_to_mm(p.x).0 * 1000.0) as usize })
+            .max()
+            .unwrap_or((start_erste_spalte * 1000.0) as usize) as f32 / 1000.0
+        }).unwrap_or(start_erste_spalte);
+        
+        letzte_spalte_x - start_erste_spalte
+    }
+    
+    pub fn get_start_y(&self) -> f32 {
+        self.get_spalten_lines()
+        .iter()
+        .map(|line| {
+            line.points.iter()
+            .map(|(p, _)| { (pt_to_mm(p.y).0 * 1000.0) as usize })
+            .max()
+            .unwrap_or(0)
+        })
+        .max()
+        .unwrap_or(0) as f32 / 1000.0
+    }
+    
+    pub fn get_end_y(&self) -> f32 {
+        self.get_spalten_lines()
+        .iter()
+        .map(|line| {
+            line.points.iter()
+            .map(|(p, _)| { (pt_to_mm(p.y).0 * 1000.0) as usize })
+            .min()
+            .unwrap_or(0)
+        })
+        .min()
+        .unwrap_or(0) as f32 / 1000.0
+    }
+    
+    fn get_spalten_lines(&self) -> Vec<Line> {
+        
+        let mut spalten_lines = Vec::new();
+        
         match self {
             PdfHeader::Bestandsverzeichnis => {
                 
@@ -453,8 +523,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                
-                layer.add_shape(lfd_nr_spalte);
+                spalten_lines.push(lfd_nr_spalte);
                 
                 let bisherige_lfd_nr_spalte = Line {
                     points: vec![
@@ -469,7 +538,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(bisherige_lfd_nr_spalte);
+                spalten_lines.push(bisherige_lfd_nr_spalte);
                 
                 let gemarkung_spalte = Line {
                     points: vec![
@@ -484,7 +553,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(gemarkung_spalte);
+                spalten_lines.push(gemarkung_spalte);
 
                 let flur_spalte = Line {
                     points: vec![
@@ -499,7 +568,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(flur_spalte);
+                spalten_lines.push(flur_spalte);
 
                 let flurstueck_spalte = Line {
                     points: vec![
@@ -514,7 +583,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(flurstueck_spalte);
+                spalten_lines.push(flurstueck_spalte);
 
                 let wirtschaftsart_lage_spalte = Line {
                     points: vec![
@@ -529,7 +598,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(wirtschaftsart_lage_spalte);
+                spalten_lines.push(wirtschaftsart_lage_spalte);
                         
                 let ha_spalte = Line {
                     points: vec![
@@ -544,7 +613,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(ha_spalte);
+                spalten_lines.push(ha_spalte);
 
                 let a_spalte = Line {
                     points: vec![
@@ -559,7 +628,7 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(a_spalte);
+                spalten_lines.push(a_spalte);
                         
                 let m2_spalte = Line {
                     points: vec![
@@ -574,19 +643,29 @@ impl PdfHeader {
                     is_clipping_path: false,
                 };
                 
-                layer.add_shape(m2_spalte);
+                spalten_lines.push(m2_spalte);
             },
             _ => { } // TODO
+        }
+        
+        spalten_lines
+    }
+    
+    pub fn add_columns_to_page(&self, layer: &mut PdfLayerReference) {
+        for l in self.get_spalten_lines() {
+            layer.add_shape(l);
         }
     }
 }
 
 fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<PdfTextRow> {
+    
     let mut rows = Vec::new();
     let mit_geroeteten_eintraegen = options.mit_geroeteten_eintraegen;
+    let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
 
     if options.exportiere_bv {
-        for bv in grundbuch.bestandsverzeichnis.eintraege {
+        for bv in grundbuch.bestandsverzeichnis.eintraege.iter() {
             let ist_geroetet = bv.ist_geroetet();
             if !mit_geroeteten_eintraegen && ist_geroetet { continue; }
             match bv {
@@ -598,7 +677,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                             flst.gemarkung.clone().map(|g| if g == grundbuch_von { String::new() } else { g }).unwrap_or_default(),
                             format!("{}", flst.flur),
                             format!("{}", flst.flurstueck),
-                            flst.bezeichnung.unwrap_or_default()
+                            flst.bezeichnung.clone().unwrap_or_default().text(),
                             flst.groesse.get_ha_string(),
                             flst.groesse.get_a_string(),
                             flst.groesse.get_m2_string(),
@@ -607,7 +686,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                         geroetet: ist_geroetet,
                         teil_geroetet: BTreeMap::new(),
                     });
-                }
+                },
                 BvEintrag::Recht(hvm) => {
                 }
             }
@@ -615,19 +694,19 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
     }
     
     if options.exportiere_abt1 {
-        for bv in grundbuch.abt1.eintraege {
+        for bv in grundbuch.abt1.eintraege.iter() {
         
         }
     }
     
     if options.exportiere_abt2 {
-        for bv in grundbuch.abt2.eintraege {
+        for bv in grundbuch.abt2.eintraege.iter() {
         
         }
     }
     
     if options.exportiere_abt3 {
-        for bv in grundbuch.abt3.eintraege {
+        for bv in grundbuch.abt3.eintraege.iter() {
         
         }
     }
@@ -636,13 +715,45 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
 }
 
 fn render_text_rows(doc: &mut PdfDocumentReference, fonts: &PdfFonts, blocks: &[PdfTextRow]) {
-
+    
+    if blocks.is_empty() { 
+        return; 
+    }    
+    
+    let (mut page, mut layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+    let  current_block = &blocks[0];
+    current_block.header.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts);
+    current_block.header.add_columns_to_page(&mut doc.get_page(page).get_layer(layer));
+    
+    let mut current_y = current_block.header.get_start_y();
+    println!("current header lines: {:#?}", current_block.header.get_spalten_lines());
+    println!("current y: {}", current_y);
+    current_block.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts, current_y);
+    current_y -= current_block.get_height_mm();
+    println!("current y 2: {}", current_y);
+    let mut current_header = current_block.header;
+    
+    for b in blocks.iter().skip(1) {
+        
+        if b.header != current_header || current_y - b.get_height_mm() < current_header.get_end_y() {
+            current_header = b.header;
+            current_y = b.header.get_start_y();
+            let (new_page, new_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+            b.header.add_to_page(&mut doc.get_page(new_page).get_layer(new_layer), fonts);
+            b.header.add_columns_to_page(&mut doc.get_page(new_page).get_layer(new_layer));
+            page = new_page;
+            layer = new_layer;
+        }
+        
+        b.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts, current_y);
+        current_y -= b.get_height_mm();
+        println!("current y loop: {}", current_y);
+    }
 }
 
 // https://www.dariocancelliere.it/blog/2020/09/29/pdf-manipulation-with-rust-and-considerations
 fn merge_pdf_files(documents: Vec<lopdf::Document>) -> Result<Vec<u8>, String> {
     
-    use std::collections::BTreeMap;
     use lopdf::{Document, Object, ObjectId};
     use std::io::BufWriter;
     
@@ -809,26 +920,90 @@ fn clean_bv(s: &str) -> String {
 
 // Format a string so that it fits into N characters per line
 fn wordbreak_text(s: &str, max_cols: usize) -> String {
-    let mut words = s.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>();
+    
+    let mut lines = s.lines()
+    .map(|l| l.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>())
+    .collect::<Vec<_>>();
+    
     let mut output = String::new();
-    let mut line_len = 0;
-    for w in words {
-        
-        let word_len = w.chars().count() + 1;
-        
-        if line_len + word_len > max_cols {
-            output.push_str("\r\n");
-            line_len = 0;
+    
+    for words in lines {
+        let mut line_len = 0;
+
+        for w in words {
+            
+            let word_len = w.chars().count() + 1;
+            let (before, after) = split_hyphenate(&w, max_cols.saturating_sub(line_len).saturating_sub(1));
+            
+            if !before.is_empty() {               
+               if !after.is_empty() {
+                    output.push_str(&before);
+                    output.push_str("-\r\n");
+                    output.push_str(&after);
+                    output.push_str(" ");
+                    line_len = after.chars().count() + 1;
+                } else {
+                    output.push_str(&before);
+                    output.push_str(" ");
+                    line_len += before.chars().count() + 1;
+                }
+            } else if !after.is_empty() {
+                output.push_str(&after);
+                output.push_str(" ");
+                line_len += after.chars().count() + 1;
+            }
         }
         
-        if line_len == 0 {
-            output.push_str(&format!("{w}"));
-            line_len += word_len - 1;
+        output.push_str("\r\n");
+    }
+        
+    output.trim().to_string()
+}
+
+fn split_hyphenate(word: &str, remaining: usize) -> (String, String) {
+    
+    if remaining == 0 {
+        return (String::new(), word.to_string());
+    }
+    
+    let mut before = String::new();
+    let mut after = String::new();
+    let mut counter = 0;
+    
+    for syllable in get_syllables(word) {
+        let syllable_len = syllable.chars().count();
+        if counter + syllable_len > remaining {
+            after.push_str(&syllable);
         } else {
-            output.push_str(&format!(" {w}"));
-            line_len += word_len;
+            before.push_str(&syllable);
+        }
+        counter += syllable_len;
+    }
+    
+    (before, after)
+}
+
+fn get_syllables(s: &str) -> Vec<String> {
+    let vocals = ['a', 'e', 'i', 'o', 'u', 'ö', 'ä', 'ü', 'y'];
+    let vocals2 = ['a', 'e', 'i', 'o', 'u', 'y'];
+
+    let mut results = Vec::new();
+    let chars = s.chars().collect::<Vec<_>>();
+    let mut current_position = chars.len() - 1;
+    let mut last_split = 0;
+    for i in 0..current_position {
+        if i != 0 && 
+            vocals.contains(&chars[i]) && 
+            !vocals2.contains(&chars[i - 1]) && 
+            i - last_split > 1 {
+            let a = &chars[last_split..i];
+            let b = &chars[i..];
+            last_split = i;
+            results.push(a.iter().collect::<String>());
         }
     }
     
-    output
+    results.push((&chars[last_split..]).iter().collect::<String>());
+    
+    results
 }

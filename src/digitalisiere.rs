@@ -2678,6 +2678,41 @@ impl FlurstueckGroesse {
             FlurstueckGroesse::Hektar { ha, a, m2 } => ha.unwrap_or(0) * 100_000 + a.unwrap_or(0) * 100 + m2.unwrap_or(0),
         }
     }
+    
+    pub fn get_ha_string(&self) -> String {
+        let m2_string = format!("{}", self.get_m2());
+        let mut m2_string_chars: Vec<char> = m2_string.chars().collect();
+        for _ in 0..4 {
+            m2_string_chars.pop();
+        }
+        m2_string_chars.iter().collect()
+    }
+    
+    pub fn get_a_string(&self) -> String {
+        let m2_string = format!("{}", self.get_m2());
+        let mut m2_string_chars: Vec<char> = m2_string.chars().collect();
+        m2_string_chars.reverse();
+        for _ in 0..(m2_string_chars.len().saturating_sub(4)) {
+            m2_string_chars.pop();
+        }
+        m2_string_chars.reverse();
+        for _ in 0..2 {
+            m2_string_chars.pop();
+        }
+        m2_string_chars.iter().collect()
+    }
+    
+    pub fn get_m2_string(&self) -> String {
+        let m2_string = format!("{}", self.get_m2());
+        let mut m2_string_chars: Vec<char> = m2_string.chars().collect();
+        m2_string_chars.reverse();
+        for _ in 0..(m2_string_chars.len().saturating_sub(2)) {
+            m2_string_chars.pop();
+        }
+        m2_string_chars.reverse();
+        let fi: String = m2_string_chars.iter().collect();
+        if fi.is_empty() { format!("0") } else { fi }
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
