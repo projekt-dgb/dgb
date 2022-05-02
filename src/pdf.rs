@@ -301,7 +301,8 @@ pub struct PdfTextRow {
     pub teil_geroetet: BTreeMap<usize, String>,
 }
 
-const EXTENT_PER_LINE: f32 = 3.43;
+const EXTENT_PER_LINE: f32 = 3.53;
+const EXTENT_PER_LINE_X: f32 = 2.2;
 const RED: Cmyk = Cmyk { c: 0.0, m: 0.7, y: 0.4, k: 0.0, icc_profile: None };
 const BLACK: Cmyk = Cmyk { c: 0.0, m: 0.0, y: 0.0, k: 1.0, icc_profile: None };
 
@@ -338,7 +339,6 @@ impl PdfTextRow {
         for (col_id, text) in self.texts.iter().enumerate() {
             let max_col_width_for_column = self.header.get_max_col_width(col_id);
             let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
-            
             layer.begin_text_section();
             layer.set_text_cursor(
                 Mm((self.header.get_starting_x_spalte_mm(col_id) + 1.0) as f64),
@@ -357,18 +357,31 @@ impl PdfTextRow {
             
             let self_height = self.get_height_mm();
             
-            layer.add_shape(Line {
-                points: vec![
-                    (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
-                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64)), false),
-                    (Point::new(Mm(x_start_mm as f64), Mm((y_start + self_height) as f64)), false),
-                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + self_height) as f64)), false),
-                ],
-                is_closed: false,
-                has_fill: false,
-                has_stroke: true,
-                is_clipping_path: false,
-            });
+            if self_height == EXTENT_PER_LINE {
+                layer.add_shape(Line {
+                    points: vec![
+                        (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
+                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64)), false),
+                    ],
+                    is_closed: false,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                });
+            } else {
+                layer.add_shape(Line {
+                    points: vec![
+                        (Point::new(Mm(x_start_mm as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                        (Point::new(Mm(x_start_mm as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height) as f64)), false),
+                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height) as f64)), false),
+                    ],
+                    is_closed: false,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                });
+            }
 
             layer.set_fill_color(Color::Cmyk(BLACK));
             layer.set_outline_color(Color::Cmyk(BLACK));
@@ -391,20 +404,23 @@ impl PdfHeader {
     pub fn get_max_col_width(&self, col_id: usize) -> usize {
         use self::PdfHeader::*;
         let spalten_lines = self.get_spalten_lines();
-        ((if col_id == spalten_lines.len() - 1 {
+        let width = ((if col_id == spalten_lines.len() - 1 {
             self.get_starting_x_spalte_mm(0) + 
             self.get_max_width_mm() - 
             self.get_starting_x_spalte_mm(col_id)
         } else {
             self.get_starting_x_spalte_mm(col_id + 1) -
             self.get_starting_x_spalte_mm(col_id)
-        } / EXTENT_PER_LINE).floor() as usize).max(3)
+        } / EXTENT_PER_LINE_X).floor() as usize).max(3);
+        width
     }
     
     fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts) {
+        layer.save_graphics_state();
+
         match self {
             PdfHeader::Bestandsverzeichnis => {
-            
+                            
                 layer.use_text(
                     "Bestandsverzeichnis", 
                     16.0, 
@@ -412,10 +428,29 @@ impl PdfHeader {
                     Mm(297.0 - 16.0), 
                     &fonts.times_bold
                 );
-        
+                
+                layer.set_outline_thickness(1.3);
+
+                let border = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(border);
+                
+                layer.set_outline_thickness(0.75);
+                
                 let text_1 = &[
                     ("Laufende",    13.0_f64, 297.0_f64 - 21.0), 
-                    ("Nummer",      13.5,     297.0 - 23.5),
+                    ("Nummer",      14.0,     297.0 - 23.5),
                     ("der",         15.5,     297.0 - 26.0), 
                     ("Grund-",      14.0,     297.0 - 28.5), 
                     ("stücke",      14.0,     297.0 - 31.0),
@@ -440,7 +475,150 @@ impl PdfHeader {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
                 }
                 
-                // ...
+                let text_1 = &[
+                    ("1",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_2 = &[
+                    ("Bisherige",       28.0_f64, 297.0_f64 - 21.0), 
+                    ("laufende",        28.5,     297.0 - 23.5),
+                    ("Nummer",          28.5,     297.0 - 26.0), 
+                    ("der Grund-",      27.5,     297.0 - 28.5), 
+                    ("stücke",          29.5,     297.0 - 31.0),
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_2 = &[
+                    ("2",    32.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_3 = &[(
+                    "Bezeichnung der Grundstücke und der mit dem Eigentum verbundenen Rechte",       
+                    60.0_f64, 297.0_f64 - 21.0
+                )];
+                
+                let text_3_header = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_3_header);
+                
+                for (t, x, y) in text_3.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_3 = &[
+                    ("3",    95.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_3_header = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_3_header);
+                
+                for (t, x, y) in text_3.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_4 = &[(
+                    "Größe",       
+                    (210.0 - 30.0) as f64, 297.0_f64 - 21.0
+                )];
+                
+                let text_4_header = Line {
+                    points: vec![
+                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_4_header);
+                
+                for (t, x, y) in text_4.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
                 
             },
             PdfHeader::Abteilung1 => {
@@ -453,6 +631,8 @@ impl PdfHeader {
             
             },
         }
+        
+        layer.restore_graphics_state();
     }
     
     pub fn get_starting_x_spalte_mm(&self, spalte_idx: usize) -> f32 {
@@ -652,9 +832,15 @@ impl PdfHeader {
     }
     
     pub fn add_columns_to_page(&self, layer: &mut PdfLayerReference) {
+        
+        layer.save_graphics_state();
+        layer.set_outline_thickness(0.5);
+
         for l in self.get_spalten_lines() {
             layer.add_shape(l);
         }
+        
+        layer.restore_graphics_state();
     }
 }
 
@@ -734,7 +920,7 @@ fn render_text_rows(doc: &mut PdfDocumentReference, fonts: &PdfFonts, blocks: &[
         
         if b.header != current_header || current_y - b.get_height_mm() < current_header.get_end_y() {
             current_header = b.header;
-            current_y = b.header.get_start_y();
+            current_y = b.header.get_start_y() - EXTENT_PER_LINE;
             let (new_page, new_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
             b.header.add_to_page(&mut doc.get_page(new_page).get_layer(new_layer), fonts);
             b.header.add_columns_to_page(&mut doc.get_page(new_page).get_layer(new_layer));
@@ -931,7 +1117,11 @@ fn wordbreak_text(s: &str, max_cols: usize) -> String {
             let word_len = w.chars().count() + 1;
             let (before, after) = split_hyphenate(&w, max_cols.saturating_sub(line_len).saturating_sub(1));
             
-            if !before.is_empty() {               
+            if line_len + word_len > max_cols {
+                println!("{line_len} + {word_len} > {max_cols}: {before}, {after}");
+            }
+            
+            if !before.is_empty() {
                if !after.is_empty() {
                     output.push_str(&before);
                     output.push_str("-\r\n");
@@ -944,9 +1134,10 @@ fn wordbreak_text(s: &str, max_cols: usize) -> String {
                     line_len += before.chars().count() + 1;
                 }
             } else if !after.is_empty() {
+                output.push_str("\r\n");
                 output.push_str(&after);
                 output.push_str(" ");
-                line_len += after.chars().count() + 1;
+                line_len = after.chars().count() + 1;
             }
         }
         
