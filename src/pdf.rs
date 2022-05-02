@@ -325,8 +325,7 @@ impl PdfTextRow {
         
         if self.geroetet {
             layer.set_fill_color(Color::Cmyk(RED));
-        } else {
-            layer.set_fill_color(Color::Cmyk(BLACK));
+            layer.set_outline_color(Color::Cmyk(RED));
         }
         
         layer.set_font(&fonts.courier_bold, 10.0);
@@ -360,10 +359,10 @@ impl PdfTextRow {
             
             layer.add_shape(Line {
                 points: vec![
-                    (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64) - Mm(1.0)), false),
-                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64) - Mm(1.0)), false),
-                    (Point::new(Mm(x_start_mm as f64), Mm((y_start + self_height) as f64) + Mm(1.0)), false),
-                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + self_height) as f64) + Mm(1.0)), false),
+                    (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
+                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64)), false),
+                    (Point::new(Mm(x_start_mm as f64), Mm((y_start + self_height) as f64)), false),
+                    (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + self_height) as f64)), false),
                 ],
                 is_closed: false,
                 has_fill: false,
@@ -372,6 +371,7 @@ impl PdfTextRow {
             });
 
             layer.set_fill_color(Color::Cmyk(BLACK));
+            layer.set_outline_color(Color::Cmyk(BLACK));
         }
     }
 }
@@ -458,7 +458,7 @@ impl PdfHeader {
     pub fn get_starting_x_spalte_mm(&self, spalte_idx: usize) -> f32 {
         self.get_spalten_lines()
         .get(spalte_idx)
-        .and_then(|line| Some(line.points.get(0)?.0.x.0 as f32))
+        .and_then(|line| Some(pt_to_mm(line.points.get(0)?.0.x).0 as f32))
         .unwrap_or(0.0)
     }
     
@@ -725,12 +725,9 @@ fn render_text_rows(doc: &mut PdfDocumentReference, fonts: &PdfFonts, blocks: &[
     current_block.header.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts);
     current_block.header.add_columns_to_page(&mut doc.get_page(page).get_layer(layer));
     
-    let mut current_y = current_block.header.get_start_y();
-    println!("current header lines: {:#?}", current_block.header.get_spalten_lines());
-    println!("current y: {}", current_y);
+    let mut current_y = current_block.header.get_start_y() - EXTENT_PER_LINE;
     current_block.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts, current_y);
     current_y -= current_block.get_height_mm();
-    println!("current y 2: {}", current_y);
     let mut current_header = current_block.header;
     
     for b in blocks.iter().skip(1) {
@@ -747,7 +744,6 @@ fn render_text_rows(doc: &mut PdfDocumentReference, fonts: &PdfFonts, blocks: &[
         
         b.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts, current_y);
         current_y -= b.get_height_mm();
-        println!("current y loop: {}", current_y);
     }
 }
 
