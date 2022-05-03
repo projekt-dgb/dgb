@@ -35,6 +35,9 @@ let rpc = {
   toggle_lefis_analyse: function() { rpc.invoke({ cmd : 'toggle_lefis_analyse' }); },
   check_pdf_for_errors: function() { rpc.invoke({ cmd : 'check_pdf_for_errors' }); },
 
+  open_grundbuch_suchen_dialog: function()  { rpc.invoke({ cmd : 'open_grundbuch_suchen_dialog' }); },
+  open_grundbuch_upload_dialog: function()  { rpc.invoke({ cmd : 'open_grundbuch_upload_dialog' }); },
+
   import_nb:  function() { rpc.invoke({ cmd : 'import_nb' }); },
   export_lefis:  function() { rpc.invoke({ cmd : 'export_lefis' }); },
   delete_nb: function() { rpc.invoke({ cmd : 'delete_nb' }); },
@@ -116,6 +119,8 @@ let tab_functions = {
     create_new_grundbuch: function(event) { rpc.create_new_grundbuch(); },
     undo: function(event) { rpc.undo() },
     redo: function(event) { rpc.redo() },
+    search_grundbuch: function(event) { rpc.open_grundbuch_suchen_dialog() },
+    upload_grundbuch: function(event) { rpc.open_grundbuch_upload_dialog() },
     export_nb: function(event) { rpc.export_nb() },
     import_nb: function(event) { rpc.import_nb() },
     delete_nb: function(event) { rpc.delete_nb() },

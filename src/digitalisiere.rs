@@ -3804,6 +3804,13 @@ impl Abt1Eintrag {
         }
     }
     
+    pub fn get_lfd_nr(&self) -> usize {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.lfd_nr },
+            Abt1Eintrag::V2(v2) => { v2.lfd_nr },
+        }
+    }
+    
     pub fn set_manuell_geroetet(&mut self, m: Option<bool>) {
         match self {
             Abt1Eintrag::V1(v1) => { v1.manuell_geroetet = m; },
@@ -3822,6 +3829,13 @@ impl Abt1Eintrag {
         match self {
             Abt1Eintrag::V1(v1) => { v1.automatisch_geroetet },
             Abt1Eintrag::V2(v2) => { v2.automatisch_geroetet },
+        }
+    }
+    
+    pub fn get_eigentuemer(&self) -> String {
+        match self {
+            Abt1Eintrag::V1(v1) => { v1.eigentuemer.text() },
+            Abt1Eintrag::V2(v2) =>{ v2.eigentuemer.text() },
         }
     }
     

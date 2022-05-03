@@ -156,8 +156,18 @@ fn export_grundbuch_single_file(options: PdfGrundbuchOptions, source: &PdfExport
             let (mut doc, page1, layer1) = PdfDocument::new(&titel, Mm(210.0), Mm(297.0), "Titelblatt");
             let fonts = PdfFonts::new(&mut doc);
             
-            for f in gb {
+            if let Some(f) = gb.get(0) {
                 write_titelblatt(&mut doc.get_page(page1).get_layer(layer1), &fonts, &f.titelblatt);
+                if options.leere_seite_nach_titelblatt {
+                    // Leere Seite 2
+                    let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
+                }
+                write_grundbuch(&mut doc, &f, &fonts, &options);
+            }
+            
+            for f in gb.iter().skip(1) {
+                let (titelblatt_page, titelblatt_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Titelblatt");
+                write_titelblatt(&mut doc.get_page(titelblatt_page).get_layer(titelblatt_layer), &fonts, &f.titelblatt);
                 if options.leere_seite_nach_titelblatt {
                     // Leere Seite 2
                     let (_, _) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
@@ -297,9 +307,24 @@ fn write_grundbuch(
 pub struct PdfTextRow {
     pub texts: Vec<String>,
     pub header: PdfHeader,
-    pub geroetet: bool,
+    pub geroetet: Geroetet,
     pub teil_geroetet: BTreeMap<usize, String>,
     pub force_single_line: Vec<usize>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Geroetet {
+    Ganz(bool),
+    HalbHalb(bool, bool),
+}
+
+impl Geroetet {
+    fn hat_rot(&self) -> bool {
+        match self {
+            Geroetet::Ganz(a) => *a,
+            Geroetet::HalbHalb(a, b) => *a || *b,
+        }
+    }
 }
 
 const EXTENT_PER_LINE: f32 = 3.53;
@@ -329,7 +354,7 @@ impl PdfTextRow {
     
     fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts, y_start: f32) {
         
-        if self.geroetet {
+        if self.geroetet.hat_rot() {
             layer.set_fill_color(Color::Cmyk(RED));
             layer.set_outline_color(Color::Cmyk(RED));
         }
@@ -342,6 +367,7 @@ impl PdfTextRow {
         let x_start_mm = self.header.get_starting_x_spalte_mm(0);
         
         for (col_id, text) in self.texts.iter().enumerate() {
+            
             let max_col_width_for_column = self.header.get_max_col_width(col_id);
             let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
             layer.begin_text_section();
@@ -362,35 +388,95 @@ impl PdfTextRow {
             layer.end_text_section();
         }
         
-        if self.geroetet {
-            
+        if self.geroetet.hat_rot() {
+        
             let self_height = self.get_height_mm();
             
-            if self_height == EXTENT_PER_LINE {
-                layer.add_shape(Line {
-                    points: vec![
-                        (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
-                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64)), false),
-                    ],
-                    is_closed: false,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                });
-            } else {
-                layer.add_shape(Line {
-                    points: vec![
-                        (Point::new(Mm(x_start_mm as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
-                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
-                        (Point::new(Mm(x_start_mm as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
-                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
-                    ],
-                    is_closed: false,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                });
+            match self.geroetet {
+                Geroetet::Ganz(true) | Geroetet::HalbHalb(true, true) => {
+                    if self_height == EXTENT_PER_LINE {
+                        layer.add_shape(Line {
+                            points: vec![
+                                (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
+                                (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64)), false),
+                            ],
+                            is_closed: false,
+                            has_fill: false,
+                            has_stroke: true,
+                            is_clipping_path: false,
+                        });
+                    } else {
+                        layer.add_shape(Line {
+                            points: vec![
+                                (Point::new(Mm(x_start_mm as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                                (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                                (Point::new(Mm(x_start_mm as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                                (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                            ],
+                            is_closed: false,
+                            has_fill: false,
+                            has_stroke: true,
+                            is_clipping_path: false,
+                        });
+                    }
+                },
+                Geroetet::HalbHalb(true, false) => {
+                    if self_height == EXTENT_PER_LINE {
+                        layer.add_shape(Line {
+                            points: vec![
+                                (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
+                                (Point::new(Mm(x_start_mm  as f64 + (max_width_mm as f64 / 2.0)), Mm(y_start as f64)), false),
+                            ],
+                            is_closed: false,
+                            has_fill: false,
+                            has_stroke: true,
+                            is_clipping_path: false,
+                        });
+                    } else {
+                        layer.add_shape(Line {
+                            points: vec![
+                                (Point::new(Mm(x_start_mm as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                                (Point::new(Mm((x_start_mm  as f64 + (max_width_mm as f64 / 2.0)) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                                (Point::new(Mm(x_start_mm as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                                (Point::new(Mm((x_start_mm  as f64 + (max_width_mm as f64 / 2.0)) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                            ],
+                            is_closed: false,
+                            has_fill: false,
+                            has_stroke: true,
+                            is_clipping_path: false,
+                        });
+                    }
+                },
+                Geroetet::HalbHalb(false, true) => {
+                    if self_height == EXTENT_PER_LINE {
+                        layer.add_shape(Line {
+                            points: vec![
+                                (Point::new(Mm(x_start_mm  as f64 + (max_width_mm as f64 / 2.0) as f64), Mm(y_start as f64)), false),
+                                (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(y_start as f64)), false),
+                            ],
+                            is_closed: false,
+                            has_fill: false,
+                            has_stroke: true,
+                            is_clipping_path: false,
+                        });
+                    } else {
+                        layer.add_shape(Line {
+                            points: vec![
+                                (Point::new(Mm(x_start_mm  as f64 + (max_width_mm as f64 / 2.0) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                                (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
+                                (Point::new(Mm(x_start_mm  as f64 + (max_width_mm as f64 / 2.0) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                                (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                            ],
+                            is_closed: false,
+                            has_fill: false,
+                            has_stroke: true,
+                            is_clipping_path: false,
+                        });
+                    }
+                },
+                _ => { },
             }
+            
 
             layer.set_fill_color(Color::Cmyk(BLACK));
             layer.set_outline_color(Color::Cmyk(BLACK));
@@ -401,9 +487,13 @@ impl PdfTextRow {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PdfHeader {
     Bestandsverzeichnis,
+    BestandsverzeichnisZuAb,
     Abteilung1,
+    Abteilung1ZuAb,
     Abteilung2,
+    Abteilung2ZuAb,
     Abteilung3,
+    Abteilung3ZuAb,
 }
 
 fn pt_to_mm(pt: Pt) -> Mm { pt.into() }
@@ -423,6 +513,378 @@ impl PdfHeader {
         } / EXTENT_PER_LINE_X).floor() as usize).max(3);
         width
     }
+
+    pub fn get_starting_x_spalte_mm(&self, spalte_idx: usize) -> f32 {
+        self.get_spalten_lines()
+        .get(spalte_idx)
+        .and_then(|line| Some(pt_to_mm(line.points.get(0)?.0.x).0 as f32))
+        .unwrap_or(0.0)
+    }
+    
+    pub fn get_max_width_mm(&self) -> f32 {
+        let start_erste_spalte = self.get_starting_x_spalte_mm(0);
+        
+        let letzte_spalte_x = self.get_spalten_lines()
+        .last()
+        .map(|last| {
+            last.points.iter()
+            .map(|(p, _)| { (pt_to_mm(p.x).0 * 1000.0) as usize })
+            .max()
+            .unwrap_or((start_erste_spalte * 1000.0) as usize) as f32 / 1000.0
+        }).unwrap_or(start_erste_spalte);
+        
+        letzte_spalte_x - start_erste_spalte
+    }
+    
+    pub fn get_start_y(&self) -> f32 {
+        self.get_spalten_lines()
+        .iter()
+        .map(|line| {
+            line.points.iter()
+            .map(|(p, _)| { (pt_to_mm(p.y).0 * 1000.0) as usize })
+            .max()
+            .unwrap_or(0)
+        })
+        .max()
+        .unwrap_or(0) as f32 / 1000.0
+    }
+    
+    pub fn get_end_y(&self) -> f32 {
+        self.get_spalten_lines()
+        .iter()
+        .map(|line| {
+            line.points.iter()
+            .map(|(p, _)| { (pt_to_mm(p.y).0 * 1000.0) as usize })
+            .min()
+            .unwrap_or(0)
+        })
+        .min()
+        .unwrap_or(0) as f32 / 1000.0
+    }
+    
+    fn get_spalten_lines(&self) -> Vec<Line> {
+        
+        let mut spalten_lines = Vec::new();
+        
+        match self {
+            PdfHeader::Bestandsverzeichnis => {
+                
+                let lfd_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(10.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(lfd_nr_spalte);
+                
+                let bisherige_lfd_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(40.0), Mm(10.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(bisherige_lfd_nr_spalte);
+                
+                let gemarkung_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(10.0)), false),
+                        (Point::new(Mm(75.0), Mm(10.0)), false),
+                        (Point::new(Mm(75.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(gemarkung_spalte);
+
+                let flur_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(75.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(75.0), Mm(10.0)), false),
+                        (Point::new(Mm(85.0), Mm(10.0)), false),
+                        (Point::new(Mm(85.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(flur_spalte);
+
+                let flurstueck_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(85.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(85.0), Mm(10.0)), false),
+                        (Point::new(Mm(100.0), Mm(10.0)), false),
+                        (Point::new(Mm(100.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(flurstueck_spalte);
+
+                let wirtschaftsart_lage_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(100.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(100.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(wirtschaftsart_lage_spalte);
+                        
+                let ha_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 24.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 24.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(ha_spalte);
+
+                let a_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(210.0 - 24.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 24.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(a_spalte);
+                        
+                let m2_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(210.0 - 17.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(m2_spalte);
+            },    
+            PdfHeader::BestandsverzeichnisZuAb | PdfHeader::Abteilung1 |  
+            PdfHeader::Abteilung1ZuAb | PdfHeader::Abteilung2ZuAb | 
+            PdfHeader::Abteilung3ZuAb => {
+                
+                let lfd_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(10.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(lfd_nr_spalte);
+                
+                let zuschreibungen_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(105.0), Mm(10.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(zuschreibungen_spalte);
+                
+                let lfd_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(10.0)), false),
+                        (Point::new(Mm(120.0), Mm(10.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(lfd_nr_spalte);
+                
+                let abschreibungen_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(10.0)), false),
+                        (Point::new(Mm(200.0), Mm(10.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(abschreibungen_spalte);
+            },
+            PdfHeader::Abteilung2 => {
+            
+                let lfd_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(10.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(lfd_nr_spalte);
+                
+                
+                let bv_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(40.0), Mm(10.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(bv_nr_spalte);
+                
+                
+                let text_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(10.0)), false),
+                        (Point::new(Mm(200.0), Mm(10.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(text_spalte);
+            },
+            PdfHeader::Abteilung3 => {
+                
+                let lfd_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(10.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(lfd_nr_spalte);
+                
+                let bv_nr_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(10.0)), false),
+                        (Point::new(Mm(40.0), Mm(10.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(bv_nr_spalte);
+                
+                
+                let betrag_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(10.0)), false),
+                        (Point::new(Mm(90.0), Mm(10.0)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(betrag_spalte);
+
+                
+                let text_spalte = Line {
+                    points: vec![
+                        (Point::new(Mm(90.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(90.0), Mm(10.0)), false),
+                        (Point::new(Mm(200.0), Mm(10.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                spalten_lines.push(text_spalte);
+            },
+        }
+        
+        spalten_lines
+    }
     
     fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts) {
         layer.save_graphics_state();
@@ -430,9 +892,13 @@ impl PdfHeader {
         layer.use_text(
             match self {
                 PdfHeader::Bestandsverzeichnis => "Bestandsverzeichnis",
+                PdfHeader::BestandsverzeichnisZuAb => "Bestandsverzeichnis - Veränderungen",
                 PdfHeader::Abteilung1 => "Abteilung 1",
+                PdfHeader::Abteilung1ZuAb => "Abteilung 1 - Veränderungen",
                 PdfHeader::Abteilung2 => "Abteilung 2",
+                PdfHeader::Abteilung2ZuAb => "Abteilung 2 - Veränderungen",
                 PdfHeader::Abteilung3 => "Abteilung 3",
+                PdfHeader::Abteilung3ZuAb => "Abteilung 3 - Veränderungen",
             }, 
             16.0, 
             Mm(10.0), 
@@ -694,13 +1160,74 @@ impl PdfHeader {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
                 }
             },
+            PdfHeader::BestandsverzeichnisZuAb => {
+                
+                let text_1 = &[
+                    ("Zur lfd.",    13.0_f64, 297.0_f64 - 22.0), 
+                    ("Nr. der",     14.0,     297.0 - 24.5),
+                    ("Grund-",      15.5,     297.0 - 27.0), 
+                    ("stücke",      14.0,     297.0 - 29.5), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("5",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+            },
             PdfHeader::Abteilung1 => {
+            
+            },
+            PdfHeader::Abteilung1ZuAb => {
             
             },
             PdfHeader::Abteilung2 => {
             
             },
+            PdfHeader::Abteilung2ZuAb => {
+            
+            },
             PdfHeader::Abteilung3 => {
+            
+            },
+            PdfHeader::Abteilung3ZuAb => {
             
             },
         }
@@ -708,201 +1235,6 @@ impl PdfHeader {
         layer.restore_graphics_state();
     }
     
-    pub fn get_starting_x_spalte_mm(&self, spalte_idx: usize) -> f32 {
-        self.get_spalten_lines()
-        .get(spalte_idx)
-        .and_then(|line| Some(pt_to_mm(line.points.get(0)?.0.x).0 as f32))
-        .unwrap_or(0.0)
-    }
-    
-    pub fn get_max_width_mm(&self) -> f32 {
-        let start_erste_spalte = self.get_starting_x_spalte_mm(0);
-        
-        let letzte_spalte_x = self.get_spalten_lines()
-        .last()
-        .map(|last| {
-            last.points.iter()
-            .map(|(p, _)| { (pt_to_mm(p.x).0 * 1000.0) as usize })
-            .max()
-            .unwrap_or((start_erste_spalte * 1000.0) as usize) as f32 / 1000.0
-        }).unwrap_or(start_erste_spalte);
-        
-        letzte_spalte_x - start_erste_spalte
-    }
-    
-    pub fn get_start_y(&self) -> f32 {
-        self.get_spalten_lines()
-        .iter()
-        .map(|line| {
-            line.points.iter()
-            .map(|(p, _)| { (pt_to_mm(p.y).0 * 1000.0) as usize })
-            .max()
-            .unwrap_or(0)
-        })
-        .max()
-        .unwrap_or(0) as f32 / 1000.0
-    }
-    
-    pub fn get_end_y(&self) -> f32 {
-        self.get_spalten_lines()
-        .iter()
-        .map(|line| {
-            line.points.iter()
-            .map(|(p, _)| { (pt_to_mm(p.y).0 * 1000.0) as usize })
-            .min()
-            .unwrap_or(0)
-        })
-        .min()
-        .unwrap_or(0) as f32 / 1000.0
-    }
-    
-    fn get_spalten_lines(&self) -> Vec<Line> {
-        
-        let mut spalten_lines = Vec::new();
-        
-        match self {
-            PdfHeader::Bestandsverzeichnis => {
-                
-                let lfd_nr_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(10.0), Mm(10.0)), false),
-                        (Point::new(Mm(25.0), Mm(10.0)), false),
-                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(lfd_nr_spalte);
-                
-                let bisherige_lfd_nr_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(25.0), Mm(10.0)), false),
-                        (Point::new(Mm(40.0), Mm(10.0)), false),
-                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(bisherige_lfd_nr_spalte);
-                
-                let gemarkung_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(40.0), Mm(10.0)), false),
-                        (Point::new(Mm(75.0), Mm(10.0)), false),
-                        (Point::new(Mm(75.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(gemarkung_spalte);
-
-                let flur_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(75.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(75.0), Mm(10.0)), false),
-                        (Point::new(Mm(85.0), Mm(10.0)), false),
-                        (Point::new(Mm(85.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(flur_spalte);
-
-                let flurstueck_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(85.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(85.0), Mm(10.0)), false),
-                        (Point::new(Mm(100.0), Mm(10.0)), false),
-                        (Point::new(Mm(100.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(flurstueck_spalte);
-
-                let wirtschaftsart_lage_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(100.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(100.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 40.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(wirtschaftsart_lage_spalte);
-                        
-                let ha_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 40.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 24.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 24.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(ha_spalte);
-
-                let a_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(210.0 - 24.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 24.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 17.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 17.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(a_spalte);
-                        
-                let m2_spalte = Line {
-                    points: vec![
-                        (Point::new(Mm(210.0 - 17.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 17.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 36.0)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                spalten_lines.push(m2_spalte);
-            },
-            _ => { } // TODO
-        }
-        
-        spalten_lines
-    }
     
     pub fn add_columns_to_page(&self, layer: &mut PdfLayerReference) {
         
@@ -922,11 +1254,10 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
     let mut rows = Vec::new();
     let mit_geroeteten_eintraegen = options.mit_geroeteten_eintraegen;
     let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
-
+    
     if options.exportiere_bv {
+        
         for bv in grundbuch.bestandsverzeichnis.eintraege.iter() {
-            let ist_geroetet = bv.ist_geroetet();
-            if !mit_geroeteten_eintraegen && ist_geroetet { continue; }
             match bv {
                 BvEintrag::Flurstueck(flst) => {
                     let ha_string = flst.groesse.get_ha_string();
@@ -945,7 +1276,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                             flst.groesse.get_m2_string(),
                         ],
                         header: PdfHeader::Bestandsverzeichnis,
-                        geroetet: ist_geroetet,
+                        geroetet: Geroetet::Ganz(bv.ist_geroetet()),
                         teil_geroetet: BTreeMap::new(),
                         force_single_line: vec![6]
                     });
@@ -954,23 +1285,142 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 }
             }
         }
+        
+        let zu_ab_len = grundbuch.bestandsverzeichnis.zuschreibungen.len().max(grundbuch.bestandsverzeichnis.abschreibungen.len());
+        
+        for i in 0..zu_ab_len {
+            
+            rows.push(PdfTextRow {
+                texts: vec![
+                    grundbuch.bestandsverzeichnis.zuschreibungen.get(i).map(|bvz| bvz.bv_nr.text()).unwrap_or_default(),
+                    grundbuch.bestandsverzeichnis.zuschreibungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                    grundbuch.bestandsverzeichnis.abschreibungen.get(i).map(|bvz| bvz.bv_nr.text()).unwrap_or_default(),
+                    grundbuch.bestandsverzeichnis.abschreibungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                ],
+                header: PdfHeader::BestandsverzeichnisZuAb,
+                geroetet: Geroetet::HalbHalb(
+                    grundbuch.bestandsverzeichnis.zuschreibungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                    grundbuch.bestandsverzeichnis.abschreibungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                ),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new(),
+            });
+        }
     }
     
     if options.exportiere_abt1 {
-        for bv in grundbuch.abt1.eintraege.iter() {
+
+        let zu_ab_len = grundbuch.abt1.eintraege.len().max(grundbuch.abt1.grundlagen_eintragungen.len());
         
+        for i in 0..zu_ab_len {
+            rows.push(PdfTextRow {
+                texts: vec![
+                    grundbuch.abt1.eintraege.get(i).map(|bvz| format!("{}", bvz.get_lfd_nr())).unwrap_or_default(),
+                    grundbuch.abt1.eintraege.get(i).map(|bvz| bvz.get_eigentuemer()).unwrap_or_default(),
+                    grundbuch.abt1.grundlagen_eintragungen.get(i).map(|bvz| bvz.bv_nr.text()).unwrap_or_default(),
+                    grundbuch.abt1.grundlagen_eintragungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                ],
+                header: PdfHeader::Abteilung1,
+                geroetet: Geroetet::HalbHalb(
+                    grundbuch.abt1.eintraege.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                    grundbuch.abt1.grundlagen_eintragungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                ),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new(),
+            });
+        }
+        
+        let zu_ab_len = grundbuch.abt1.veraenderungen.len().max(grundbuch.abt1.loeschungen.len());
+        
+        for i in 0..zu_ab_len {
+            rows.push(PdfTextRow {
+                texts: vec![
+                    grundbuch.abt1.veraenderungen.get(i).map(|bvz| bvz.lfd_nr.text()).unwrap_or_default(),
+                    grundbuch.abt1.veraenderungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                    grundbuch.abt1.loeschungen.get(i).map(|bvz| bvz.lfd_nr.text()).unwrap_or_default(),
+                    grundbuch.abt1.loeschungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                ],
+                header: PdfHeader::Abteilung1ZuAb,
+                geroetet: Geroetet::HalbHalb(
+                    grundbuch.abt1.veraenderungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                    grundbuch.abt1.loeschungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                ),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new(),
+            });
         }
     }
     
     if options.exportiere_abt2 {
-        for bv in grundbuch.abt2.eintraege.iter() {
+        for abt2 in grundbuch.abt2.eintraege.iter() {
+            rows.push(PdfTextRow {
+                texts: vec![
+                    format!("{}", abt2.lfd_nr),
+                    abt2.bv_nr.text(),
+                    abt2.text.text(),
+                ],
+                header: PdfHeader::Abteilung2,
+                geroetet: Geroetet::Ganz(abt2.ist_geroetet()),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new()
+            });
+        }
         
+        let zu_ab_len = grundbuch.abt2.veraenderungen.len().max(grundbuch.abt2.loeschungen.len());
+        
+        for i in 0..zu_ab_len {
+            rows.push(PdfTextRow {
+                texts: vec![
+                    grundbuch.abt2.veraenderungen.get(i).map(|bvz| bvz.lfd_nr.text()).unwrap_or_default(),
+                    grundbuch.abt2.veraenderungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                    grundbuch.abt2.loeschungen.get(i).map(|bvz| bvz.lfd_nr.text()).unwrap_or_default(),
+                    grundbuch.abt2.loeschungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                ],
+                header: PdfHeader::Abteilung2ZuAb,
+                geroetet: Geroetet::HalbHalb(
+                    grundbuch.abt2.veraenderungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                    grundbuch.abt2.loeschungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                ),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new(),
+            });
         }
     }
     
     if options.exportiere_abt3 {
-        for bv in grundbuch.abt3.eintraege.iter() {
+        for abt3 in grundbuch.abt3.eintraege.iter() {
+            rows.push(PdfTextRow {
+                texts: vec![
+                    format!("{}", abt3.lfd_nr),
+                    abt3.bv_nr.text(),
+                    abt3.betrag.text(),
+                    abt3.text.text(),
+                ],
+                header: PdfHeader::Abteilung3,
+                geroetet: Geroetet::Ganz(abt3.ist_geroetet()),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new()
+            });
+        }
         
+        let zu_ab_len = grundbuch.abt3.veraenderungen.len().max(grundbuch.abt3.loeschungen.len());
+        
+        for i in 0..zu_ab_len {
+            rows.push(PdfTextRow {
+                texts: vec![
+                    grundbuch.abt3.veraenderungen.get(i).map(|bvz| bvz.lfd_nr.text()).unwrap_or_default(),
+                    grundbuch.abt3.veraenderungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                    grundbuch.abt3.loeschungen.get(i).map(|bvz| bvz.lfd_nr.text()).unwrap_or_default(),
+                    grundbuch.abt3.loeschungen.get(i).map(|bvz| bvz.text.text()).unwrap_or_default(),
+                ],
+                header: PdfHeader::Abteilung3ZuAb,
+                geroetet: Geroetet::HalbHalb(
+                    grundbuch.abt3.veraenderungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                    grundbuch.abt3.loeschungen.get(i).map(|bvz| bvz.ist_geroetet()).unwrap_or_default(),
+                ),
+                teil_geroetet: BTreeMap::new(),
+                force_single_line: Vec::new(),
+            });
         }
     }
     

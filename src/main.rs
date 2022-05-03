@@ -74,6 +74,8 @@ pub enum PopoverState {
     Info,
     ExportPdf,
     CreateNewGrundbuch,
+    GrundbuchSuchenDialog,
+    GrundbuchUploadDialog,
     Configuration(ConfigurationView),
     Help,
 }
@@ -459,6 +461,10 @@ pub enum Cmd {
     ExportAlleAbt1,
     #[serde(rename = "export_alle_teilbelastungen")]
     ExportAlleTeilbelastungen,    
+    #[serde(rename = "open_grundbuch_suchen_dialog")]
+    OpenGrundbuchSuchenDialog,
+    #[serde(rename = "open_grundbuch_upload_dialog")]
+    OpenGrundbuchUploadDialog,  
     #[serde(rename = "grundbuch_exportieren")]
     GrundbuchExportieren {
         was_exportieren: String, 
@@ -776,6 +782,14 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+        },
+        Cmd::OpenGrundbuchSuchenDialog => {
+            data.popover_state = Some(PopoverState::GrundbuchSuchenDialog);
+            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+        },
+        Cmd::OpenGrundbuchUploadDialog => {
+            data.popover_state = Some(PopoverState::GrundbuchUploadDialog);
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::GrundbuchAnlegen { land, grundbuch_von, amtsgericht, blatt } => {

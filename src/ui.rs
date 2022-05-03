@@ -79,6 +79,106 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     
     let pc = match rpc_data.popover_state {
         None => return String::new(),
+        Some(PopoverState::GrundbuchUploadDialog) => {
+            format!("
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+                
+                {close_button}
+
+                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Änderungen in Datenbank hochladen</h2>
+                
+                <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <form onsubmit='grundbuchHochladen(event)' action=''>
+                    <div style='display:flex;padding:10px 0px;font-size:16px;'>
+                        <p>Beschreiben Sie ihre Änderungen:</p>
+                        <input 
+                            type='text' 
+                            id='__application_grundbuch_aenderung_commit_titel' 
+                            required 
+                            placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag Nr. XXX/XXX\"' 
+                            style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <div style='display:flex;padding:10px 0px;font-size:16px;'>
+                        <p>Ausführliche Beschreibung der Änderung</p>
+                        <div contenteditable='true' id='__application_grundbuch_aenderung_commit_description' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></div>
+                    </div>
+                    <br/>
+                    <input type='submit' value='Änderungen übernehmen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
+                    </form>
+                    
+                    <div id='__application_grundbuch_upload_aenderungen' style='display:flex;flex-direction:column;max-height:200px;overflow-y:scroll;'>
+                        <div id='__application_aenderung_dateien'>
+                            <p>Ludwigsburg_10.gbx</p>
+                            <p>Ludwigsburg_356.gbx</p>
+                            <p>Ludwigsburg_97.gbx</p>
+                        </div>
+                        <div id='__application_aenderungen'>
+                            <div>
+                                <span><p>+</p><p>Neue Zeile</p></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ")
+        },
+        Some(PopoverState::GrundbuchSuchenDialog) => {
+            format!("
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+                
+                {close_button}
+
+                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Grundbuchblatt suchen</h2>
+                
+                <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <form onsubmit='grundbuchSuchen(event)' action=''>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;flex-direct'>
+                        <input 
+                            type='text' 
+                            id='__application_grundbuch_suchen_suchbegriff' 
+                            required 
+                            placeholder='Suchbegriff (z.B. \"Ludwigsburg Blatt 420\"' 
+                            style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <br/>
+                    <input type='submit' value='Suchen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
+                    </form>
+                    
+                    <div id='__application_grundbuch_suchen_suchergebnisse' style='display:flex;flex-direction:column;max-height:200px;overflow-y:scroll;'>
+                        <div class='__application_suchergebnis'>
+                            <div class='__application_suchergebnis_description'>
+                            <h5>Ludwigsburg_569.gbx</h5>
+                            <div><p>... des Eigentümers</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></div>
+                            </div>
+                            <div>
+                                <button>Herunterladen</button>
+                            </div>
+                        </div>
+                        
+                        <div class='__application_suchergebnis'>
+                            <div class='__application_suchergebnis_description'>
+                            <h5>Ludwigsburg_569.gbx</h5>
+                            <div><p>... des Eigentümers</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></div>
+                            </div>
+                            <div>
+                                <button>Herunterladen</button>
+                            </div>
+                        </div>
+                        
+                        <div class='__application_suchergebnis'>
+                            <div class='__application_suchergebnis_description'>
+                            <h5>Ludwigsburg_569.gbx</h5>
+                            <div><p>... des Eigentümers</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></div>
+                            </div>
+                            <div>
+                                <button>Herunterladen</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ")
+        },
         Some(PopoverState::CreateNewGrundbuch) => {
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
@@ -892,7 +992,9 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_ABT1_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-person-96.png");
     static ICON_TEILBELASTUNGEN_AUSGEBEN: &[u8] = include_bytes!("./img/icons8-pass-fail-96.png");
     static ICON_NEU: &[u8] = include_bytes!("./img/icons8-add-file-96.png");
-    
+    static ICON_SEARCH: &[u8] = include_bytes!("./img/icons8-search-in-cloud-96.png");
+    static ICON_UPLOAD: &[u8] = include_bytes!("./img/icons8-upload-to-cloud-96.png");
+
     let ribbon_body = format!("
         <div class='__application-ribbon-body'>
             <div class='__application-ribbon-section 1'>
@@ -908,6 +1010,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                             </div>
                         </label>
                     </div>
+                    
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.create_new_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
@@ -916,6 +1019,18 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                             <div>
                                 <p>Neues</p>
                                 <p>Grundbuch</p>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.search_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon' src='data:image/png;base64,{icon_search_base64}'>
+                            </div>
+                            <div>
+                                <p>Grundbuch</p>
+                                <p>suchen</p>
                             </div>
                         </label>
                     </div>
@@ -1074,8 +1189,23 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                 </div>
             </div>
             
-            
             <div class='__application-ribbon-section 6'>
+                <div style='display:flex;flex-direction:row;'>
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.upload_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_upload_lefis}'>
+                            </div>
+                            <div>
+                                <p>Änderungen</p>
+                                <p>übernehmen</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class='__application-ribbon-section 7'>
                 <div style='display:flex;flex-direction:row;'>
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.open_configuration(event);' class='__application-ribbon-action-vertical-large'>
@@ -1136,6 +1266,8 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         icon_fehler_speichern = base64::encode(ICON_FEHLER_AUSGEBEN),
         icon_export_teilbelastungen = base64::encode(ICON_TEILBELASTUNGEN_AUSGEBEN),
         icon_export_abt1 = base64::encode(ICON_ABT1_AUSGEBEN),
+        icon_search_base64 = base64::encode(ICON_SEARCH),
+        icon_upload_lefis = base64::encode(ICON_UPLOAD),
         
         icon_export_csv = base64::encode(ICON_EXPORT_CSV),
         icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS),
@@ -1934,8 +2066,8 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
             bv_nr_textfield = bva.bv_nr.clone().get_html_editable_textfield(
                 90, // px width
                 bva.ist_geroetet(),
-                format!("bv-abschreibung_{zeile_nr}_text"),
-                format!("bv-abschreibung:{zeile_nr}:text"),
+                format!("bv-abschreibung_{zeile_nr}_bv-nr"),
+                format!("bv-abschreibung:{zeile_nr}:bv-nr"),
                 TextInputType::Text
             ),
             bv_abschreibung_text_textfield = bva.text.clone().get_html_editable_textfield(
