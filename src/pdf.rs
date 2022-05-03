@@ -299,6 +299,7 @@ pub struct PdfTextRow {
     pub header: PdfHeader,
     pub geroetet: bool,
     pub teil_geroetet: BTreeMap<usize, String>,
+    pub force_single_line: Vec<usize>,
 }
 
 const EXTENT_PER_LINE: f32 = 3.53;
@@ -314,8 +315,12 @@ impl PdfTextRow {
         .enumerate()
         .map(|(col_id, text)| {
             let max_col_width_for_column = self.header.get_max_col_width(col_id);
-            let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
-            text_broken_lines.lines().count() as f32 * EXTENT_PER_LINE
+            if self.force_single_line.contains(&col_id) {
+                EXTENT_PER_LINE
+            } else {
+                let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
+                text_broken_lines.lines().count() as f32 * EXTENT_PER_LINE
+            }
         })
         .map(|s| (s * 1000.0).round() as usize)
         .max()
@@ -345,9 +350,13 @@ impl PdfTextRow {
                 Mm(y_start as f64),
             );
             
-            for line in text_broken_lines.lines() {
-                layer.write_text(line.clone(), &fonts.courier_bold);
-                layer.add_line_break();
+            if self.force_single_line.contains(&col_id) {
+                layer.write_text(text.clone(), &fonts.courier_bold);
+            } else {
+                for line in text_broken_lines.lines() {
+                    layer.write_text(line.clone(), &fonts.courier_bold);
+                    layer.add_line_break();
+                }
             }
             
             layer.end_text_section();
@@ -373,8 +382,8 @@ impl PdfTextRow {
                     points: vec![
                         (Point::new(Mm(x_start_mm as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
                         (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm((y_start + EXTENT_PER_LINE) as f64)), false),
-                        (Point::new(Mm(x_start_mm as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height) as f64)), false),
-                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height) as f64)), false),
+                        (Point::new(Mm(x_start_mm as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
+                        (Point::new(Mm((x_start_mm + max_width_mm) as f64), Mm(((y_start + EXTENT_PER_LINE) - self_height - 1.0) as f64)), false),
                     ],
                     is_closed: false,
                     has_fill: false,
@@ -417,36 +426,41 @@ impl PdfHeader {
     
     fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts) {
         layer.save_graphics_state();
+       
+        layer.use_text(
+            match self {
+                PdfHeader::Bestandsverzeichnis => "Bestandsverzeichnis",
+                PdfHeader::Abteilung1 => "Abteilung 1",
+                PdfHeader::Abteilung2 => "Abteilung 2",
+                PdfHeader::Abteilung3 => "Abteilung 3",
+            }, 
+            16.0, 
+            Mm(10.0), 
+            Mm(297.0 - 16.0), 
+            &fonts.times_bold
+        );
+        
+        layer.set_outline_thickness(1.3);
+
+        let border = Line {
+            points: vec![
+                (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                (Point::new(Mm(10.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
+                (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 18.5)), false)
+            ],
+            is_closed: true,
+            has_fill: false,
+            has_stroke: true,
+            is_clipping_path: false,
+        };
+        
+        layer.add_shape(border);
+        
+        layer.set_outline_thickness(0.75);
 
         match self {
             PdfHeader::Bestandsverzeichnis => {
-                            
-                layer.use_text(
-                    "Bestandsverzeichnis", 
-                    16.0, 
-                    Mm(10.0), 
-                    Mm(297.0 - 16.0), 
-                    &fonts.times_bold
-                );
-                
-                layer.set_outline_thickness(1.3);
-
-                let border = Line {
-                    points: vec![
-                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
-                        (Point::new(Mm(10.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 18.5)), false)
-                    ],
-                    is_closed: true,
-                    has_fill: false,
-                    has_stroke: true,
-                    is_clipping_path: false,
-                };
-                
-                layer.add_shape(border);
-                
-                layer.set_outline_thickness(0.75);
                 
                 let text_1 = &[
                     ("Laufende",    13.0_f64, 297.0_f64 - 21.0), 
@@ -557,8 +571,8 @@ impl PdfHeader {
                     points: vec![
                         (Point::new(Mm(40.0), Mm(297.0 - 18.5)), false),
                         (Point::new(Mm(40.0), Mm(297.0 - 22.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 22.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 18.5)), false)
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 18.5)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -572,7 +586,6 @@ impl PdfHeader {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
                 }
                 
-                
                 let text_3 = &[
                     ("3",    95.0_f64, 297.0_f64 - 34.5)
                 ];
@@ -581,8 +594,8 @@ impl PdfHeader {
                     points: vec![
                         (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
                         (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 32.0)), false)
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 32.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -598,13 +611,13 @@ impl PdfHeader {
                 
                 let text_4 = &[(
                     "Größe",       
-                    (210.0 - 30.0) as f64, 297.0_f64 - 21.0
+                    (210.0 - 28.0) as f64, 297.0_f64 - 21.0
                 )];
                 
                 let text_4_header = Line {
                     points: vec![
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 18.5)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 22.0)), false),
                         (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 22.0)), false),
                         (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 18.5)), false)
                     ],
@@ -620,6 +633,66 @@ impl PdfHeader {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
                 }
                 
+                
+                let text_4 = &[
+                    ("4",    (210.0 - 25.5) as f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_4_header = Line {
+                    points: vec![
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_4_header);
+                
+                for (t, x, y) in text_4.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_4_header = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 22.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_4_header);
+                
+                let text_4 = &[
+                    ("Gemarkung*",              50.0_f64, 297.0_f64 - 31.0),
+                    ("Flur",                    77.5_f64, 297.0_f64 - 31.0),
+                    ("Flurstück",               87.5_f64, 297.0_f64 - 31.0),
+                    ("Wirtschaftsart und Lage", 120.5_f64, 297.0_f64 - 31.0),
+                    ("* Wenn die Angabe der Gemarkung fehlt, stimmt ihre Bezeichnung mit der des Grundbuchbezirks überein.", 10.0_f64, 7_f64),
+                ];
+                
+                for (t, x, y) in text_4.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_4 = &[
+                    ("ha", (210.0 - 32.5) as f64, 297.0_f64 - 31.0),
+                    ("a",  (210.0 - 21.0) as f64, 297.0_f64 - 31.0),
+                    ("m²", (210.0 - 15.0) as f64, 297.0_f64 - 31.0),
+                ];
+                
+                for (t, x, y) in text_4.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
             },
             PdfHeader::Abteilung1 => {
             
@@ -724,8 +797,8 @@ impl PdfHeader {
                     points: vec![
                         (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
                         (Point::new(Mm(40.0), Mm(10.0)), false),
-                        (Point::new(Mm(80.0), Mm(10.0)), false),
-                        (Point::new(Mm(80.0), Mm(297.0 - 36.0)), false)
+                        (Point::new(Mm(75.0), Mm(10.0)), false),
+                        (Point::new(Mm(75.0), Mm(297.0 - 36.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -737,10 +810,10 @@ impl PdfHeader {
 
                 let flur_spalte = Line {
                     points: vec![
-                        (Point::new(Mm(80.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(80.0), Mm(10.0)), false),
-                        (Point::new(Mm(95.0), Mm(10.0)), false),
-                        (Point::new(Mm(95.0), Mm(297.0 - 36.0)), false)
+                        (Point::new(Mm(75.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(75.0), Mm(10.0)), false),
+                        (Point::new(Mm(85.0), Mm(10.0)), false),
+                        (Point::new(Mm(85.0), Mm(297.0 - 36.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -752,10 +825,10 @@ impl PdfHeader {
 
                 let flurstueck_spalte = Line {
                     points: vec![
-                        (Point::new(Mm(95.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(95.0), Mm(10.0)), false),
-                        (Point::new(Mm(115.0), Mm(10.0)), false),
-                        (Point::new(Mm(115.0), Mm(297.0 - 36.0)), false)
+                        (Point::new(Mm(85.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(85.0), Mm(10.0)), false),
+                        (Point::new(Mm(100.0), Mm(10.0)), false),
+                        (Point::new(Mm(100.0), Mm(297.0 - 36.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -767,10 +840,10 @@ impl PdfHeader {
 
                 let wirtschaftsart_lage_spalte = Line {
                     points: vec![
-                        (Point::new(Mm(115.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(115.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 36.0)), false)
+                        (Point::new(Mm(100.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(100.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -782,10 +855,10 @@ impl PdfHeader {
                         
                 let ha_spalte = Line {
                     points: vec![
-                        (Point::new(Mm(210.0 - 45.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 45.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 30.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 30.0), Mm(297.0 - 36.0)), false)
+                        (Point::new(Mm(210.0 - 40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 40.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 24.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 24.0), Mm(297.0 - 36.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -797,10 +870,10 @@ impl PdfHeader {
 
                 let a_spalte = Line {
                     points: vec![
-                        (Point::new(Mm(210.0 - 30.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 30.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 20.0), Mm(10.0)), false),
-                        (Point::new(Mm(210.0 - 20.0), Mm(297.0 - 36.0)), false)
+                        (Point::new(Mm(210.0 - 24.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 24.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(297.0 - 36.0)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -812,8 +885,8 @@ impl PdfHeader {
                         
                 let m2_spalte = Line {
                     points: vec![
-                        (Point::new(Mm(210.0 - 20.0), Mm(297.0 - 36.0)), false),
-                        (Point::new(Mm(210.0 - 20.0), Mm(10.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(210.0 - 17.0), Mm(10.0)), false),
                         (Point::new(Mm(210.0 - 10.0), Mm(10.0)), false),
                         (Point::new(Mm(210.0 - 10.0), Mm(297.0 - 36.0)), false)
                     ],
@@ -856,6 +929,9 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
             if !mit_geroeteten_eintraegen && ist_geroetet { continue; }
             match bv {
                 BvEintrag::Flurstueck(flst) => {
+                    let ha_string = flst.groesse.get_ha_string();
+                    let pad_ha_string = " ".repeat(6_usize.saturating_sub(ha_string.trim().len()));
+                    
                     rows.push(PdfTextRow {
                         texts: vec![
                             format!("{}", flst.lfd_nr),
@@ -864,13 +940,14 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                             format!("{}", flst.flur),
                             format!("{}", flst.flurstueck),
                             flst.bezeichnung.clone().unwrap_or_default().text(),
-                            flst.groesse.get_ha_string(),
+                            format!("{pad_ha_string}{ha_string}"),
                             flst.groesse.get_a_string(),
                             flst.groesse.get_m2_string(),
                         ],
                         header: PdfHeader::Bestandsverzeichnis,
                         geroetet: ist_geroetet,
                         teil_geroetet: BTreeMap::new(),
+                        force_single_line: vec![6]
                     });
                 },
                 BvEintrag::Recht(hvm) => {
@@ -911,16 +988,16 @@ fn render_text_rows(doc: &mut PdfDocumentReference, fonts: &PdfFonts, blocks: &[
     current_block.header.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts);
     current_block.header.add_columns_to_page(&mut doc.get_page(page).get_layer(layer));
     
-    let mut current_y = current_block.header.get_start_y() - EXTENT_PER_LINE;
+    let mut current_y = current_block.header.get_start_y() - EXTENT_PER_LINE - 0.5;
     current_block.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts, current_y);
-    current_y -= current_block.get_height_mm();
+    current_y -= current_block.get_height_mm() + 2.0;
     let mut current_header = current_block.header;
     
     for b in blocks.iter().skip(1) {
         
-        if b.header != current_header || current_y - b.get_height_mm() < current_header.get_end_y() {
+        if b.header != current_header || current_y - b.get_height_mm() - 2.0 < current_header.get_end_y() {
             current_header = b.header;
-            current_y = b.header.get_start_y() - EXTENT_PER_LINE;
+            current_y = b.header.get_start_y() - EXTENT_PER_LINE - 0.5;
             let (new_page, new_layer) = doc.add_page(Mm(210.0), Mm(297.0), "Formular");
             b.header.add_to_page(&mut doc.get_page(new_page).get_layer(new_layer), fonts);
             b.header.add_columns_to_page(&mut doc.get_page(new_page).get_layer(new_layer));
@@ -929,7 +1006,7 @@ fn render_text_rows(doc: &mut PdfDocumentReference, fonts: &PdfFonts, blocks: &[
         }
         
         b.add_to_page(&mut doc.get_page(page).get_layer(layer), fonts, current_y);
-        current_y -= b.get_height_mm();
+        current_y -= b.get_height_mm() + 2.0;
     }
 }
 
@@ -1094,12 +1171,6 @@ fn merge_pdf_files(documents: Vec<lopdf::Document>) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn clean_bv(s: &str) -> String {
-    let s = s.split(",").collect::<Vec<_>>().join(" ");
-    let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    s
-}
-
 // Format a string so that it fits into N characters per line
 fn wordbreak_text(s: &str, max_cols: usize) -> String {
     
@@ -1116,10 +1187,6 @@ fn wordbreak_text(s: &str, max_cols: usize) -> String {
             
             let word_len = w.chars().count() + 1;
             let (before, after) = split_hyphenate(&w, max_cols.saturating_sub(line_len).saturating_sub(1));
-            
-            if line_len + word_len > max_cols {
-                println!("{line_len} + {word_len} > {max_cols}: {before}, {after}");
-            }
             
             if !before.is_empty() {
                if !after.is_empty() {
