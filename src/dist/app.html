@@ -1939,7 +1939,120 @@ img {
     color: white;
 }
 
+#__application_grundbuch_suchen_suchergebnisse {
+    
+}
 
+.__application_suchergebnis {
+    display: flex;
+    flex-direction:row;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid rgb(219, 219, 219);
+    margin-bottom: 5px;
+}
+
+.__application_suchergebnis button {
+    flex-grow: 1;
+    align-content: center;
+    text-align: center;
+    align-items: center;
+    display: flex;
+    margin: 15px;
+}
+
+.__application_suchergebnis_description {
+    display: flex;
+    flex-grow:1;
+    flex-direction:column;
+}
+
+.__application_suchergebnis_description > h5 {
+    margin-bottom: 5px;
+}
+
+.__application_suchergebnis_description > span > * {
+    display: inline;
+}
+
+#__application_grundbuch_upload_aenderungen {
+    
+}
+
+#__application_aenderung_dateien {
+    padding: 10px 0px;
+    margin-right:10px;
+    overflow-y: scroll;
+    max-height: 400px;
+    min-height: 300px;
+}
+
+#__application_aenderung_dateien p {
+    font-size: 14px;
+    padding: 10px;
+    border-radius: 3px;
+    font-family: monospace;
+    border: 2px solid rgb(249, 249, 249);
+    margin-bottom: 5px;
+    margin-right: 10px;
+    margin-left: 10px;
+    cursor:pointer;
+    box-shadow: 1px 1px 5px #ccc;
+    background: rgb(251, 251, 251);
+}
+
+#__application_aenderung_dateien p:hover {
+    position:relative;
+    top:-1px;
+    background: rgb(249, 249, 249);
+}
+
+#__application_aenderung_dateien p:active {
+    background: rgb(230, 230, 230);
+}
+
+#__application_aenderung_dateien p.selected {
+    border: 2px solid rgb(87, 149, 223);
+}
+
+#__application_aenderungen {
+    display: flex;
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+#__application_aenderungen span {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+    user-select: none;
+    -webkit-user-select:none;
+    font-family: monospace;
+    font-size: 14px;
+    background: white;
+}
+
+#__application_aenderungen span p {
+    font-size: 12px;
+}
+
+#__application_aenderungen span.add {
+    background: white;
+}
+
+#__application_aenderungen span.remove {
+    background: white; 
+}
+
+#__application_aenderungen span p:first-child {
+    width: 20px;
+    padding-left: 4px;
+}
+
+#__application_aenderungen {
+    
+    
+}
 .btn-grad {
     background-image: linear-gradient(to right, #24C6DC 0%, #514A9D  51%, #24C6DC  100%)
 }
@@ -2088,7 +2201,7 @@ let tab_functions = {
     create_new_grundbuch: function(event) { rpc.create_new_grundbuch(); },
     undo: function(event) { rpc.undo() },
     redo: function(event) { rpc.redo() },
-    search_grundbuhc: function(event) { rpc.open_grundbuch_suchen_dialog() },
+    search_grundbuch: function(event) { rpc.open_grundbuch_suchen_dialog() },
     upload_grundbuch: function(event) { rpc.open_grundbuch_upload_dialog() },
     export_nb: function(event) { rpc.export_nb() },
     import_nb: function(event) { rpc.import_nb() },

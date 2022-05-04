@@ -51,6 +51,28 @@ pub struct RpcData {
 }
 
 impl RpcData {
+    pub fn get_passwort(&self) -> Option<String> {
+        let pw_file_path = std::env::temp_dir().join("dgb").join("passwort.txt");
+        match std::fs::read_to_string(pw_file_path) {
+            Ok(o) => return Some(o.trim().to_string()),
+            Err(_) => {
+            
+                let email = &self.konfiguration.server_email;
+                let pw = tinyfiledialogs::password_box(
+                    &format!("Passwort für '{email}' eingeben"), 
+                    &format!("Bitte geben Sie das Passwort für '{email}' ein:")
+                )?;
+                
+                if self.konfiguration.passwort_speichern {
+                    let _ = std::fs::create_dir_all(std::env::temp_dir().join("dgb"));
+                    let _ = std::fs::write(std::env::temp_dir().join("dgb").join("passwort.txt"), pw.clone().as_bytes());
+                }
+                
+                Some(pw)
+            }
+        }
+    }
+    
     pub fn is_context_menu_open(&self) -> bool {
         match self.popover_state {
             Some(PopoverState::ContextMenu(_)) => true,
@@ -126,6 +148,31 @@ impl RpcData {
         back_forward.current_index = back_forward.last_states.len().wrapping_sub(1);
     }
     
+    pub fn create_diff_save_point(&self, file_name: &FileName, file: PdfFile) {
+        let json = match serde_json::to_string_pretty(&file) { Ok(o) => o, Err(_) => return, };
+        let _ = std::fs::create_dir_all(&format!("{}/backup/", Konfiguration::backup_dir()));
+        let target_path = format!("{}/backup/{}.gbx", Konfiguration::backup_dir(), file_name);
+        if !Path::new(&target_path).exists() {
+            let _ = std::fs::write(&target_path, json.as_bytes());
+        }
+    }
+    
+    pub fn get_changed_files(&self) -> Vec<(String, PdfFile)>  {
+        self.loaded_files.iter()
+        .filter(|(file_name, lf)| {
+            let json = match serde_json::to_string_pretty(&lf) { Ok(o) => o, Err(_) => return true, };
+            let _ = std::fs::create_dir_all(&format!("{}/backup/", Konfiguration::backup_dir()));
+            let target_path = format!("{}/backup/{}.gbx", Konfiguration::backup_dir(), file_name);
+            if let Ok(exist) = std::fs::read_to_string(&target_path) {
+                if exist == json { false } else { true }
+            } else {
+                true
+            }
+        })
+        .map(|(file_name, lf)| (file_name.clone(), lf.clone()))
+        .collect()
+    }
+    
     pub fn undo(&mut self, file_name: &FileName) {
     
     }
@@ -157,6 +204,13 @@ impl Default for RpcData {
                 lefis_analyse_einblenden: false,
                 spalten_ausblenden: false,
                 vorschau_ohne_geroetet: false,
+                
+                server_url: format!("https://127.0.0.1"),
+                server_benutzer: format!("Max Mustermann"),
+                server_email: format!("max@mustermann.de"),
+                server_privater_schluessel_base64: None,
+                passwort_speichern: true,
+                
                 regex: BTreeMap::new(),
                 flurstuecke_auslesen_script: Vec::new(),
                 abkuerzungen_script: Vec::new(),
@@ -361,6 +415,16 @@ pub struct Konfiguration {
     #[serde(default)]
     pub vorschau_ohne_geroetet: bool,
     #[serde(default)]
+    pub server_url: String,
+    #[serde(default)]
+    pub server_benutzer: String,
+    #[serde(default)]
+    pub server_email: String,
+    #[serde(default)]
+    pub server_privater_schluessel_base64: Option<String>,
+    #[serde(default = "default_passwort_speichern")]
+    pub passwort_speichern: bool,                
+    #[serde(default)]
     pub regex: BTreeMap<String, String>,
     #[serde(default)]
     pub abkuerzungen_script: Vec<String>,
@@ -384,19 +448,32 @@ pub struct Konfiguration {
     pub klassifiziere_schuldenart: Vec<String>,
 }
 
+fn default_passwort_speichern() -> bool { 
+    true 
+}
+
 impl Konfiguration {
 
     const DEFAULT: &'static str = include_str!("../Konfiguration.json");
     const FILE_NAME: &'static str = "Konfiguration.json";
     
-    pub fn konfiguration_pfad() -> String {
+    pub fn backup_dir() -> String {
         dirs::config_dir()
-        .and_then(|p| Some(p.join(Self::FILE_NAME).to_str()?.to_string()))
+        .and_then(|p| Some(p.join("dgb").to_str()?.to_string()))
         .or(
             std::env::current_exe().ok()
-            .and_then(|p| Some(p.parent()?.to_path_buf().join(Self::FILE_NAME).to_str()?.to_string()))
+            .and_then(|p| Some(p.parent()?.to_path_buf().join("dgb").to_str()?.to_string()))
+        ).unwrap_or(format!("./dgb/"))
+    }
+    
+    pub fn konfiguration_pfad() -> String {
+        dirs::config_dir()
+        .and_then(|p| Some(p.join("dgb").join(Self::FILE_NAME).to_str()?.to_string()))
+        .or(
+            std::env::current_exe().ok()
+            .and_then(|p| Some(p.parent()?.to_path_buf().join("dgb").join(Self::FILE_NAME).to_str()?.to_string()))
         )
-        .unwrap_or(format!("./{}", Self::FILE_NAME))
+        .unwrap_or(format!("./dgb/{}", Self::FILE_NAME))
     }
     
     pub fn speichern(&self) {
@@ -496,7 +573,18 @@ pub enum Cmd {
     ToggleLefisAnalyse,
     #[serde(rename = "check_pdf_for_errors")]
     CheckPdfForErrors,
-    
+    #[serde(rename = "search")]
+    Search { search_text: String },
+    #[serde(rename = "download_gbx")]
+    DownloadGbx { 
+        download_id: String, 
+        target_folder_path: String,
+    },
+    #[serde(rename = "upload_gbx")]
+    UploadGbx {
+        commit_title: String,
+        commit_msg: String,
+    },
     #[serde(rename = "edit_abkuerzungen_script")]
     EditAbkuerzungenScript { script: String },
     #[serde(rename = "edit_text_saubern_script")]
@@ -670,11 +758,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     }
                 };
                 
-                if let Some(mut pdf_parsed) = String::from_utf8(datei_bytes.clone()).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
+                if let Some(mut grundbuch_json_parsed) = String::from_utf8(datei_bytes.clone()).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
                     
-                    let file_name = format!("{}_{}", pdf_parsed.titelblatt.grundbuch_von, pdf_parsed.titelblatt.blatt);
+                    let file_name = format!("{}_{}", grundbuch_json_parsed.titelblatt.grundbuch_von, grundbuch_json_parsed.titelblatt.blatt);
 
-                    for nb_datei in pdf_parsed.nebenbeteiligte_dateipfade.iter() {
+                    for nb_datei in grundbuch_json_parsed.nebenbeteiligte_dateipfade.iter() {
                         if let Some(mut nb) = std::fs::read_to_string(&nb_datei).ok().map(|fs| parse_nb(&fs)) {
                             data.loaded_nb.append(&mut nb);
                             data.loaded_nb.sort_by(|a, b| a.name.cmp(&b.name));
@@ -685,8 +773,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         }
                     }
                                     
-                    data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
-                    pdf_zu_laden.push(pdf_parsed);  
+                    data.loaded_files.insert(file_name.clone(), grundbuch_json_parsed.clone());
+                    data.create_diff_save_point(&file_name.clone(), grundbuch_json_parsed.clone());
+                    pdf_zu_laden.push(grundbuch_json_parsed);  
                     if data.open_page.is_none() {
                         data.open_page = Some((file_name.clone(), 2));
                     }
@@ -742,8 +831,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         pdf_parsed = cached_pdf;
                     }
                     
-                    if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
-                        pdf_parsed = target_pdf;
+                    if let Some(target_pdf) = std::fs::read_to_string(&target_output_path).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
+                        pdf_parsed = target_pdf.clone();
+                        data.create_diff_save_point(&file_name, target_pdf.clone());
                     }
                 
                     for nb_datei in pdf_parsed.nebenbeteiligte_dateipfade.iter() {
@@ -789,6 +879,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenGrundbuchUploadDialog => {
+            if data.loaded_files.is_empty() {
+                return;
+            }
             data.popover_state = Some(PopoverState::GrundbuchUploadDialog);
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
@@ -835,6 +928,45 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
             webview.eval("startCheckingForPdfErrors()");
         },
+        Cmd::Search { search_text } => {
+            // webview.eval("replaceSuchergebnisse()");
+        },
+        Cmd::DownloadGbx { download_id, target_folder_path } => {
+            
+            let passwort = match data.get_passwort() {
+                Some(s) => s,
+                None => return,
+            };
+            
+            let server_url = &data.konfiguration.server_url;
+            let server_benutzer = &data.konfiguration.server_benutzer;
+            let server_email = &data.konfiguration.server_email;
+            let pkey = data.konfiguration.server_privater_schluessel_base64
+                .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
+            
+            let resp = match reqwest::blocking::get(format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}")) {
+                Ok(s) => s,
+                _ => return,
+            };
+            
+            let json = match resp.json::<PdfFile>() {
+                Ok(s) => s,
+                _ => return,
+            };
+        
+            let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+            data.loaded_files.insert(file_name.clone(), json.clone());
+            data.create_diff_save_point(&file_name, json.clone());
+            data.popover_state = None;
+            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+            webview.eval("startCheckingForPdfErrors()");
+        },
+        Cmd::UploadGbx { commit_title, commit_msg } => {
+            // TODO
+            // data.reset_diff_backup_files();
+            data.popover_state = None;
+            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+        },    
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO
             webview.eval(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
@@ -4027,8 +4159,11 @@ fn main() {
 
     if !launched_successful {
         println!("failed to launch {}", env!("CARGO_PKG_NAME"));
+        return;
     }
-
+    
+    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+    
     if let Ok(original_value) = original_value {
         env::set_var(GTK_OVERLAY_SCROLLING, original_value);
     }

@@ -1,5 +1,6 @@
 {
   "spalten_ausblenden": false,
+  "lefis_analyse_einblenden": false,
   "zeilenumbrueche_in_ocr_text": false,
   "vorschau_ohne_geroetet": false,
   "regex": {
@@ -189,7 +190,8 @@
     "recht = recht.replace(\"f ü r\", \"für\")",
     "recht = recht.replace(\"d i e\", \"die\")",
     " ",
-    "# Worte mit \"- \" vor diesen Worten sollten nicht zusammengeführt werden",
+    "# Worte mit \"- \" vor diesen Worten ",
+    "# sollten nicht zusammengeführt werden",
     "stop = set([\"und\", \"bzw.\", \"sowie\", \"u.\"])",
     "recht = \" \".join(recht.splitlines())",
     "worte = recht.split()",

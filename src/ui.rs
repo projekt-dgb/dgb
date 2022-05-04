@@ -81,7 +81,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         None => return String::new(),
         Some(PopoverState::GrundbuchUploadDialog) => {
             format!("
-            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1200px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
                 {close_button}
 
@@ -89,26 +89,23 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
                     <form onsubmit='grundbuchHochladen(event)' action=''>
-                    <div style='display:flex;padding:10px 0px;font-size:16px;'>
-                        <p>Beschreiben Sie ihre Änderungen:</p>
-                        <input 
-                            type='text' 
-                            id='__application_grundbuch_aenderung_commit_titel' 
-                            required 
-                            placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag Nr. XXX/XXX\"' 
-                            style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
-                    </div>
-                    <div style='display:flex;padding:10px 0px;font-size:16px;'>
-                        <p>Ausführliche Beschreibung der Änderung</p>
-                        <div contenteditable='true' id='__application_grundbuch_aenderung_commit_description' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></div>
-                    </div>
-                    <br/>
-                    <input type='submit' value='Änderungen übernehmen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
-                    </form>
                     
-                    <div id='__application_grundbuch_upload_aenderungen' style='display:flex;flex-direction:column;max-height:200px;overflow-y:scroll;'>
+                    <div style='display:flex;font-size:16px;flex-direction:column;'>
+                        <p style='font-size:16px;line-height:2;'>Beschreiben Sie ihre Änderungen:</p>
+                        <input type='text' id='__application_grundbuch_aenderung_commit_titel' required placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag XXX/XXXX\"' style='font-size:18px;font-family:monospace;font-weight:bold;border:1px solid #ccc;cursor:text;display:flex;flex-grow:1;'></input>
+                    </div>
+                    
+                    <div style='display:flex;font-size:16px;flex-direction:column;'>
+                        <p style='font-size:16px;line-height:2;'>Ausführliche Beschreibung der Änderung:</p>
+                        <div><p contenteditable='true' id='__application_grundbuch_aenderung_commit_description' style='border:1px solid #ccc;cursor:text;min-height:200px;flex-grow:1;display:flex;font-size:16px;font-family:monospace;font-weight:bold;'></p>
+                        </div>
+                    </div>
+                    
+                    <br/>
+                    
+                    <div id='__application_grundbuch_upload_aenderungen' style='display:flex;flex-direction:row;min-height:300px;max-height:400px;flex-grow:1;overflow-y:scroll;'>
                         <div id='__application_aenderung_dateien'>
-                            <p>Ludwigsburg_10.gbx</p>
+                            <p class='selected'>Ludwigsburg_10.gbx</p>
                             <p>Ludwigsburg_356.gbx</p>
                             <p>Ludwigsburg_97.gbx</p>
                         </div>
@@ -118,6 +115,11 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             </div>
                         </div>
                     </div>
+                    
+                    <div style='display:flex;flex-direction:row;justify-content: flex-end;margin-top: 20px;'>
+                        <input type='submit' value='Änderungen übernehmen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;' />
+                    </div>
+                    </form>
                 </div>
             </div>
             ")
@@ -128,50 +130,44 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 
                 {close_button}
 
-                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Grundbuchblatt suchen</h2>
+                <h2 style='font-size:24px;font-family:sans-serif;'>Grundbuchblatt suchen</h2>
                 
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
                     <form onsubmit='grundbuchSuchen(event)' action=''>
-                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;flex-direct'>
-                        <input 
-                            type='text' 
-                            id='__application_grundbuch_suchen_suchbegriff' 
-                            required 
-                            placeholder='Suchbegriff (z.B. \"Ludwigsburg Blatt 420\"' 
-                            style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
-                    </div>
-                    <br/>
-                    <input type='submit' value='Suchen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;flex-direction:row;margin-bottom:20px;'>
+                        <input type='text' id='__application_grundbuch_suchen_suchbegriff' required placeholder='Suchbegriff (z.B. \"Ludwigsburg Blatt 10\" oder \"Max Mustermann\")' style='font-size:16px;font-weight:bold;border-bottom:1px solid black;cursor:text;display:flex;flex-grow:1;'></input>
+                        <input type='submit' value='Suchen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:flex;flex-grow:0;margin-left:20px;' />
+                        </div>
                     </form>
                     
-                    <div id='__application_grundbuch_suchen_suchergebnisse' style='display:flex;flex-direction:column;max-height:200px;overflow-y:scroll;'>
+                    <div id='__application_grundbuch_suchen_suchergebnisse' style='display:flex;flex-grow:1;min-height:500px;flex-direction:column;max-height:700px;overflow-y:scroll;'>
                         <div class='__application_suchergebnis'>
                             <div class='__application_suchergebnis_description'>
-                            <h5>Ludwigsburg_569.gbx</h5>
-                            <div><p>... des Eigentümers</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></div>
+                                <h5>Ludwigsburg_569.gbx</h5>
+                                <span><p>... des Eigentümers&nbsp;</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></span>
                             </div>
-                            <div>
-                                <button>Herunterladen</button>
+                            <div style='display: flex; flex-direction: column;flex-grow: 1;'>
+                                <button class='btn btn_neu'>Herunterladen</button>
                             </div>
                         </div>
                         
                         <div class='__application_suchergebnis'>
                             <div class='__application_suchergebnis_description'>
                             <h5>Ludwigsburg_569.gbx</h5>
-                            <div><p>... des Eigentümers</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></div>
+                            <span><p>... des Eigentümers&nbsp;</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></span>
                             </div>
-                            <div>
-                                <button>Herunterladen</button>
+                            <div style='display: flex; flex-direction: column;flex-grow: 1;'>
+                                <button class='btn btn_neu' >Herunterladen</button>
                             </div>
                         </div>
                         
                         <div class='__application_suchergebnis'>
                             <div class='__application_suchergebnis_description'>
                             <h5>Ludwigsburg_569.gbx</h5>
-                            <div><p>... des Eigentümers</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></div>
+                            <span><p>... des Eigentümers&nbsp;</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></span>
                             </div>
-                            <div>
-                                <button>Herunterladen</button>
+                            <div style='display: flex; flex-direction: column;flex-grow: 1;'>
+                                <button class='btn btn_neu' >Herunterladen</button>
                             </div>
                         </div>
                     </div>
