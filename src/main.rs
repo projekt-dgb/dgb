@@ -23,6 +23,7 @@ use crate::digitalisiere::{
 use crate::analysiere::GrundbuchAnalysiert;
 use crate::kurztext::{PyBetrag, SchuldenArtPyWrapper, RechteArtPyWrapper};
 use pyo3::{Python, PyClass, PyAny, pyclass, pymethods, IntoPy, ToPyObject};
+use tinyfiledialogs::MessageBoxIcon;
 
 const APP_TITLE: &str = "Digitales Grundbuch";
 const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
@@ -42,12 +43,40 @@ pub struct RpcData {
     pub popover_state: Option<PopoverState>,
     pub open_page: Option<(FileName, u32)>,
     
+    pub commit_title: String,
+    pub commit_msg: String,
+    
     pub loaded_files: BTreeMap<FileName, PdfFile>,
     pub back_forward: BTreeMap<FileName, BackForwardBuf>,
     pub loaded_nb: Vec<Nebenbeteiligter>,
     pub loaded_nb_paths: Vec<String>,
     
     pub konfiguration: Konfiguration,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadChangeset {
+    pub aenderung_titel: String,
+    pub aenderung_beschreibung: String,
+    pub neue_dateien: BTreeMap<FileName, PdfFile>,
+    pub geaenderte_dateien: BTreeMap<FileName, GbxAenderung>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UploadChangesetResponse {
+    StatusOk(UploadChangesetResponseOk),
+    StatusError(UploadChangesetResponseError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadChangesetResponseOk {
+    pub neu: BTreeMap<FileName, PdfFile>,
+    pub geaendert: BTreeMap<FileName, PdfFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadChangesetResponseError {
+    pub code: isize,
+    pub text: String,
 }
 
 impl RpcData {
@@ -74,6 +103,59 @@ impl RpcData {
         }
     }
     
+    pub fn get_aenderungen(&self) -> GbxAenderungen {
+        
+        let mut neue_dateien = BTreeMap::new();
+        let mut geaenderte_dateien = BTreeMap::new();
+      
+        for (file_name, open_file) in self.loaded_files.iter() {
+            if !open_file.ist_geladen() { continue; }
+            
+            let json = match serde_json::to_string_pretty(&open_file) {
+                Ok(o) => o,
+                Err(_) => continue,
+            };
+            
+            match std::fs::read_to_string(Path::new(&Konfiguration::backup_dir()).join("backup").join(&format!("{file_name}.gbx"))) {
+                Ok(o) => {
+                    if o != json {
+                        geaenderte_dateien.insert(file_name.clone(), GbxAenderung {
+                            alt: match serde_json::from_str(&o) {
+                                Ok(o) => o,
+                                Err(_) => continue,
+                            },
+                            neu: open_file.clone(),
+                        });
+                    }
+                },
+                Err(_) => {
+                    neue_dateien.insert(file_name.clone(), open_file.clone());
+                }
+            }
+        }
+        
+        GbxAenderungen {
+            neue_dateien,
+            geaenderte_dateien,
+        }
+    }
+    
+    pub fn reset_diff_backup_files(&self, changed_files: &UploadChangesetResponseOk) {
+        let path = Path::new(&Konfiguration::backup_dir()).join("backup");
+        
+        for (file_name, new_state) in changed_files.neu.iter() {
+            if let Ok(json) = serde_json::to_string_pretty(&new_state) {
+                let _ = fs::write(path.clone().join(&format!("{file_name}.gbx")), json.as_bytes());
+            }
+        }
+        
+        for (file_name, new_state) in changed_files.geaendert.iter() {
+            if let Ok(json) = serde_json::to_string_pretty(&new_state) {
+                let _ = fs::write(path.clone().join(&format!("{file_name}.gbx")), json.as_bytes());
+            }
+        }
+    }
+    
     pub fn is_context_menu_open(&self) -> bool {
         match self.popover_state {
             Some(PopoverState::ContextMenu(_)) => true,
@@ -91,6 +173,25 @@ impl RpcData {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GbxAenderungen {
+    pub neue_dateien: BTreeMap<FileName, PdfFile>,
+    pub geaenderte_dateien: BTreeMap<FileName, GbxAenderung>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GbxAenderung {
+    pub alt: PdfFile,
+    pub neu: PdfFile,
+}
+
+impl GbxAenderungen {
+    pub fn ist_leer(&self) -> bool {
+        self.neue_dateien.is_empty() && 
+        self.geaenderte_dateien.is_empty()
+    }
+}
+
 #[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
 pub enum PopoverState {
     ContextMenu(ContextMenuData),
@@ -98,7 +199,7 @@ pub enum PopoverState {
     ExportPdf,
     CreateNewGrundbuch,
     GrundbuchSuchenDialog,
-    GrundbuchUploadDialog,
+    GrundbuchUploadDialog(usize),
     Configuration(ConfigurationView),
     Help,
 }
@@ -198,6 +299,8 @@ impl Default for RpcData {
             popover_state: None,
             loaded_files: BTreeMap::new(),
             back_forward: BTreeMap::new(),
+            commit_title: String::new(),
+            commit_msg: String::new(),
             loaded_nb: Vec::new(),
             loaded_nb_paths: Vec::new(),
             konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
@@ -915,7 +1018,16 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if data.loaded_files.is_empty() {
                 return;
             }
-            data.popover_state = Some(PopoverState::GrundbuchUploadDialog);
+            let aenderungen = data.get_aenderungen();
+            if aenderungen.ist_leer() {
+                tinyfiledialogs::message_box_ok(
+                    "Keine Änderungen zum Hochladen vorhanden", 
+                    "Es sind noch keine Änderungen zum Hochladen vorhanden. Alle Dateien sind bereits auf dem neuesten Stand.", 
+                    MessageBoxIcon::Info
+                );
+                return;
+            }
+            data.popover_state = Some(PopoverState::GrundbuchUploadDialog(0));
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::GrundbuchAnlegen { land, grundbuch_von, amtsgericht, blatt } => {
@@ -1036,10 +1148,57 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval("startCheckingForPdfErrors()");
         },
         Cmd::UploadGbx { commit_title, commit_msg } => {
-            // TODO
-            // data.reset_diff_backup_files();
-            data.popover_state = None;
-            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+        
+            let passwort = match data.get_passwort() {
+                Some(s) => s,
+                None => return,
+            };
+            let server_url = &data.konfiguration.server_url;
+            let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
+            let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let pkey = data.konfiguration.server_privater_schluessel_base64
+                .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
+            let url = format!("{server_url}/upload&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+            
+            let aenderungen = data.get_aenderungen();
+            if aenderungen.ist_leer() {
+                data.popover_state = None;
+                webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                return;
+            }
+            
+            let data_changes = UploadChangeset {
+                aenderung_titel: commit_title.clone(),
+                aenderung_beschreibung: commit_msg.clone(),
+                neue_dateien: aenderungen.neue_dateien,
+                geaenderte_dateien: aenderungen.geaenderte_dateien,
+            };
+            
+            let client = reqwest::blocking::Client::new();
+            let res = match client.post(url)
+                .json(&data_changes)
+                .send() {
+                Ok(o) => {
+                    match o.json::<UploadChangesetResponse>() {
+                        Ok(UploadChangesetResponse::StatusOk(o)) => {
+                            data.reset_diff_backup_files(&o);
+                            data.popover_state = None;
+                            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                        },
+                        Ok(UploadChangesetResponse::StatusError(e)) => {
+                            tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("E{}: {}", e.code, e.text), MessageBoxIcon::Error);
+                            return;
+                        },
+                        Err(e) => {
+                            tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("{}", e), MessageBoxIcon::Error);
+                            return;
+                        }
+                    }
+                },
+                Err(e) => {
+                    
+                }
+            };
         },    
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO

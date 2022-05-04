@@ -1,6 +1,6 @@
 use crate::{
     RpcData, PdfFile, GrundbuchSucheResponse,
-    Konfiguration, PopoverState,
+    Konfiguration, PopoverState, GbxAenderungen,
     digitalisiere::{
         Nebenbeteiligter,
         BvZuschreibung,
@@ -60,6 +60,109 @@ pub fn render_popover(rpc_data: &RpcData) -> String {
     normalize_for_js(popover)
 }
 
+pub fn render_aenderungen_dateien(aenderungen: &GbxAenderungen, aktiv: usize) -> String {
+    let mut out = String::new();
+    
+    for (i, file_name) in aenderungen.neue_dateien.keys().enumerate() {
+        let selected = match aktiv == i {
+            true => "class='selected'",
+            false => "",
+        };
+        out.push_str(&format!("<p {selected} onmousedown='switchAenderungView({i})'>{file_name}.gbx</p>\r\n"));
+    }
+    
+    for (i, file_name) in aenderungen.geaenderte_dateien.keys().enumerate() {
+        let i = i + aenderungen.neue_dateien.len();
+        let selected = match aktiv == i {
+            true => "class='selected'",
+            false => "",
+        };
+        out.push_str(&format!("<p {selected} onmousedown='switchAenderungView({i})'>{file_name}.gbx</p>\r\n"));
+    }
+    
+    normalize_for_js(out)
+}
+
+pub fn render_aenderung_diff(aenderungen: &GbxAenderungen, aktiv: usize) -> String {
+        
+    if aktiv < aenderungen.neue_dateien.len() {
+        
+        let neu = match aenderungen.neue_dateien.iter().nth(aktiv) {
+            Some((_, file)) => file,
+            None => return String::new(),
+        };
+        
+        let neu_json = match serde_json::to_string_pretty(&neu) {
+            Ok(o) => o,
+            Err(_) => return String::new(),
+        };
+        
+        let mut out = format!("<div>");
+        for line in neu_json.lines() {
+            out.push_str(&format!("<span class='insert'><p>+</p><p>{}</p></span>", line.replace(" ", "&nbsp;")))
+        }
+        out.push_str("</div>");
+        out
+        
+    } else if aktiv < aenderungen.neue_dateien.len() + aenderungen.geaenderte_dateien.len() {
+
+        use crate::GbxAenderung;
+        use prettydiff::basic::DiffOp;
+        
+        let (alt, neu) = match aenderungen.geaenderte_dateien.iter().nth(aktiv - aenderungen.neue_dateien.len()) {
+            Some((_, GbxAenderung { alt, neu })) => (alt, neu),
+            None => return String::new(),
+        };
+        
+        let alt_json = match serde_json::to_string_pretty(&alt) {
+            Ok(o) => o,
+            Err(_) => return String::new(),
+        };
+        
+        let neu_json = match serde_json::to_string_pretty(&neu) {
+            Ok(o) => o,
+            Err(_) => return String::new(),
+        };
+        
+        let diff = prettydiff::diff_lines(&alt_json, &neu_json);
+        let diff = diff.diff();
+        let mut out = format!("<div>");
+        
+        for c in diff {
+            let _ = match c {
+                DiffOp::Insert(i) => {
+                    for i in i.iter() {
+                        out.push_str(&format!("<span class='insert'><p>+</p><p>{}</p></span>", i.replace(" ", "&nbsp;")));
+                    }
+                },
+                DiffOp::Replace(old, new) => {
+                    for old in old.iter() {
+                        out.push_str(&format!("<span class='remove'><p>-</p><p>{}</p></span>", old.replace(" ", "&nbsp;")));
+                    }
+                    for new in new.iter() {
+                        out.push_str(&format!("<span class='insert'><p>+</p><p>{}</p></span>", new.replace(" ", "&nbsp;")));
+                    }
+                },
+                DiffOp::Remove(r) => {
+                    for r in r.iter() {
+                        out.push_str(&format!("<span class='remove'><p>-</p><p>{}</p></span>", r.replace(" ", "&nbsp;")))
+                    }
+                },
+                DiffOp::Equal(e) => {
+                    for e in e.iter() {
+                        out.push_str(&format!("<span class='equal'><p>&nbsp;</p><p>{}</p></span>", e.replace(" ", "&nbsp;")))
+                    }
+                },
+            };
+        }
+        
+        out.push_str("</div>");
+        out
+    } else {
+        String::new()
+    }
+}
+
 pub fn render_popover_content(rpc_data: &RpcData) -> String {
 
     const ICON_CLOSE: &[u8] = include_bytes!("./img/icons8-close-96.png");
@@ -79,7 +182,12 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     
     let pc = match rpc_data.popover_state {
         None => return String::new(),
-        Some(PopoverState::GrundbuchUploadDialog) => {
+        Some(PopoverState::GrundbuchUploadDialog(i)) => {
+            
+            let upload = rpc_data.get_aenderungen();
+            let dateien = render_aenderungen_dateien(&upload, i);
+            let diff = render_aenderung_diff(&upload, i);
+            
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1200px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
@@ -105,14 +213,10 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     
                     <div id='__application_grundbuch_upload_aenderungen' style='display:flex;flex-direction:row;min-height:300px;max-height:400px;flex-grow:1;overflow-y:scroll;'>
                         <div id='__application_aenderung_dateien'>
-                            <p class='selected'>Ludwigsburg_10.gbx</p>
-                            <p>Ludwigsburg_356.gbx</p>
-                            <p>Ludwigsburg_97.gbx</p>
+                            {dateien}
                         </div>
                         <div id='__application_aenderungen'>
-                            <div>
-                                <span><p>+</p><p>Neue Zeile</p></span>
-                            </div>
+                            {diff}
                         </div>
                     </div>
                     

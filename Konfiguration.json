@@ -3,6 +3,11 @@
   "lefis_analyse_einblenden": false,
   "zeilenumbrueche_in_ocr_text": false,
   "vorschau_ohne_geroetet": false,
+  "server_url": "https://127.0.0.1",
+  "server_benutzer": "Max Mustermann",
+  "server_email": "max@mustermann.de",
+  "server_privater_schluessel_base64": null,
+  "passwort_speichern": true,
   "regex": {
     "ABT2_SATZ_1_BEVOR_KLAMMER_1": "(.*)\\((.*)\\)",
     "ALS_GESAMTBERECHTIGTE_1": "(.*),? als Gesamtberechtigte gemäß § (\\d*) BGB -?(.*)",
