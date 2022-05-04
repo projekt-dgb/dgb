@@ -2118,6 +2118,7 @@ let rpc = {
   check_pdf_for_errors: function() { rpc.invoke({ cmd : 'check_pdf_for_errors' }); },
 
   open_grundbuch_suchen_dialog: function()  { rpc.invoke({ cmd : 'open_grundbuch_suchen_dialog' }); },
+  search: function(search_text) { rpc.invoke({ cmd : 'search', search_text: search_text }); },
   open_grundbuch_upload_dialog: function()  { rpc.invoke({ cmd : 'open_grundbuch_upload_dialog' }); },
 
   import_nb:  function() { rpc.invoke({ cmd : 'import_nb' }); },
@@ -2493,6 +2494,36 @@ function replaceAbt1GrundlagenEintragungen(s) {
     let e = document.getElementById("__application-abteilung-1-grundlagen-eintragungen");
     if (e)
         e.innerHTML = s;    
+}
+
+function grundbuchSuchen(e) {
+    let search_text = document.getElementById("__application_grundbuch_suchen_suchbegriff");
+    if (!search_text) {
+        return;
+    }
+    rpc.search(search_text.value);
+}
+
+function replaceSuchergebnisse(s) {
+    let e = document.getElementById("__application_grundbuch_suchen_suchergebnisse");
+    if (e)
+        e.innerHTML = s;    
+}
+
+function grundbuchHerunterladen(e) {
+    e.preventDefault();
+    
+    let download_id = e.target.dataset.downloadId;
+    if (!download_id) {
+        return false;
+    }
+    
+    let file_name = e.target.dataset.fileName;
+    if (!file_name) {
+        return false;
+    }
+    
+    return false;
 }
 
 function replaceAbt1Veraenderungen(s) {

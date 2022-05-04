@@ -1,5 +1,5 @@
 use crate::{
-    RpcData, PdfFile, 
+    RpcData, PdfFile, GrundbuchSucheResponse,
     Konfiguration, PopoverState,
     digitalisiere::{
         Nebenbeteiligter,
@@ -141,35 +141,6 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     </form>
                     
                     <div id='__application_grundbuch_suchen_suchergebnisse' style='display:flex;flex-grow:1;min-height:500px;flex-direction:column;max-height:700px;overflow-y:scroll;'>
-                        <div class='__application_suchergebnis'>
-                            <div class='__application_suchergebnis_description'>
-                                <h5>Ludwigsburg_569.gbx</h5>
-                                <span><p>... des Eigentümers&nbsp;</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></span>
-                            </div>
-                            <div style='display: flex; flex-direction: column;flex-grow: 1;'>
-                                <button class='btn btn_neu'>Herunterladen</button>
-                            </div>
-                        </div>
-                        
-                        <div class='__application_suchergebnis'>
-                            <div class='__application_suchergebnis_description'>
-                            <h5>Ludwigsburg_569.gbx</h5>
-                            <span><p>... des Eigentümers&nbsp;</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></span>
-                            </div>
-                            <div style='display: flex; flex-direction: column;flex-grow: 1;'>
-                                <button class='btn btn_neu' >Herunterladen</button>
-                            </div>
-                        </div>
-                        
-                        <div class='__application_suchergebnis'>
-                            <div class='__application_suchergebnis_description'>
-                            <h5>Ludwigsburg_569.gbx</h5>
-                            <span><p>... des Eigentümers&nbsp;</p><strong>Albrecht Bernard</strong><p>, geboren am 12.10.1998</p></span>
-                            </div>
-                            <div style='display: flex; flex-direction: column;flex-grow: 1;'>
-                                <button class='btn btn_neu' >Herunterladen</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -847,6 +818,40 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     normalize_for_js(pc)
 }
 
+pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
+    let pc = match data {
+        GrundbuchSucheResponse::StatusOk(ok) => {
+        
+            ok.ergebnisse.iter().map(|e| {
+                
+                let file_name = format!("{}_{}", e.titelblatt.grundbuch_von, e.titelblatt.blatt);
+                let text = e.ergebnis_text.as_str().replace(&e.gefunden_text, &format!("&nbsp;<strong>{}</strong>", e.gefunden_text));
+                let download_id = &e.download_id;
+                
+                format!("
+                    <div class='__application_suchergebnis'>
+                        <div class='__application_suchergebnis_description'>
+                            <h5>{file_name}.gbx</h5>
+                            <span><p>{text}</p></span>
+                        </div>
+                        <div style='display: flex; flex-direction: column;flex-grow: 1;'>
+                            <button class='btn btn_neu' data-downloadId='{download_id}' data-fileId='{file_name}' onclick='grundbuchHerunterladen(event)'>Herunterladen</button>
+                        </div>
+                    </div>
+                ")
+            })
+            .collect::<Vec<_>>()
+            .join("\r\n")
+        },
+        GrundbuchSucheResponse::StatusErr(err) => {
+            let code = &err.code;
+            let text = &err.text;
+            format!("<div class='__application_suchergebnis'><p>E{code}: {text}</p></div>")
+        }
+    };
+    
+    normalize_for_js(pc)
+}
 
 pub fn render_schuldenart_select() -> String {
     format!("

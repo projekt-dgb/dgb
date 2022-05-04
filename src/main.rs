@@ -51,6 +51,7 @@ pub struct RpcData {
 }
 
 impl RpcData {
+
     pub fn get_passwort(&self) -> Option<String> {
         let pw_file_path = std::env::temp_dir().join("dgb").join("passwort.txt");
         match std::fs::read_to_string(pw_file_path) {
@@ -59,8 +60,8 @@ impl RpcData {
             
                 let email = &self.konfiguration.server_email;
                 let pw = tinyfiledialogs::password_box(
-                    &format!("Passwort für '{email}' eingeben"), 
-                    &format!("Bitte geben Sie das Passwort für '{email}' ein:")
+                    &format!("Passwort für {email} eingeben"), 
+                    &format!("Bitte geben Sie das Passwort für {email} ein:")
                 )?;
                 
                 if self.konfiguration.passwort_speichern {
@@ -205,9 +206,9 @@ impl Default for RpcData {
                 spalten_ausblenden: false,
                 vorschau_ohne_geroetet: false,
                 
-                server_url: format!("https://127.0.0.1"),
-                server_benutzer: format!("Max Mustermann"),
-                server_email: format!("max@mustermann.de"),
+                server_url: default_server_url(),
+                server_benutzer: default_server_benutzer(),
+                server_email: default_server_email(),
                 server_privater_schluessel_base64: None,
                 passwort_speichern: true,
                 
@@ -227,6 +228,10 @@ impl Default for RpcData {
         }
     }
 }
+
+fn default_server_url() -> String { format!("https://127.0.0.1") }
+fn default_server_email() -> String { format!("max@mustermann.de") }
+fn default_server_benutzer() -> String { format!("Max Mustermann") }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdfFile {
@@ -414,11 +419,11 @@ pub struct Konfiguration {
     pub zeilenumbrueche_in_ocr_text: bool,
     #[serde(default)]
     pub vorschau_ohne_geroetet: bool,
-    #[serde(default)]
+    #[serde(default = "default_server_url")]
     pub server_url: String,
-    #[serde(default)]
+    #[serde(default = "default_server_benutzer")]
     pub server_benutzer: String,
-    #[serde(default)]
+    #[serde(default = "default_server_email")]
     pub server_email: String,
     #[serde(default)]
     pub server_privater_schluessel_base64: Option<String>,
@@ -702,7 +707,35 @@ pub enum Cmd {
     SetOpenPage { active_page: u32 },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status")]
+pub enum GrundbuchSucheResponse {
+    #[serde(rename = "ok")]
+    StatusOk(GrundbuchSucheOk),
+    #[serde(rename = "error")]
+    StatusErr(GrundbuchSucheError)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrundbuchSucheOk {
+    pub ergebnisse: Vec<GrundbuchSucheErgebnis>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrundbuchSucheErgebnis {
+    pub titelblatt: Titelblatt,
+    pub ergebnis_text: String,
+    pub gefunden_text: String,
+    pub download_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrundbuchSucheError {
+    pub code: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LefisDateiExport {
     pub titelblatt: Titelblatt,
     pub rechte: GrundbuchAnalysiert,
@@ -929,7 +962,43 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval("startCheckingForPdfErrors()");
         },
         Cmd::Search { search_text } => {
-            // webview.eval("replaceSuchergebnisse()");
+        
+            let passwort = match data.get_passwort() {
+                Some(s) => s,
+                None => return,
+            };
+            
+            let server_url = &data.konfiguration.server_url;
+            let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
+            let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let pkey = data.konfiguration.server_privater_schluessel_base64
+                .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
+            let search_text = urlencoding::encode(&search_text);
+            let url = format!("{server_url}/suche/{search_text}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+                        
+            let resp = match reqwest::blocking::get(&url) {
+                Ok(s) => s,
+                Err(e) => {
+                    webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
+                        code: 0,
+                        text: format!("HTTP GET {url}: {}", e),
+                    }))));
+                    return;
+                },
+            };
+            
+            let json = match resp.json::<GrundbuchSucheResponse>() {
+                Ok(s) => s,
+                Err(e) => {
+                    webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
+                        code: 0,
+                        text: format!("HTTP GET {url}: {}", e),
+                    }))));
+                    return;
+                },
+            };
+        
+            webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&json)));
         },
         Cmd::DownloadGbx { download_id, target_folder_path } => {
             
@@ -939,12 +1008,16 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let server_url = &data.konfiguration.server_url;
-            let server_benutzer = &data.konfiguration.server_benutzer;
-            let server_email = &data.konfiguration.server_email;
+            let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
+            let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
+            let download_id = urlencoding::encode(&download_id);
+            let url = format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
             
-            let resp = match reqwest::blocking::get(format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}")) {
+            println!("HTTP GET {url}");
+
+            let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
                 _ => return,
             };
@@ -953,8 +1026,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(s) => s,
                 _ => return,
             };
-        
+
             let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+            let _ = std::fs::write(&format!("{target_folder_path}/{file_name}.gbx"), serde_json::to_string_pretty(&json).unwrap_or_default());
             data.loaded_files.insert(file_name.clone(), json.clone());
             data.create_diff_save_point(&file_name, json.clone());
             data.popover_state = None;
