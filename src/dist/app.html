@@ -2119,7 +2119,7 @@ let rpc = {
           exportiere_in_eine_einzelne_datei: exportiere_in_eine_einzelne_datei,
     });
   },
-  
+  switch_aenderung_view: function(i) { rpc.invoke({ cmd : 'switch_aenderung_view', i: i }); },
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
@@ -2266,6 +2266,11 @@ function toggleLefisAnalyse(event) {
 
 function startCheckingForImageLoaded(filepath, filename) {
     images_to_load[filepath] = filename;
+}
+
+
+function switchAenderungView(i) {
+    rpc.switch_aenderung_view(i);
 }
 
 function stopCheckingForImageLoaded(filename) {
@@ -2497,6 +2502,18 @@ function replaceBestandsverzeichnisAbschreibungen(s) {
 
 function replaceAbt1(s) {
     let e = document.getElementById("__application-abteilung-1");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAenderungDateien(s) {
+    let e = document.getElementById("__application_aenderung_dateien");
+    if (e)
+        e.innerHTML = s;
+}
+
+function replaceAenderungDiff(s) {
+    let e = document.getElementById("__application_aenderungen_diff");
     if (e)
         e.innerHTML = s;
 }

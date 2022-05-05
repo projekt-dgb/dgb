@@ -735,6 +735,8 @@ pub enum Cmd {
     EditRechtsinhaberAuslesenAbt3Script { neu: String },
     #[serde(rename = "rechtsinhaber_auslesen_abt3_script_testen")]
     RechtsinhaberAuslesenAbt3ScriptTesten { text: String },
+    #[serde(rename = "switch_aenderung_view")]
+    SwitchAenderungView { i: usize },
     
     #[serde(rename = "teste_regex")]
     TesteRegex { regex_id: String, text: String },
@@ -2080,6 +2082,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let element = document.getElementById(`{}`); 
                 if (element) {{ element.focus(); }};
             }})();", next_focus));
+        },
+        Cmd::SwitchAenderungView { i } => {
+            data.popover_state = Some(PopoverState::GrundbuchUploadDialog(*i));
+            let aenderungen = data.get_aenderungen();
+            webview.eval(&format!("replaceAenderungDateien(`{}`)", ui::render_aenderungen_dateien(&aenderungen, *i)));
+            webview.eval(&format!("replaceAenderungDiff(`{}`)", ui::render_aenderung_diff(&aenderungen, *i)));
         },
         Cmd::OpenContextMenu { x, y, seite } => {
             data.popover_state = Some(PopoverState::ContextMenu(ContextMenuData {

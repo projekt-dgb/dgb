@@ -215,7 +215,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                         <div id='__application_aenderung_dateien'>
                             {dateien}
                         </div>
-                        <div id='__application_aenderungen'>
+                        <div id='__application_aenderungen_diff'>
                             {diff}
                         </div>
                     </div>
