@@ -1051,7 +1051,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             for (_, d) in dateien {
                 if try_download_file_database(konfiguration.clone(), d.titelblatt.clone()).is_none() {
                     let file_name = format!("{}_{}", d.titelblatt.grundbuch_von, d.titelblatt.blatt);
-                    konfiguration.create_empty_diff_save_point(&file_name);
                     tinyfiledialogs::message_box_ok(
                         "Fehler beim Synchronisieren mit Datenbank", 
                         &format!("Der aktuelle Stand von {file_name}.gbx konnte nicht aus der Datenbank geladen werden.\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
@@ -1133,9 +1132,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let search_text = urlencoding::encode(&search_text);
-            let url = format!("{server_url}/suche/{search_text}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
-                        
-            let resp = match reqwest::blocking::get(&url) {
+            let url = format!("{server_url}/suche/{search_text}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+
+            let client = reqwest::blocking::Client::new();
+            let res = client
+                .get(&url)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .send();
+
+            let resp = match res {
                 Ok(s) => s,
                 Err(e) => {
                     webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
@@ -1174,7 +1179,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let download_id = urlencoding::encode(&download_id);
-            let url = format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+            let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
             
             let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
@@ -1211,7 +1216,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
-            let url = format!("{server_url}/upload&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+            let url = format!("{server_url}/upload?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
                     
             let aenderungen = data.get_aenderungen();
             if aenderungen.ist_leer() {
@@ -4435,6 +4440,14 @@ fn teste_regex(regex_id: &str, text: &str, konfig: &Konfiguration) -> Result<Vec
     Ok(compiled_regex.get_captures(text))
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum PdfFileOrEmpty {
+    Pdf(PdfFile),
+    #[serde(rename = "grundbuchNichtInDatenbankVorhanden")]
+    NichtVorhanden,
+}
+
 // Versucht eine Synchronisierung von  ~/.config/dgb/backup/XXX.gbx mit der Datenbank
 fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelblatt) -> Option<()> {
 
@@ -4449,12 +4462,22 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     let pkey = konfiguration.server_privater_schluessel_base64
         .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
     let download_id = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
-    let url = format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+    let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
     let resp = reqwest::blocking::get(&url).ok()?;
-    let json = resp.json::<PdfFile>().ok()?;
-    let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
-    let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
-    let _ = std::fs::write(target_folder_path.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
+    let json = resp.json::<PdfFileOrEmpty>().ok()?;
+    
+    match json {
+        PdfFileOrEmpty::Pdf(json) => {
+            let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+            let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
+            let _ = std::fs::write(target_folder_path.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
+        },
+        PdfFileOrEmpty::NichtVorhanden => {
+            let file_name = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
+            konfiguration.create_empty_diff_save_point(&file_name);
+        }
+    }
+    
     Some(())
 }
 

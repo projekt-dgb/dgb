@@ -969,7 +969,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
             ok.ergebnisse.iter().map(|e| {
                 
                 let file_name = format!("{}_{}", e.titelblatt.grundbuch_von, e.titelblatt.blatt);
-                let text = e.ergebnis_text.as_str().replace(&e.gefunden_text, &format!("&nbsp;<strong>{}</strong>", e.gefunden_text));
+                let text = e.ergebnis_text.as_str().replace(&e.gefunden_text, &format!("<strong>{}</strong>", e.gefunden_text));
                 let download_id = &e.download_id;
                 
                 format!("
@@ -978,7 +978,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
                             <h5>{file_name}.gbx</h5>
                             <span><p>{text}</p></span>
                         </div>
-                        <div style='display: flex; flex-direction: column;flex-grow: 1;'>
+                        <div style='display: flex; flex-direction: column;flex-grow: 0;'>
                             <button class='btn btn_neu' data-downloadId='{download_id}' data-fileId='{file_name}' onclick='grundbuchHerunterladen(event)'>Herunterladen</button>
                         </div>
                     </div>
