@@ -81,28 +81,6 @@ pub struct UploadChangesetResponseError {
 
 impl RpcData {
 
-    pub fn get_passwort(&self) -> Option<String> {
-        let pw_file_path = std::env::temp_dir().join("dgb").join("passwort.txt");
-        match std::fs::read_to_string(pw_file_path) {
-            Ok(o) => return Some(o.trim().to_string()),
-            Err(_) => {
-            
-                let email = &self.konfiguration.server_email;
-                let pw = tinyfiledialogs::password_box(
-                    &format!("Passwort für {email} eingeben"), 
-                    &format!("Bitte geben Sie das Passwort für {email} ein:")
-                )?;
-                
-                if self.konfiguration.passwort_speichern {
-                    let _ = std::fs::create_dir_all(std::env::temp_dir().join("dgb"));
-                    let _ = std::fs::write(std::env::temp_dir().join("dgb").join("passwort.txt"), pw.clone().as_bytes());
-                }
-                
-                Some(pw)
-            }
-        }
-    }
-    
     pub fn get_aenderungen(&self) -> GbxAenderungen {
         
         let mut neue_dateien = BTreeMap::new();
@@ -122,7 +100,10 @@ impl RpcData {
                         geaenderte_dateien.insert(file_name.clone(), GbxAenderung {
                             alt: match serde_json::from_str(&o) {
                                 Ok(o) => o,
-                                Err(_) => continue,
+                                Err(_) => {
+                                    neue_dateien.insert(file_name.clone(), open_file.clone());
+                                    continue;
+                                },
                             },
                             neu: open_file.clone(),
                         });
@@ -565,6 +546,33 @@ impl Konfiguration {
     const DEFAULT: &'static str = include_str!("../Konfiguration.json");
     const FILE_NAME: &'static str = "Konfiguration.json";
     
+    pub fn create_empty_diff_save_point(&self, file_name: &FileName) {
+        let _ = std::fs::create_dir_all(&format!("{}/backup/", Konfiguration::backup_dir()));
+        let target_path = format!("{}/backup/{}.gbx", Konfiguration::backup_dir(), file_name);
+        let _ = std::fs::write(&target_path, "".as_bytes());
+    }
+    
+    pub fn get_passwort(&self) -> Option<String> {
+        let pw_file_path = std::env::temp_dir().join("dgb").join("passwort.txt");
+        match std::fs::read_to_string(pw_file_path) {
+            Ok(o) => return Some(o.trim().to_string()),
+            Err(_) => {
+            
+                let email = &self.server_email;
+                let pw = tinyfiledialogs::password_box(
+                    &format!("Passwort für {email} eingeben"), 
+                    &format!("Bitte geben Sie das Passwort für {email} ein:")
+                )?;
+                
+                let _ = std::fs::create_dir_all(std::env::temp_dir().join("dgb"));
+                let _ = std::fs::write(std::env::temp_dir().join("dgb").join("passwort.txt"), pw.clone().as_bytes());
+            
+                Some(pw)
+            }
+        }
+    }
+    
+    
     pub fn backup_dir() -> String {
         dirs::config_dir()
         .and_then(|p| Some(p.join("dgb").to_str()?.to_string()))
@@ -689,16 +697,21 @@ pub enum Cmd {
         target_folder_path: String,
     },
     #[serde(rename = "upload_gbx")]
-    UploadGbx {
-        commit_title: String,
-        commit_msg: String,
-    },
+    UploadGbx,
     #[serde(rename = "edit_abkuerzungen_script")]
     EditAbkuerzungenScript { script: String },
     #[serde(rename = "edit_text_saubern_script")]
     EditTextSaubernScript { script: String },
     #[serde(rename = "edit_flurstuecke_auslesen_script")]
     EditFlurstueckeAuslesenScript { script: String },
+    #[serde(rename = "edit_commit_description")]
+    EditCommitDescription { value: String },
+    #[serde(rename = "edit_commit_title")]
+    EditCommitTitle { value: String },
+    #[serde(rename = "edit_konfiguration_textfield")]
+    EditKonfigurationTextField { id: String, value: String },
+    #[serde(rename = "edit_konfiguration_schluesseldatei")]
+    EditKonfigurationSchluesseldatei { base64: String },
     
     #[serde(rename = "flurstueck_auslesen_script_testen")]
     FlurstueckAuslesenScriptTesten { text: String, bv_nr: String },
@@ -941,6 +954,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
                     let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
                     
+                    if !Path::new(&target_output_path).exists() {
+                        data.konfiguration.create_empty_diff_save_point(&file_name);
+                    }
+                    
                     // Lösche Titelblattseite von Seiten, die gerendert werden müssen
                     seitenzahlen.remove(0);
                     
@@ -973,7 +990,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         pdf_parsed = target_pdf.clone();
                         data.create_diff_save_point(&file_name, target_pdf.clone());
                     }
-                
+                    
                     for nb_datei in pdf_parsed.nebenbeteiligte_dateipfade.iter() {
                         if let Some(mut nb) = std::fs::read_to_string(&nb_datei).ok().map(|fs| parse_nb(&fs)) {
                             data.loaded_nb.append(&mut nb);
@@ -1017,18 +1034,44 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenGrundbuchUploadDialog => {
+            use rayon::prelude::*;
+        
             if data.loaded_files.is_empty() {
                 return;
             }
+
+            let passwort = match data.konfiguration.get_passwort() {
+                Some(s) => s,
+                None => return,
+            };
+            
+            let dateien = data.loaded_files.clone();
+            let konfiguration = data.konfiguration.clone();
+            
+            for (_, d) in dateien {
+                if try_download_file_database(konfiguration.clone(), d.titelblatt.clone()).is_none() {
+                    let file_name = format!("{}_{}", d.titelblatt.grundbuch_von, d.titelblatt.blatt);
+                    konfiguration.create_empty_diff_save_point(&file_name);
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Synchronisieren mit Datenbank", 
+                        &format!("Der aktuelle Stand von {file_name}.gbx konnte nicht aus der Datenbank geladen werden.\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
+                }
+            }
+            
             let aenderungen = data.get_aenderungen();
             if aenderungen.ist_leer() {
                 tinyfiledialogs::message_box_ok(
                     "Keine Änderungen zum Hochladen vorhanden", 
-                    "Es sind noch keine Änderungen zum Hochladen vorhanden. Alle Dateien sind bereits auf dem neuesten Stand.", 
+                    "Es sind noch keine Änderungen zum Hochladen vorhanden.\r\nAlle Dateien sind bereits auf dem neuesten Stand.", 
                     MessageBoxIcon::Info
                 );
                 return;
             }
+            
             data.popover_state = Some(PopoverState::GrundbuchUploadDialog(0));
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
@@ -1072,12 +1115,14 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 data.open_page = Some((file_name.clone(), 2));
             }
             data.popover_state = None;
+            let _ = std::fs::create_dir_all(Path::new(&Konfiguration::backup_dir()).join("backup"));
+            let _ = std::fs::write(Path::new(&Konfiguration::backup_dir()).join("backup").join("{file_name}.gbx"), "".as_bytes());
             webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
             webview.eval("startCheckingForPdfErrors()");
         },
         Cmd::Search { search_text } => {
         
-            let passwort = match data.get_passwort() {
+            let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
                 None => return,
             };
@@ -1097,6 +1142,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         code: 0,
                         text: format!("HTTP GET {url}: {}", e),
                     }))));
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                     return;
                 },
             };
@@ -1108,6 +1154,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         code: 0,
                         text: format!("HTTP GET {url}: {}", e),
                     }))));
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                     return;
                 },
             };
@@ -1116,7 +1163,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::DownloadGbx { download_id, target_folder_path } => {
             
-            let passwort = match data.get_passwort() {
+            let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
                 None => return,
             };
@@ -1129,16 +1176,20 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let download_id = urlencoding::encode(&download_id);
             let url = format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
             
-            println!("HTTP GET {url}");
-
             let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
-                _ => return,
+                _ => {
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
+                },
             };
             
             let json = match resp.json::<PdfFile>() {
                 Ok(s) => s,
-                _ => return,
+                _ => {
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
+                },
             };
 
             let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
@@ -1149,9 +1200,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
             webview.eval("startCheckingForPdfErrors()");
         },
-        Cmd::UploadGbx { commit_title, commit_msg } => {
+        Cmd::UploadGbx => {
         
-            let passwort = match data.get_passwort() {
+            let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
                 None => return,
             };
@@ -1161,7 +1212,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let url = format!("{server_url}/upload&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
-            
+                    
             let aenderungen = data.get_aenderungen();
             if aenderungen.ist_leer() {
                 data.popover_state = None;
@@ -1170,14 +1221,14 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             let data_changes = UploadChangeset {
-                aenderung_titel: commit_title.clone(),
-                aenderung_beschreibung: commit_msg.clone(),
+                aenderung_titel: data.commit_title.clone(),
+                aenderung_beschreibung: data.commit_msg.clone(),
                 neue_dateien: aenderungen.neue_dateien,
                 geaenderte_dateien: aenderungen.geaenderte_dateien,
             };
             
             let client = reqwest::blocking::Client::new();
-            let res = match client.post(url)
+            let res = match client.post(url.clone())
                 .json(&data_changes)
                 .send() {
                 Ok(o) => {
@@ -1185,20 +1236,30 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         Ok(UploadChangesetResponse::StatusOk(o)) => {
                             data.reset_diff_backup_files(&o);
                             data.popover_state = None;
+                            data.commit_title.clear();
+                            data.commit_msg.clear();
                             webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                         },
                         Ok(UploadChangesetResponse::StatusError(e)) => {
                             tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("E{}: {}", e.code, e.text), MessageBoxIcon::Error);
+                            let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                             return;
                         },
                         Err(e) => {
-                            tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("{}", e), MessageBoxIcon::Error);
+                            tinyfiledialogs::message_box_ok(
+                                "Fehler beim Hochladen der Dateien", 
+                                &format!("Antwort vom Server ist nicht im richtigen Format: {}", e), 
+                                MessageBoxIcon::Error
+                            );
+                            let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                             return;
                         }
                     }
                 },
                 Err(e) => {
-                    
+                    tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("HTTP POST {url}: {}", e), MessageBoxIcon::Error);
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
                 }
             };
         },    
@@ -2083,6 +2144,32 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 if (element) {{ element.focus(); }};
             }})();", next_focus));
         },
+        Cmd::EditCommitDescription { value } => {
+            data.commit_msg = value.clone();
+        },
+        Cmd::EditCommitTitle { value } => {
+            data.commit_title = value.trim().to_string();
+        },
+        Cmd::EditKonfigurationTextField { id, value } => {
+            match id.as_str() {
+                "server-url" => {
+                    data.konfiguration.server_url = value.trim().to_string();
+                },
+                "email" => {
+                    data.konfiguration.server_email = value.trim().to_string();
+                },
+                "benutzername" => {
+                    data.konfiguration.server_benutzer = value.trim().to_string();
+                },
+                _ => { return; }
+            }
+            
+            data.konfiguration.speichern();
+        },
+        Cmd::EditKonfigurationSchluesseldatei { base64 } => {
+            data.konfiguration.server_privater_schluessel_base64 = Some(base64::encode(base64));
+            data.konfiguration.speichern();
+        },
         Cmd::SwitchAenderungView { i } => {
             data.popover_state = Some(PopoverState::GrundbuchUploadDialog(*i));
             let aenderungen = data.get_aenderungen();
@@ -2161,6 +2248,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             for (k, v) in new_icons {
                 if let Some(s) = data.loaded_files.get_mut(&k.clone()) {
                     s.icon = Some(v);
+                    let konfiguration = data.konfiguration.clone();
+                    let titelblatt = s.titelblatt.clone();
                     webview.eval(&format!("replaceIcon(`{}`, `{}`)", k, v.get_base64()));
                 }
             }
@@ -2875,6 +2964,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 "konfiguration-keine-roten-linien" => {
                     data.konfiguration.vorschau_ohne_geroetet = !data.konfiguration.vorschau_ohne_geroetet;
+                },
+                "konfiguration-passwort-speichern" => {
+                    data.konfiguration.passwort_speichern = !data.konfiguration.passwort_speichern;
                 },
                 _ => return,
             }
@@ -4341,6 +4433,29 @@ fn teste_regex(regex_id: &str, text: &str, konfig: &Konfiguration) -> Result<Vec
     )?;
     
     Ok(compiled_regex.get_captures(text))
+}
+
+// Versucht eine Synchronisierung von  ~/.config/dgb/backup/XXX.gbx mit der Datenbank
+fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelblatt) -> Option<()> {
+
+    let passwort = match konfiguration.get_passwort() {
+        Some(s) => s,
+        None => return None,
+    };
+    
+    let server_url = &konfiguration.server_url;
+    let server_benutzer = urlencoding::encode(&konfiguration.server_benutzer);
+    let server_email = urlencoding::encode(&konfiguration.server_email);
+    let pkey = konfiguration.server_privater_schluessel_base64
+        .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
+    let download_id = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
+    let url = format!("{server_url}/download/{download_id}&benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+    let resp = reqwest::blocking::get(&url).ok()?;
+    let json = resp.json::<PdfFile>().ok()?;
+    let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+    let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
+    let _ = std::fs::write(target_folder_path.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
+    Some(())
 }
 
 fn main() {

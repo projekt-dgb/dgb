@@ -188,6 +188,18 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             let dateien = render_aenderungen_dateien(&upload, i);
             let diff = render_aenderung_diff(&upload, i);
             
+            let commit_title = if rpc_data.commit_title.is_empty() { 
+                String::new() 
+            } else { 
+                format!("value='{}'", rpc_data.commit_title) 
+            };
+            
+            let commit_description = if rpc_data.commit_msg.is_empty() { 
+                String::new() 
+            } else { 
+                rpc_data.commit_msg.clone()
+            };
+            
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1200px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
@@ -200,19 +212,17 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     
                     <div style='display:flex;font-size:16px;flex-direction:column;'>
                         <p style='font-size:16px;line-height:2;'>Beschreiben Sie ihre Änderungen:</p>
-                        <input type='text' id='__application_grundbuch_aenderung_commit_titel' required placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag XXX/XXXX\"' style='font-size:18px;font-family:monospace;font-weight:bold;border:1px solid #ccc;cursor:text;display:flex;flex-grow:1;'></input>
+                        <input type='text' id='__application_grundbuch_aenderung_commit_titel' required placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag XXX/XXXX\"' style='font-size:18px;font-family:monospace;font-weight:bold;border:1px solid #ccc;cursor:text;display:flex;flex-grow:1;' {commit_title}></input>
                     </div>
                     
                     <div style='display:flex;font-size:16px;flex-direction:column;'>
                         <p style='font-size:16px;line-height:2;'>Ausführliche Beschreibung der Änderung:</p>
-                        <div><p contenteditable='true' id='__application_grundbuch_aenderung_commit_description' style='border:1px solid #ccc;cursor:text;min-height:200px;flex-grow:1;display:flex;font-size:16px;font-family:monospace;font-weight:bold;'></p>
+                        <div><p contenteditable='true' id='__application_grundbuch_aenderung_commit_description' style='border:1px solid #ccc;cursor:text;min-height:200px;flex-grow:1;display:flex;font-size:16px;font-family:monospace;font-weight:bold;'>{commit_description}</p>
                         </div>
                     </div>
                     
-                    <br/>
-                    
                     <div id='__application_grundbuch_upload_aenderungen' style='display:flex;flex-direction:row;min-height:300px;max-height:400px;flex-grow:1;overflow-y:scroll;'>
-                        <div id='__application_aenderung_dateien'>
+                        <div id='__application_aenderung_dateien' style='padding: 10px 0px;margin-right:10px;overflow-y: scroll;height: 300px;min-width: 300px;'>
                             {dateien}
                         </div>
                         <div id='__application_aenderungen_diff'>
@@ -239,7 +249,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
                     <form onsubmit='grundbuchSuchen(event)' action=''>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;flex-direction:row;margin-bottom:20px;'>
-                        <input type='text' id='__application_grundbuch_suchen_suchbegriff' required placeholder='Suchbegriff (z.B. \"Ludwigsburg Blatt 10\" oder \"Max Mustermann\")' style='font-size:16px;font-weight:bold;border-bottom:1px solid black;cursor:text;display:flex;flex-grow:1;'></input>
+                        <input type='text' id='__application_grundbuch_suchen_suchbegriff' required placeholder='Suchbegriff (z.B. \"Ludwigsburg Blatt 10\" oder \"Max Mustermann\")' style='font-size:14px;font-weight:bold;border-bottom:1px solid black;cursor:text;display:flex;flex-grow:1;'></input>
                         <input type='submit' value='Suchen' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:flex;flex-grow:0;margin-left:20px;' />
                         </div>
                     </form>
@@ -522,22 +532,52 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             let main_content = match cw {
                 Allgemein => format!("
                     <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
-                        <div style='display:flex;flex-direction:row;'>
-                            <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_einblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
-                            <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_spalten_ausblenden'>Formularspalten einblenden</label>
+                        <div>
+                            <div style='display:flex;flex-direction:row;'>
+                                <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_spalten_ausblenden' {spalten_einblenden} data-checkBoxId='konfiguration-spalten-ausblenden' onchange='toggleCheckbox(event)'>
+                                <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_spalten_ausblenden'>Formularspalten einblenden</label>
+                            </div>
+                            
+                            <div style='display:flex;flex-direction:row;'>
+                                <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
+                                <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
+                            </div>
+                            
+                            <div style='display:flex;flex-direction:row;'>
+                                <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
+                                <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
+                            </div>
                         </div>
                         
-                        <div style='display:flex;flex-direction:row;'>
-                            <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_zeilenumbrueche-in-ocr-text' data-checkBoxId='konfiguration-zeilenumbrueche-in-ocr-text' {zeilenumbrueche_in_ocr_text} onchange='toggleCheckbox(event)'>
-                            <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_zeilenumbrueche-in-ocr-text'>Beim Kopieren von OCR-Text Zeilenumbrüche beibehalten</label>
-                        </div>
-                        
-                        <div style='display:flex;flex-direction:row;'>
-                            <input style='width:20px;height:20px;cursor:pointer;' type='checkbox' id='__application_konfiguration_hide_red_lines' data-checkBoxId='konfiguration-keine-roten-linien' {vorschau_ohne_geroetet} onchange='toggleCheckbox(event)'>
-                            <label style='font-size:20px;font-style:italic;' for='__application_konfiguration_hide_red_lines'>PDF ohne geröteten Linien darstellen</label>
+                        <div style='margin-top:25px;'>
+                            <h2 style='font-size:20px;'>Datenbank</h2>
+                            
+                            <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                                <label style='font-size:20px;font-style:italic;'>Server-URL</label>
+                                <input type='text' id='__application_konfiguration_datenbank_server' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;min-width:300px;' value='{server_url}' data-konfiguration-textfield='server-url' onchange='editKonfigurationTextField(event)'></input>
+                            </div>
+                    
+                            <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                                <label style='font-size:20px;font-style:italic;'>Benutzername</label>
+                                <input type='text' id='__application_konfiguration_datenbank_benutzername' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;min-width:300px;' value='{server_benutzername}' data-konfiguration-textfield='benutzername' onchange='editKonfigurationTextField(event)'></input>
+                            </div>
+                            
+                            <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                                <label style='font-size:20px;font-style:italic;'>E-Mail</label>
+                                <input type='text' id='__application_konfiguration_datenbank_email' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;min-width:300px;' value='{server_email}' data-konfiguration-textfield='email' onchange='editKonfigurationTextField(event)'></input>
+                            </div>
+                            
+                            <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                                <label style='font-size:20px;font-style:italic;'>Zertifikatsdatei</label>
+                                <input type='file' class='btn btn_neu' id='__application_konfiguration_datenbank_private_key' onchange='editKonfigurationSchluesseldatei(event)' accept='.pfx'></input>
+                                <input type='button' value='Datei auswählen...' class='btn btn_neu' data-file-input-id='__application_konfiguration_datenbank_private_key' onclick='document.getElementById(event.target.dataset.fileInputId).click();' />
+                            </div>´
                         </div>
                     </div>
                 ",
+                    server_url = rpc_data.konfiguration.server_url,
+                    server_benutzername = rpc_data.konfiguration.server_benutzer,
+                    server_email = rpc_data.konfiguration.server_email,
                     vorschau_ohne_geroetet = if rpc_data.konfiguration.vorschau_ohne_geroetet { "checked" } else { "" },
                     spalten_einblenden = if !rpc_data.konfiguration.spalten_ausblenden { "checked" } else { "" },
                     zeilenumbrueche_in_ocr_text = if rpc_data.konfiguration.zeilenumbrueche_in_ocr_text { "checked" } else { "" },
@@ -950,7 +990,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
         GrundbuchSucheResponse::StatusErr(err) => {
             let code = &err.code;
             let text = &err.text;
-            format!("<div class='__application_suchergebnis'><p>E{code}: {text}</p></div>")
+            format!("<div class='__application_suchergebnis'><p style='width: 500px;word-break: break-all;'>E{code}: {text}</p></div>")
         }
     };
     

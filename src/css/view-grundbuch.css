@@ -425,7 +425,7 @@ img {
     border: 2px solid rgb(87, 149, 223);
 }
 
-#__application_aenderungen {
+#__application_aenderungen_diff {
     display: flex;
     flex-grow: 1;
     flex-direction: column;
@@ -433,7 +433,7 @@ img {
     overflow-y: scroll;
 }
 
-#__application_aenderungen span {
+#__application_aenderungen_diff span {
     display: flex;
     flex-direction: row;
     flex-grow: 1;
@@ -444,36 +444,23 @@ img {
     background: white;
 }
 
-#__application_aenderungen span.insert {
+#__application_aenderungen_diff span.insert {
     background: rgb(222, 255, 222);
-
 }
 
-#__application_aenderungen span.remove {
-    background: rgb(255, 222, 222);
-}
-
-#__application_aenderungen span p {
+#__application_aenderungen_diff span p {
     font-size: 12px;
 }
 
-#__application_aenderungen span.add {
-    background: white;
+#__application_aenderungen_diff span.remove {
+    background: background: rgb(255, 209, 209);
 }
 
-#__application_aenderungen span.remove {
-    background: white; 
-}
-
-#__application_aenderungen span p:first-child {
+#__application_aenderungen_diff span p:first-child {
     width: 20px;
     padding-left: 4px;
 }
 
-#__application_aenderungen {
-    
-    
-}
 .btn-grad {
     background-image: linear-gradient(to right, #24C6DC 0%, #514A9D  51%, #24C6DC  100%)
 }

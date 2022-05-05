@@ -27,6 +27,12 @@ let rpc = {
     });
   },
   switch_aenderung_view: function(i) { rpc.invoke({ cmd : 'switch_aenderung_view', i: i }); },
+  edit_konfiguration_textfield: function(id, value) { rpc.invoke({ cmd : 'edit_konfiguration_textfield', id: id, value: value }); },
+  edit_commit_title: function(value) { rpc.invoke({ cmd : 'edit_commit_title', value: value }); },
+  edit_commit_description: function(value) { rpc.invoke({ cmd : 'edit_commit_description', value: value }); },
+  edit_konfiguration_schluesseldatei: function(base64) { rpc.invoke({ cmd : 'edit_konfiguration_schluesseldatei', base64: base64 }); },
+  upload_gbx: function() { rpc.invoke({ cmd : 'upload_gbx' }); },
+  
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
@@ -316,6 +322,18 @@ function eintragLoeschen(path) {
     rpc.eintrag_loeschen(path);        
 }
 
+function editKonfigurationSchluesseldatei(event) {
+    
+	var file = event.target.files[0];
+
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		rpc.edit_konfiguration_schluesseldatei(e.target.result);
+		event.target.value = "";
+	};
+	reader.readAsBinaryString(file);
+}
+
 function inputOnKeyDown(path, e) {
     if ((event.keyCode == 10 || event.keyCode == 13) && event.ctrlKey) {
         // CTRL + Enter
@@ -413,6 +431,14 @@ function replaceAbt1(s) {
         e.innerHTML = s;
 }
 
+function editKonfigurationTextField(event) {
+    if (!event.target.dataset.konfigurationTextfield) {
+        return;
+    }
+    
+    rpc.edit_konfiguration_textfield(event.target.dataset.konfigurationTextfield, event.target.value);
+}
+
 function replaceAenderungDateien(s) {
     let e = document.getElementById("__application_aenderung_dateien");
     if (e)
@@ -443,6 +469,10 @@ function replaceSuchergebnisse(s) {
     let e = document.getElementById("__application_grundbuch_suchen_suchergebnisse");
     if (e)
         e.innerHTML = s;    
+}
+
+function grundbuchHochladen(e) {
+    rpc.upload_gbx();
 }
 
 function grundbuchHerunterladen(e) {
