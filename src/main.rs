@@ -53,6 +53,7 @@ pub struct RpcData {
     
     pub konfiguration: Konfiguration,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadChangeset {
     pub aenderung_titel: String,
@@ -328,7 +329,7 @@ pub struct PdfFile {
     land: Option<String>,
     titelblatt: Titelblatt,
     seitenzahlen: Vec<u32>,
-    geladen: BTreeMap<u32, SeiteParsed>,
+    geladen: BTreeMap<String, SeiteParsed>,
     analysiert: Grundbuch,
     pdftotext_layout: PdfToTextLayout,
     #[serde(skip, default)]
@@ -338,11 +339,11 @@ pub struct PdfFile {
     #[serde(default)]
     seiten_versucht_geladen: BTreeSet<u32>,
     #[serde(default)]
-    seiten_ocr_text: BTreeMap<u32, String>,
+    seiten_ocr_text: BTreeMap<String, String>,
     #[serde(default)]
-    anpassungen_seite: BTreeMap<usize, AnpassungSeite>,
+    anpassungen_seite: BTreeMap<String, AnpassungSeite>,
     #[serde(default)]
-    klassifikation_neu: BTreeMap<usize, SeitenTyp>,
+    klassifikation_neu: BTreeMap<String, SeitenTyp>,
     #[serde(default)]
     nebenbeteiligte_dateipfade: Vec<String>,
 }
@@ -437,7 +438,9 @@ impl PdfFile {
     pub fn ist_geladen(&self) -> bool {
         self.seitenzahlen
         .iter()
-        .all(|sz| self.geladen.contains_key(sz) || self.seiten_versucht_geladen.contains(sz))
+        .all(|sz| {
+            self.geladen.contains_key(&format!("{}", sz)) || self.seiten_versucht_geladen.contains(sz)
+        })
     }
     
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
@@ -692,10 +695,7 @@ pub enum Cmd {
     #[serde(rename = "search")]
     Search { search_text: String },
     #[serde(rename = "download_gbx")]
-    DownloadGbx { 
-        download_id: String, 
-        target_folder_path: String,
-    },
+    DownloadGbx { download_id: String },
     #[serde(rename = "upload_gbx")]
     UploadGbx,
     #[serde(rename = "edit_abkuerzungen_script")]
@@ -1166,7 +1166,17 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         
             webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&json)));
         },
-        Cmd::DownloadGbx { download_id, target_folder_path } => {
+        Cmd::DownloadGbx { download_id } => {
+            
+            let file_dialog_result = tinyfiledialogs::select_folder_dialog(
+                ".gbx-Datei speichern unter...", 
+                "~/",
+            );
+            
+            let target_folder_path = match file_dialog_result {
+                Some(f) => f,
+                None => return,
+            };
             
             let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
@@ -1183,27 +1193,72 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
-                _ => {
+                Err(e) => {
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    println!("fehler in response: {e:?}");
+                    let fehler = format!("{e}").replace("\"", "").replace("'", "");
+                    tinyfiledialogs::message_box_ok(
+                        &format!("Fehler beim Herunterladen von {download_id}"), 
+                        &format!("Datei {download_id} konnte nicht heruntergeladen werden:\r\nInterner Server-Fehler:\r\nHTTP GET {url}:\r\n{fehler}"), 
+                        MessageBoxIcon::Error
+                    );
                     return;
                 },
             };
             
-            let json = match resp.json::<PdfFile>() {
+            let text = match resp.text() {
                 Ok(s) => s,
-                _ => {
+                Err(e) => {
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    println!("fehler in response: {e:?}");
+                    let fehler = format!("{e}").replace("\"", "").replace("'", "");
+                    tinyfiledialogs::message_box_ok(
+                        &format!("Fehler beim Herunterladen von {download_id}"), 
+                        &format!("Datei {download_id} konnte nicht heruntergeladen werden:\r\nInterner Server-Fehler:\r\nHTTP GET {url}:\r\n{fehler}"), 
+                        MessageBoxIcon::Error
+                    );
+                    return;
+                }
+            };
+            
+            println!("json response:\r\n{text}");
+            
+            let json = match serde_json::from_str::<PdfFileOrEmpty>(&text) {
+                Ok(s) => s,
+                Err(e) => {
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    println!("fehler in json: {e:?}");
+                    let fehler = format!("{e}").replace("\"", "").replace("'", "");
+                    tinyfiledialogs::message_box_ok(
+                        &format!("Fehler beim Herunterladen von {download_id}"), 
+                        &format!("Datei {download_id} konnte nicht heruntergeladen werden:\r\nServer-Antwort hat falsches Format:\r\nHTTP GET {url}:\r\n{fehler}"), 
+                        MessageBoxIcon::Error
+                    );
                     return;
                 },
             };
 
-            let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
-            let _ = std::fs::write(&format!("{target_folder_path}/{file_name}.gbx"), serde_json::to_string_pretty(&json).unwrap_or_default());
-            data.loaded_files.insert(file_name.clone(), json.clone());
-            data.create_diff_save_point(&file_name, json.clone());
-            data.popover_state = None;
-            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
-            webview.eval("startCheckingForPdfErrors()");
+            match json {
+                PdfFileOrEmpty::Pdf(json) => {
+                    let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+                    let backup_1 = Path::new(&Konfiguration::backup_dir()).join("backup");
+                    let _ = std::fs::write(backup_1.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
+                    
+                    let _ = std::fs::write(&format!("{target_folder_path}/{file_name}.gbx"), serde_json::to_string_pretty(&json).unwrap_or_default());
+                    data.create_diff_save_point(&file_name, json.clone());
+                    data.loaded_files.insert(file_name.clone(), json.clone());
+                    data.open_page = Some((file_name.clone(), 2));                    
+                    webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                    webview.eval("startCheckingForPdfErrors()");
+                },
+                PdfFileOrEmpty::NichtVorhanden => {
+                    tinyfiledialogs::message_box_ok(
+                        &format!("Fehler beim Herunterladen von {download_id}.gbx"), 
+                        &format!("{download_id}.gbx konnte nicht heruntergeladen werden:\r\nDatei ist auf Server nicht vorhanden."), 
+                        MessageBoxIcon::Error
+                    );
+                }
+            }
         },
         Cmd::UploadGbx => {
         
@@ -1211,6 +1266,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Some(s) => s,
                 None => return,
             };
+            
             let server_url = &data.konfiguration.server_url;
             let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
@@ -1231,6 +1287,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 neue_dateien: aenderungen.neue_dateien,
                 geaenderte_dateien: aenderungen.geaenderte_dateien,
             };
+            
+            println!("data_changes:\r\n{}\r\n{}", data.commit_title, data.commit_msg);
             
             let client = reqwest::blocking::Client::new();
             let res = match client.post(url.clone())
@@ -1253,7 +1311,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         Err(e) => {
                             tinyfiledialogs::message_box_ok(
                                 "Fehler beim Hochladen der Dateien", 
-                                &format!("Antwort vom Server ist nicht im richtigen Format: {}", e), 
+                                &format!("Antwort vom Server ist nicht im richtigen Format:\r\n{}", e), 
                                 MessageBoxIcon::Error
                             );
                             let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
@@ -1262,7 +1320,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     }
                 },
                 Err(e) => {
-                    tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("HTTP POST {url}: {}", e), MessageBoxIcon::Error);
+                    tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("HTTP POST {url}:\r\n{}", e), MessageBoxIcon::Error);
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                     return;
                 }
@@ -2591,7 +2649,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 _ => { return; },
             };
                         
-            open_file.klassifikation_neu.insert(*seite, seiten_typ_neu);
+            open_file.klassifikation_neu.insert(format!("{}", *seite), seiten_typ_neu);
             data.popover_state = None;            
                         
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
@@ -2811,10 +2869,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let mut ap = open_file.anpassungen_seite
-                .entry(*page)
+                .entry(format!("{}", *page))
                 .or_insert_with(|| AnpassungSeite::default());
 
-            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
+            let (im_width, im_height, page_width, page_height) = match
+                open_file.pdftotext_layout.seiten.get(&format!("{}", *page)) {
                 Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
                 None => return,
             };
@@ -2847,7 +2906,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(*page as u32)) {
+            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&format!("{}", *page)) {
                 Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
                 None => return,
             };
@@ -2856,7 +2915,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let aspect_ratio = im_height / im_width;
             let img_ui_height = img_ui_width * aspect_ratio;
             
-            if let Some(ap) = open_file.anpassungen_seite.get_mut(page) {
+            if let Some(ap) = open_file.anpassungen_seite.get_mut(&format!("{}", page)) {
                 if *zeilen_id < ap.zeilen.len() {
                     let _ = ap.zeilen.remove(*zeilen_id);                    
                     webview.eval(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
@@ -2886,22 +2945,24 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            let open_page = match open_file.geladen.get_mut(&(page as u32)) {
+            let open_page = match open_file.geladen.get_mut(&format!("{}", page)) {
                 Some(s) => s,
                 None => return,
             };
             
-            let seitentyp = match open_file.klassifikation_neu.get(&page) {
+            let seitentyp = match open_file.klassifikation_neu.get(&format!("{}", page)) {
                 Some(s) => *s,
                 None => open_page.typ,
             };
             
-            let current_column = match seitentyp.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
+            let current_column = match seitentyp.get_columns(open_file.anpassungen_seite.get(&format!("{}", page)))
+                .iter().find(|col| col.id == column_id) {
                 Some(s) => s.clone(),
                 None => return,
             };
             
-            let (im_width, im_height, page_width, page_height) = match open_file.pdftotext_layout.seiten.get(&(page as u32)) {
+            let (im_width, im_height, page_width, page_height) = match 
+                open_file.pdftotext_layout.seiten.get(&format!("{}", page)) {
                 Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
                 None => return,
             };
@@ -2912,7 +2973,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
     
             {
                 let rect_to_modify = open_file.anpassungen_seite
-                .entry(page)
+                .entry(format!("{}", page))
                 .or_insert_with(|| AnpassungSeite::default())
                 .spalten
                 .entry(column_id.clone())
@@ -2944,7 +3005,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 };
             }
             
-            let new_column = match seitentyp.get_columns(open_file.anpassungen_seite.get(&page)).iter().find(|col| col.id == column_id) {
+            let new_column = match
+                seitentyp.get_columns(open_file.anpassungen_seite.get(&format!("{}", page))).iter().find(|col| col.id == column_id) {
                 Some(s) => s.clone(),
                 None => return,
             };
@@ -3436,7 +3498,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let titelblatt = open_file.titelblatt.clone();
-            let seitenzahlen = open_file.pdftotext_layout.seiten.keys().copied().collect::<Vec<_>>();
+            let seitenzahlen = open_file.pdftotext_layout.seiten
+                .keys()
+                .filter_map(|i| i.parse::<u32>().ok())
+                .collect::<Vec<_>>();
+            
             if let Some(pdf) = open_file.datei.as_ref() {
     
                 let pdf_bytes = match std::fs::read(&pdf) {
@@ -3448,7 +3514,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
                     use crate::digitalisiere::konvertiere_pdf_seiten_zu_png;
         
-                    let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
+                    let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
 
                     let _ = konvertiere_pdf_seiten_zu_png(
                         &pdf_bytes, 
@@ -3835,7 +3901,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                 
                 let seitenzahlen_zu_laden = pdf.seitenzahlen
                     .iter()
-                    .filter(|sz| !pdf.geladen.contains_key(sz))
+                    .filter(|sz| !pdf.geladen.contains_key(&format!("{}", sz)))
                     .copied()
                     .collect::<Vec<_>>();
                             
@@ -3861,13 +3927,16 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         pdf.pdftotext_layout.seiten.insert(k.clone(), v.clone());
                     }
                     
-                    let mut ocr_text_cached = pdf.seiten_ocr_text.get(&sz).cloned();
+                    let mut ocr_text_cached = pdf.seiten_ocr_text
+                        .get(&format!("{}", sz))
+                        .cloned();
+                    
                     let mut ocr_text_final = None;
                     
                     if ocr_text_cached.is_none() {
                         match digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz) {
                             Ok(o) => { 
-                                pdf.seiten_ocr_text.insert(sz, o.clone());
+                                pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
                                 ocr_text_final = Some(o); 
                             },
                             Err(_) => continue,
@@ -3876,7 +3945,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         ocr_text_final = ocr_text_cached;
                     }
                     
-                    let seitentyp = match pdf.klassifikation_neu.get(&(sz as usize)) {
+                    let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)) {
                         Some(s) => *s,
                         None => {
                             match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
@@ -3892,7 +3961,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         max_sz, 
                         seitentyp, 
                         &pdftotext_layout, 
-                        pdf.anpassungen_seite.get(&(sz as usize))
+                        pdf.anpassungen_seite.get(&format!("{}", sz))
                     ) { 
                         Ok(o) => o, 
                         Err(_) => continue, 
@@ -3906,13 +3975,13 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         max_sz,
                         &spalten, 
                         &pdftotext_layout,
-                        pdf.anpassungen_seite.get(&(sz as usize))
+                        pdf.anpassungen_seite.get(&format!("{}", sz))
                     ) { 
                         Ok(o) => o, 
                         Err(_) => continue, 
                     };
                     
-                    pdf.geladen.insert(sz, SeiteParsed {
+                    pdf.geladen.insert(format!("{}", sz), SeiteParsed {
                         typ: seitentyp,
                         texte: textbloecke,
                     });
@@ -3938,7 +4007,12 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                 );
 
                 pdf.analysiert.abt1.migriere_v2();
-                let json = match serde_json::to_string_pretty(&pdf) { Ok(o) => o, Err(_) => return, };
+                
+                let json = match serde_json::to_string_pretty(&pdf) { 
+                    Ok(o) => o, 
+                    Err(_) => return, 
+                };
+                
                 let _ = std::fs::write(&target_output_path, json.as_bytes());
             });
         }
@@ -4014,13 +4088,13 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
 
         let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], max_sz, &pdf.titelblatt)?;
                    
-        let ocr_text_cached = pdf.seiten_ocr_text.get(&sz).cloned();
+        let ocr_text_cached = pdf.seiten_ocr_text.get(&format!("{}", sz)).cloned();
         let mut ocr_text_final = None;
         
         if ocr_text_cached.is_none() {
             match digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz) {
                 Ok(o) => { 
-                    pdf.seiten_ocr_text.insert(sz, o.clone());
+                    pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
                     ocr_text_final = Some(o); 
                 },
                 Err(e) => {
@@ -4032,7 +4106,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             ocr_text_final = ocr_text_cached;
         }
         
-        let seitentyp = match pdf.klassifikation_neu.get(&(sz as usize)).cloned() {
+        let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)).cloned() {
             Some(s) => s,
             None => {
                 match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
@@ -4042,7 +4116,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             }
         };
         
-        pdf.klassifikation_neu.insert(sz as usize, seitentyp);
+        pdf.klassifikation_neu.insert(format!("{}", sz), seitentyp);
                         
         let spalten = match digitalisiere::formularspalten_ausschneiden(
             &pdf.titelblatt, 
@@ -4050,7 +4124,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             max_sz, 
             seitentyp, 
             &pdf.pdftotext_layout, 
-            pdf.anpassungen_seite.get(&(sz as usize)),
+            pdf.anpassungen_seite.get(&format!("{}", sz)),
         ) { 
             Ok(o) => o, 
             Err(e) => continue, 
@@ -4064,10 +4138,10 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             max_sz,
             &spalten, 
             &pdf.pdftotext_layout,
-            pdf.anpassungen_seite.get(&(sz as usize)),
+            pdf.anpassungen_seite.get(&format!("{}", sz)),
         )?;
       
-        pdf.geladen.insert(sz, SeiteParsed {
+        pdf.geladen.insert(format!("{}", sz), SeiteParsed {
             typ: seitentyp,
             texte: textbloecke.clone(),
         });
@@ -4441,10 +4515,11 @@ fn teste_regex(regex_id: &str, text: &str, konfig: &Konfiguration) -> Result<Vec
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "status")]
 pub enum PdfFileOrEmpty {
+    #[serde(rename = "ok")]
     Pdf(PdfFile),
-    #[serde(rename = "grundbuchNichtInDatenbankVorhanden")]
+    #[serde(rename = "error")]
     NichtVorhanden,
 }
 
@@ -4461,7 +4536,7 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     let server_email = urlencoding::encode(&konfiguration.server_email);
     let pkey = konfiguration.server_privater_schluessel_base64
         .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
-    let download_id = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
+    let download_id = urlencoding::encode(&format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt));
     let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
     let resp = reqwest::blocking::get(&url).ok()?;
     let json = resp.json::<PdfFileOrEmpty>().ok()?;

@@ -965,21 +965,39 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
 pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
     let pc = match data {
         GrundbuchSucheResponse::StatusOk(ok) => {
-        
+            
+            if ok.ergebnisse.is_empty() {
+                return format!("
+                    <div class='__application_suchergebnis'>
+                        <div class='__application_suchergebnis_description'>
+                            <h5>Keine Ergebnisse gefunden</h5>
+                            <span><p>Bitte versuchen Sie es mit einem anderen Suchbegriff erneut oder wenden Sie sich an Ihren Administrator.</p></span>
+                        </div>
+                    </div>
+                ");
+            }
+            
             ok.ergebnisse.iter().map(|e| {
                 
                 let file_name = format!("{}_{}", e.titelblatt.grundbuch_von, e.titelblatt.blatt);
-                let text = e.ergebnis_text.as_str().replace(&e.gefunden_text, &format!("<strong>{}</strong>", e.gefunden_text));
+                let text = if !e.gefunden_text.is_empty() {
+                    e.ergebnis_text.as_str()
+                    .replace(&e.gefunden_text, &format!("<strong>{}</strong>", e.gefunden_text))
+                } else {
+                    e.ergebnis_text.clone()
+                };
+                
                 let download_id = &e.download_id;
                 
                 format!("
                     <div class='__application_suchergebnis'>
                         <div class='__application_suchergebnis_description'>
                             <h5>{file_name}.gbx</h5>
-                            <span><p>{text}</p></span>
+                            <span style='max-width:300px;'><p>{text}</p></span>
                         </div>
-                        <div style='display: flex; flex-direction: column;flex-grow: 0;'>
-                            <button class='btn btn_neu' data-downloadId='{download_id}' data-fileId='{file_name}' onclick='grundbuchHerunterladen(event)'>Herunterladen</button>
+                        <div style='display: flex; flex-direction: row;flex-grow: 0;'>
+                            <button class='btn' data-download-id='{download_id}' onclick='grundbuchAbbonieren(event)'>Abbonieren</button>
+                            <button class='btn btn_neu' data-download-id='{download_id}' onclick='grundbuchHerunterladen(event)'>Herunterladen</button>
                         </div>
                     </div>
                 ")
@@ -1523,11 +1541,11 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
     
         use crate::digitalisiere::SeitenTyp;
         
-        let page_is_loaded = open_file.geladen.contains_key(page_num);
+        let page_is_loaded = open_file.geladen.contains_key(&format!("{}", page_num));
         let page_is_active = rpc_data.open_page.as_ref().map(|s| s.1) == Some(*page_num);
         let seiten_typ = open_file.klassifikation_neu
-            .get(&(*page_num as usize)).cloned()
-            .or(open_file.geladen.get(page_num).map(|p| p.typ.clone()));
+            .get(&format!("{}", page_num)).cloned()
+            .or(open_file.geladen.get(&format!("{}", page_num)).map(|p| p.typ.clone()));
         
         let page_color = seiten_typ.map(|t| match t {
               SeitenTyp::BestandsverzeichnisHorz
@@ -2947,7 +2965,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         Err(_) => return String::new(),
     };
 
-    let (im_width, im_height, page_width, page_height) = match file.pdftotext_layout.seiten.get(&open_file.1) {
+    let (im_width, im_height, page_width, page_height) = match file.pdftotext_layout.seiten.get(&format!("{}", open_file.1)) {
         Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
         None => return String::new(),
     };
@@ -2956,16 +2974,16 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     let aspect_ratio = im_height / im_width;
     let img_ui_height = img_ui_width * aspect_ratio;
     
-    let columns = match file.geladen.get(&open_file.1) {
+    let columns = match file.geladen.get(&format!("{}", open_file.1)) {
         Some(page) =>  {
             
-            let seitentyp = match file.klassifikation_neu.get(&(open_file.1 as usize)) {
+            let seitentyp = match file.klassifikation_neu.get(&format!("{}", open_file.1)) {
                 Some(s) => *s,
                 None => page.typ,
             };
                                                     
             seitentyp
-            .get_columns(file.anpassungen_seite.get(&(open_file.1 as usize)))
+            .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
             .into_iter()
             .map(|col| {
             
@@ -3076,7 +3094,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     };
     
     let zeilen = file.anpassungen_seite
-    .get(&(open_file.1 as usize))
+    .get(&format!("{}", open_file.1))
     .map(|ap| ap.zeilen.clone())
     .unwrap_or_default();
     

@@ -91,7 +91,7 @@ impl fmt::Display for TitelblattFehler {
 // Layout mit PdfToText (kein OCR! - schnell, aber nicht alle Rechte vorhanden)
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PdfToTextLayout {
-    pub seiten: BTreeMap<u32, PdfToTextSeite>,
+    pub seiten: BTreeMap<String, PdfToTextSeite>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,7 +174,7 @@ pub fn get_pdftotext_layout(titelblatt: &Titelblatt, seitenzahlen: &[u32]) -> Re
         let hoehe_mm = (&*seite_attributes).get("height").and_then(|b| b.parse::<f32>().ok())?;
 
                     
-        Some((*sz, PdfToTextSeite { breite_mm, hoehe_mm, texte, }))        
+        Some((format!("{}", *sz), PdfToTextSeite { breite_mm, hoehe_mm, texte, }))        
     })
     .collect();
     
@@ -1542,7 +1542,7 @@ pub fn formularspalten_ausschneiden(
     }
     
     let seite = pdftotext_layout.seiten
-        .get(&seitenzahl)
+        .get(&format!("{}", seitenzahl))
         .ok_or(Fehler::FalscheSeitenZahl(seitenzahl))?;
     
     let _ = fs::create_dir_all(temp_dir.clone())
@@ -1795,7 +1795,7 @@ pub fn textbloecke_aus_spalten(
         
         let css_selector = ".ocr_line";
         
-        let (page_width, page_height) = match pdftotext.seiten.get(&seitenzahl) {
+        let (page_width, page_height) = match pdftotext.seiten.get(&format!("{}", seitenzahl)) {
             Some(o) => (o.breite_mm, o.hoehe_mm),
             None => { return Err(Fehler::FalscheSeitenZahl(seitenzahl)); },
         };
@@ -1910,7 +1910,7 @@ pub fn textbloecke_aus_spalten(
             
             // Textblöcke pdftotext
             let texts_on_page = pdftotext.seiten
-                .get(&seitenzahl)
+                .get(&format!("{}", seitenzahl))
                 .map(|s| s.texte.clone())
                 .unwrap_or_default();
             
@@ -2033,7 +2033,7 @@ pub fn textbloecke_aus_spalten(
             }
             
             let texts_on_page = pdftotext.seiten
-                .get(&seitenzahl)
+                .get(&format!("{}", seitenzahl))
                 .map(|s| s.texte.clone())
                 .unwrap_or_default();
             
@@ -2763,11 +2763,14 @@ impl BvAbschreibung {
 pub fn analysiere_bv(
     titelblatt: &Titelblatt,
     pdftotext_layout: &PdfToTextLayout,
-    seiten: &BTreeMap<u32, SeiteParsed>, 
-    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>
+    seiten: &BTreeMap<String, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<String, AnpassungSeite>
 ) -> Result<Bestandsverzeichnis, Fehler> {
 
-    let seitenzahlen = seiten.keys().cloned().collect::<Vec<_>>();
+    let seitenzahlen = seiten.keys().cloned()
+        .filter_map(|s| s.parse::<usize>().ok())
+        .collect::<Vec<_>>();
+    
     let max_seitenzahl = seitenzahlen.iter().copied().max().unwrap_or(0);
     
     let default_texte = Vec::new();
@@ -2779,10 +2782,14 @@ pub fn analysiere_bv(
         s.typ == SeitenTyp::BestandsverzeichnisHorz || 
         s.typ == SeitenTyp::BestandsverzeichnisVert ||
         s.typ == SeitenTyp::BestandsverzeichnisVertTyp2
-    }).flat_map(|(seitenzahl, s)| {
+    })
+    .filter_map(|(num, s)| {
+        Some((num.parse::<u32>().ok()?, s))
+    })
+    .flat_map(|(seitenzahl, s)| {
         
         let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
         
@@ -2792,7 +2799,7 @@ pub fn analysiere_bv(
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                 
                     let mut position_in_pdf = PositionInPdf {
-                        seite: *seitenzahl,
+                        seite: seitenzahl,
                         rect: OptRect::zero(),
                     };
                     
@@ -2906,7 +2913,7 @@ pub fn analysiere_bv(
                 .filter_map(|(lfd_num, flurstueck_text)| {
                     
                     let mut position_in_pdf = PositionInPdf {
-                        seite: *seitenzahl,
+                        seite: seitenzahl,
                         rect: OptRect::zero(),
                     };
                     
@@ -3011,7 +3018,7 @@ pub fn analysiere_bv(
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                     
                     let mut position_in_pdf = PositionInPdf {
-                        seite: *seitenzahl,
+                        seite: seitenzahl,
                         rect: OptRect::zero(),
                     };
                     
@@ -3105,7 +3112,7 @@ pub fn analysiere_bv(
                 .filter_map(|(lfd_num, ldf_nr_text)| {
                     
                     let mut position_in_pdf = PositionInPdf {
-                        seite: *seitenzahl,
+                        seite: seitenzahl,
                         rect: OptRect::zero(),
                     };
                     
@@ -3175,7 +3182,7 @@ pub fn analysiere_bv(
                 (0..(zeilen_auf_seite.len() + 1)).map(|i| {
                     
                     let mut position_in_pdf = PositionInPdf {
-                        seite: *seitenzahl,
+                        seite: seitenzahl,
                         rect: OptRect::zero(),
                     };
                     
@@ -3254,7 +3261,7 @@ pub fn analysiere_bv(
                 .filter_map(|(lfd_num, ldf_nr_text)| {
                     
                     let mut position_in_pdf = PositionInPdf {
-                        seite: *seitenzahl,
+                        seite: seitenzahl,
                         rect: OptRect::zero(),
                     };
                     
@@ -3454,10 +3461,14 @@ pub fn analysiere_bv(
     .filter(|(num, s)| {
         s.typ == SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen || 
         s.typ == SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen
-    }).flat_map(|(seitenzahl, s)| {
+    })
+    .filter_map(|(num, s)| {
+        Some((num.parse::<u32>().ok()?, s))
+    })
+    .flat_map(|(seitenzahl, s)| {
     
         let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
     
@@ -3515,10 +3526,14 @@ pub fn analysiere_bv(
     .filter(|(num, s)| {
         s.typ == SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen || 
         s.typ == SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen
-    }).flat_map(|(seitenzahl, s)| {
+    })
+    .filter_map(|(num, s)| {
+        Some((num.parse::<u32>().ok()?, s))
+    })
+    .flat_map(|(seitenzahl, s)| {
     
         let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
             
@@ -3621,7 +3636,10 @@ pub fn bv_eintraege_roeten(
                 .and_then(|o| {
                     
                     let (im_width, im_height) = o.dimensions();
-                    let (page_width, page_height) = pdftotext_layout.seiten.get(&position_in_pdf.seite).map(|o| (o.breite_mm, o.hoehe_mm))?;
+                    let (page_width, page_height) = pdftotext_layout.seiten
+                        .get(&format!("{}", position_in_pdf.seite))
+                        .map(|o| (o.breite_mm, o.hoehe_mm))?;
+                    
                     let im_width = im_width as f32;
                     let im_height = im_height as f32;
                     
@@ -3855,8 +3873,8 @@ impl Abt1Eintrag {
 }
 
 pub fn analysiere_abt1(
-    seiten: &BTreeMap<u32, SeiteParsed>, 
-    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
+    seiten: &BTreeMap<String, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
 ) -> Result<Abteilung1, Fehler> {
     
@@ -3870,7 +3888,7 @@ pub fn analysiere_abt1(
     }).flat_map(|(seitenzahl, s)| {
     
         let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
         
@@ -3954,7 +3972,7 @@ pub fn analysiere_abt1(
     }).flat_map(|(seitenzahl, s)| {
     
         let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
         
@@ -4408,8 +4426,8 @@ impl Abt2Loeschung {
 }
 
 pub fn analysiere_abt2(
-    seiten: &BTreeMap<u32, SeiteParsed>, 
-    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
+    seiten: &BTreeMap<String, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
 ) -> Result<Abteilung2, Fehler> {
         
@@ -4423,7 +4441,7 @@ pub fn analysiere_abt2(
     }).flat_map(|(seitenzahl, s)| {
     
         let zeilen_auf_seite = anpassungen_seite
-        .get(&(*seitenzahl as usize))
+        .get(&format!("{}", seitenzahl))
         .map(|aps| aps.zeilen.clone())
         .unwrap_or_default();
         
@@ -4512,7 +4530,7 @@ pub fn analysiere_abt2(
     }).flat_map(|(seitenzahl, s)| {
 
         let zeilen_auf_seite = anpassungen_seite
-        .get(&(*seitenzahl as usize))
+        .get(&format!("{}", seitenzahl))
         .map(|aps| aps.zeilen.clone())
         .unwrap_or_default();
         
@@ -4668,8 +4686,8 @@ impl Abt3Loeschung {
 }
 
 pub fn analysiere_abt3(
-    seiten: &BTreeMap<u32, SeiteParsed>, 
-    anpassungen_seite: &BTreeMap<usize, AnpassungSeite>,
+    seiten: &BTreeMap<String, SeiteParsed>, 
+    anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis
 ) -> Result<Abteilung3, Fehler> {
     
@@ -4688,7 +4706,7 @@ pub fn analysiere_abt3(
     }).flat_map(|(seitenzahl, s)| {
     
         let zeilen_auf_seite = anpassungen_seite
-        .get(&(*seitenzahl as usize))
+        .get(&format!("{}", seitenzahl))
         .map(|aps| aps.zeilen.clone())
         .unwrap_or_default();
         
@@ -4804,7 +4822,7 @@ pub fn analysiere_abt3(
         if s.typ == SeitenTyp::Abt3VertVeraenderungen {
             
             let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
             
@@ -4894,7 +4912,7 @@ pub fn analysiere_abt3(
             };
             
             let zeilen_auf_seite = anpassungen_seite
-            .get(&(*seitenzahl as usize))
+            .get(&format!("{}", seitenzahl))
             .map(|aps| aps.zeilen.clone())
             .unwrap_or_default();
             
