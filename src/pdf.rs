@@ -319,10 +319,17 @@ pub enum Geroetet {
 }
 
 impl Geroetet {
-    fn hat_rot(&self) -> bool {
+    fn hat_links_rot(&self) -> bool {
         match self {
             Geroetet::Ganz(a) => *a,
-            Geroetet::HalbHalb(a, b) => *a || *b,
+            Geroetet::HalbHalb(a, _) => *a,
+        }
+    }
+    
+    fn hat_rechts_rot(&self) -> bool {
+        match self {
+            Geroetet::Ganz(a) => *a,
+            Geroetet::HalbHalb(_, b) => *b,
         }
     }
 }
@@ -354,7 +361,7 @@ impl PdfTextRow {
     
     fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts, y_start: f32) {
         
-        if self.geroetet.hat_rot() {
+        if self.geroetet.hat_links_rot() {
             layer.set_fill_color(Color::Cmyk(RED));
             layer.set_outline_color(Color::Cmyk(RED));
         }
@@ -366,7 +373,19 @@ impl PdfTextRow {
         
         let x_start_mm = self.header.get_starting_x_spalte_mm(0);
         
+        let col_id_half = self.texts.len() / 2;
+        
         for (col_id, text) in self.texts.iter().enumerate() {
+            
+            if col_id == col_id_half {
+                if self.geroetet.hat_rechts_rot() {
+                    layer.set_fill_color(Color::Cmyk(RED));
+                    layer.set_outline_color(Color::Cmyk(RED));
+                } else {
+                    layer.set_fill_color(Color::Cmyk(BLACK));
+                    layer.set_outline_color(Color::Cmyk(BLACK));
+                }
+            }
             
             let max_col_width_for_column = self.header.get_max_col_width(col_id);
             let text_broken_lines = wordbreak_text(&text, max_col_width_for_column);
@@ -388,9 +407,13 @@ impl PdfTextRow {
             layer.end_text_section();
         }
         
-        if self.geroetet.hat_rot() {
+        if self.geroetet.hat_links_rot() || 
+           self.geroetet.hat_rechts_rot() {
         
             let self_height = self.get_height_mm();
+            
+            layer.set_fill_color(Color::Cmyk(RED));
+            layer.set_outline_color(Color::Cmyk(RED));
             
             match self.geroetet {
                 Geroetet::Ganz(true) | Geroetet::HalbHalb(true, true) => {
@@ -477,7 +500,6 @@ impl PdfTextRow {
                 _ => { },
             }
             
-
             layer.set_fill_color(Color::Cmyk(BLACK));
             layer.set_outline_color(Color::Cmyk(BLACK));
         }
@@ -1053,7 +1075,7 @@ impl PdfHeader {
                 }
                 
                 let text_3 = &[
-                    ("3",    95.0_f64, 297.0_f64 - 34.5)
+                    ("3",    100.0_f64, 297.0_f64 - 34.5)
                 ];
                 
                 let text_3_header = Line {
@@ -1163,18 +1185,15 @@ impl PdfHeader {
             PdfHeader::BestandsverzeichnisZuAb => {
                 
                 let text_1 = &[
-                    ("Zur lfd.",    13.0_f64, 297.0_f64 - 22.0), 
-                    ("Nr. der",     14.0,     297.0 - 24.5),
-                    ("Grund-",      15.5,     297.0 - 27.0), 
-                    ("stücke",      14.0,     297.0 - 29.5), 
+                    ("Bestand und Zuschreibungen",    50.0_f64, 297.0_f64 - 20.7), 
                 ];
                 
                 let text_1_header = Line {
                     points: vec![
                         (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
-                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
-                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
-                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false)
                     ],
                     is_closed: true,
                     has_fill: false,
@@ -1184,6 +1203,31 @@ impl PdfHeader {
                 
                 layer.add_shape(text_1_header);
                 
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    14.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     14.0,     297.0 - 26.0),
+                    ("Grund-",      13.7,     297.0 - 28.5), 
+                    ("stücke",      14.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
                 
                 for (t, x, y) in text_1.iter() {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
@@ -1211,24 +1255,1369 @@ impl PdfHeader {
                 for (t, x, y) in text_1.iter() {
                     layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
                 }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("6",    60.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                // ----
+                
+                
+                let text_1 = &[
+                    ("Abschreibungen",    150.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    109.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     109.0,     297.0 - 26.0),
+                    ("Grund-",      108.7,     297.0 - 28.5), 
+                    ("stücke",      109.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("7",    112.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("8",    155.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
             },
             PdfHeader::Abteilung1 => {
-            
+                                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                
+                let text_1 = &[
+                    ("Lfd. Nr.",     13.5_f64, 297.0_f64 - 22.5), 
+                    ("der",         15.5,     297.0 - 25.0),
+                    ("Eintra-",     14.0,     297.0 - 27.5), 
+                    ("gungen",      13.5,     297.0 - 30.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("1",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Eigentümer",     55.0_f64, 297.0_f64 - 26.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("2",    60.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                // ----
+                                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                
+                let text_1 = &[
+                    ("Lfd. Nr. der",    107.7_f64, 297.0_f64 - 21.7), 
+                    ("Grundstücke",     106.7,     297.0 - 24.0),
+                    ("im Bestands-",    107.4,     297.0 - 26.5), 
+                    ("verzeichnis",     107.7,     297.0 - 29.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 5.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("3",    112.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Grundlage der Eintragungen",     147.5_f64, 297.0_f64 - 26.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("4",    160.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
             },
             PdfHeader::Abteilung1ZuAb => {
             
+                let text_1 = &[
+                    ("Veränderungen",    60.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    14.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     14.0,     297.0 - 26.0),
+                    ("Grund-",      13.7,     297.0 - 28.5), 
+                    ("stücke",      14.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("5",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("6",    60.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                // ----
+                
+                
+                let text_1 = &[
+                    ("Löschungen",    155.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    109.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     109.0,     297.0 - 26.0),
+                    ("Grund-",      108.7,     297.0 - 28.5), 
+                    ("stücke",      109.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("7",    112.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("8",    155.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
             },
             PdfHeader::Abteilung2 => {
-            
+                     
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                
+                let text_1 = &[
+                    ("Lfd. Nr.",     13.5_f64, 297.0_f64 - 22.5), 
+                    ("der",         15.5,     297.0 - 25.0),
+                    ("Eintra-",     14.0,     297.0 - 27.5), 
+                    ("gungen",      13.5,     297.0 - 30.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_1 = &[
+                    ("1",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("2",    32.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Lfd. Nr. der",    27.7_f64, 297.0_f64 - 20.7), 
+                    ("betroffenen",     27.2,     297.0 - 23.0),
+                    ("Grundstücke",     26.7,     297.0 - 25.5),
+                    ("im Bestands-",    27.2,     297.0 - 28.0), 
+                    ("verzeichnis",     27.7,     297.0 - 30.5), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 5.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Lasten und Beschränkungen",     105.5_f64, 297.0_f64 - 26.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_2 = &[
+                    ("3",    120.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
             },
             PdfHeader::Abteilung2ZuAb => {
-            
+                
+                let text_1 = &[
+                    ("Veränderungen",    50.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    14.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     14.0,     297.0 - 26.0),
+                    ("Grund-",      13.7,     297.0 - 28.5), 
+                    ("stücke",      14.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("4",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("5",    60.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                // ----
+                
+                
+                let text_1 = &[
+                    ("Löschungen",    145.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    109.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     109.0,     297.0 - 26.0),
+                    ("Grund-",      108.7,     297.0 - 28.5), 
+                    ("stücke",      109.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("6",    112.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("7",    155.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
             },
             PdfHeader::Abteilung3 => {
             
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                
+                let text_1 = &[
+                    ("Lfd. Nr.",     13.5_f64, 297.0_f64 - 22.5), 
+                    ("der",         15.5,     297.0 - 25.0),
+                    ("Eintra-",     14.0,     297.0 - 27.5), 
+                    ("gungen",      13.5,     297.0 - 30.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_1 = &[
+                    ("1",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("2",    32.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Lfd. Nr. der",    27.7_f64, 297.0_f64 - 20.7), 
+                    ("betroffenen",     27.2,     297.0 - 23.0),
+                    ("Grundstücke",     26.7,     297.0 - 25.5),
+                    ("im Bestands-",    27.2,     297.0 - 28.0), 
+                    ("verzeichnis",     27.7,     297.0 - 30.5), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 5.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Betrag",     60.5_f64, 297.0_f64 - 26.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(90.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_1 = &[
+                    ("Hypotheken, Grundschulden, Rentenschulden",     125.5_f64, 297.0_f64 - 26.0), 
+                ];
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(40.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(40.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                let text_2 = &[
+                    ("3",    62.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(90.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(90.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                let text_2 = &[
+                    ("4",    135.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
             },
             PdfHeader::Abteilung3ZuAb => {
-            
+                
+                let text_1 = &[
+                    ("Veränderungen",    50.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    14.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     14.0,     297.0 - 26.0),
+                    ("Grund-",      13.7,     297.0 - 28.5), 
+                    ("stücke",      14.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("5",    17.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("6",    60.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                // ----
+                
+                
+                let text_1 = &[
+                    ("Löschungen",    145.0_f64, 297.0_f64 - 20.7), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 18.5)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 18.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("Zur lfd.",    109.0_f64, 297.0_f64 - 23.7), 
+                    ("Nr. der",     109.0,     297.0 - 26.0),
+                    ("Grund-",      108.7,     297.0 - 28.5), 
+                    ("stücke",      109.0,     297.0 - 31.0), 
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(10.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(10.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(25.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                let text_1 = &[
+                    ("7",    112.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(105.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(105.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                for (t, x, y) in text_1.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
+                
+                
+                let text_1_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 21.5)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 21.5)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_1_header);
+                
+                let text_2 = &[
+                    ("8",    155.0_f64, 297.0_f64 - 34.5)
+                ];
+                
+                let text_2_header = Line {
+                    points: vec![
+                        (Point::new(Mm(120.0), Mm(297.0 - 32.0)), false),
+                        (Point::new(Mm(120.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 36.0)), false),
+                        (Point::new(Mm(200.0), Mm(297.0 - 32.0)), false)
+                    ],
+                    is_closed: true,
+                    has_fill: false,
+                    has_stroke: true,
+                    is_clipping_path: false,
+                };
+                
+                layer.add_shape(text_2_header);
+                
+                for (t, x, y) in text_2.iter() {
+                    layer.use_text(*t, 6.0, Mm(*x), Mm(*y), &fonts.helvetica);        
+                }
             },
         }
         

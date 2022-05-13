@@ -127,35 +127,67 @@ pub fn render_aenderung_diff(aenderungen: &GbxAenderungen, aktiv: usize) -> Stri
         let diff = prettydiff::diff_lines(&alt_json, &neu_json);
         let diff = diff.diff();
         let mut out = format!("<div>");
+        let mut lines = Vec::new();
         
         for c in diff {
             let _ = match c {
                 DiffOp::Insert(i) => {
                     for i in i.iter() {
-                        out.push_str(&format!("<span class='insert'><p>+</p><p>{}</p></span>", i.replace(" ", "&nbsp;")));
+                        lines.push(format!("<span class='insert'><p>+</p><p>{}</p></span>", i.replace(" ", "&nbsp;")));
                     }
                 },
                 DiffOp::Replace(old, new) => {
                     for old in old.iter() {
-                        out.push_str(&format!("<span class='remove'><p>-</p><p>{}</p></span>", old.replace(" ", "&nbsp;")));
+                        lines.push(format!("<span class='remove'><p>-</p><p>{}</p></span>", old.replace(" ", "&nbsp;")));
                     }
                     for new in new.iter() {
-                        out.push_str(&format!("<span class='insert'><p>+</p><p>{}</p></span>", new.replace(" ", "&nbsp;")));
+                        lines.push(format!("<span class='insert'><p>+</p><p>{}</p></span>", new.replace(" ", "&nbsp;")));
                     }
                 },
                 DiffOp::Remove(r) => {
                     for r in r.iter() {
-                        out.push_str(&format!("<span class='remove'><p>-</p><p>{}</p></span>", r.replace(" ", "&nbsp;")))
+                        lines.push(format!("<span class='remove'><p>-</p><p>{}</p></span>", r.replace(" ", "&nbsp;")))
                     }
                 },
                 DiffOp::Equal(e) => {
                     for e in e.iter() {
-                        out.push_str(&format!("<span class='equal'><p>&nbsp;</p><p>{}</p></span>", e.replace(" ", "&nbsp;")))
+                        lines.push(format!("<span class='equal'><p>&nbsp;</p><p>{}</p></span>", e.replace(" ", "&nbsp;")))
                     }
                 },
             };
         }
         
+        let lines_equal = lines.iter().enumerate().filter_map(|(num, line)| {
+            if line.contains("<span class='equal'>") { Some(num) } else { None }
+        }).collect::<Vec<_>>();
+        
+        let mut ranges = vec![(0, 0)];
+        let mut last_l = 0;
+        
+        for l in lines_equal.iter() {
+            
+            if l - last_l > 1 {
+                // start new range 
+                ranges.push((*l, *l));
+            }
+            
+            last_l = *l;
+            
+            if let Some((start, end)) = ranges.last_mut() {
+                *end = *l; 
+            }
+        }
+                
+        for (start, end) in ranges {
+            if end.saturating_sub(start) >= 5 {
+                for i in (start + 1)..(end - 1) {
+                    lines[i].clear();
+                }
+                lines[start + 2] = format!("<span class='snip'><p>&nbsp;</p><p>----</p></span>");
+            }
+        }
+        
+        out.push_str(&lines.join("\r\n"));
         out.push_str("</div>");
         out
     } else {
@@ -197,7 +229,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             let commit_description = if rpc_data.commit_msg.is_empty() { 
                 String::new() 
             } else { 
-                rpc_data.commit_msg.clone()
+                rpc_data.commit_msg.lines().map(|l| format!("<p>{l}</p>")).collect::<Vec<_>>().join("\r\n")
             };
             
             format!("
@@ -212,12 +244,14 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     
                     <div style='display:flex;font-size:16px;flex-direction:column;'>
                         <p style='font-size:16px;line-height:2;'>Beschreiben Sie ihre Änderungen:</p>
-                        <input type='text' id='__application_grundbuch_aenderung_commit_titel' required placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag XXX/XXXX\"' style='font-size:18px;font-family:monospace;font-weight:bold;border:1px solid #ccc;cursor:text;display:flex;flex-grow:1;' {commit_title}></input>
+                        <input type='text' oninput='editCommitTitle(event);' id='__application_grundbuch_aenderung_commit_titel' required placeholder='z.B. \"Korrektur aufgrund von Kaufvertrag XXX/XXXX\"' style='font-size:18px;font-family:monospace;font-weight:bold;border:1px solid #ccc;cursor:text;display:flex;flex-grow:1;' {commit_title}></input>
                     </div>
                     
                     <div style='display:flex;font-size:16px;flex-direction:column;'>
                         <p style='font-size:16px;line-height:2;'>Ausführliche Beschreibung der Änderung:</p>
-                        <div><p contenteditable='true' id='__application_grundbuch_aenderung_commit_description' style='border:1px solid #ccc;cursor:text;min-height:200px;flex-grow:1;display:flex;font-size:16px;font-family:monospace;font-weight:bold;'>{commit_description}</p>
+                        
+                        <div style='display:flex;flex-grow:1;flex-direction:column;background:white;border:1px solid #efefef;margin-top:5px;font-weight:bold;font-size:14px;font-family:monospace;color:black;padding:0px;min-height:200px;max-height:250px;overflow-y:scroll;'>
+                            <div style='padding-left:2px;caret-color: #4a4e6a;' contenteditable='true' onkeydown='insertTabAtCaret(event);' oninput='editCommitDescription(event);' id='__application_grundbuch_aenderung_commit_description'>{commit_description}</div>
                         </div>
                     </div>
                     

@@ -56,22 +56,120 @@ pub struct RpcData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadChangeset {
-    pub aenderung_titel: String,
-    pub aenderung_beschreibung: String,
-    pub neue_dateien: BTreeMap<FileName, PdfFile>,
-    pub geaenderte_dateien: BTreeMap<FileName, GbxAenderung>,
+    pub titel: String,
+    pub beschreibung: Vec<String>,
+    pub fingerprint: String,
+    pub signatur: Vec<String>,
+    pub data: UploadChangesetData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadChangesetData {
+    pub neu: Vec<PdfFile>,
+    pub geaendert: Vec<GbxAenderung>,
+}
+
+pub type DateTime = chrono::DateTime<chrono::Local>;
+
+impl UploadChangesetData {
+    pub fn format_patch(&self) -> Result<String, String> {
+        
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let hash_self = serde_json::to_string(&self).unwrap_or_default();        
+        let mut hasher = DefaultHasher::new();
+        hash_self.hash(&mut hasher);
+        let hash_self = hasher.finish();
+        let dir = std::env::temp_dir().join(format!("{:x}", hash_self));
+        let _ = std::fs::create_dir_all(dir.clone());
+        let repo = git2::Repository::init(dir.clone()).map_err(|e| format!("{e}"))?;
+        
+        for geaendert in self.geaendert.iter() {
+            let file_name = format!("{}_{}.gbx", geaendert.alt.titelblatt.grundbuch_von, geaendert.alt.titelblatt.blatt);
+            let json_alt = serde_json::to_string(&geaendert.alt)
+                .map_err(|e| format!("{e}"))?;
+            let _ = std::fs::write(dir.clone().join(file_name), json_alt.as_bytes())
+                .map_err(|e| format!("{e}"))?;
+        }
+        
+        let mut index = repo.index().map_err(|e| format!("{e}"))?;
+        let _ = index.add_all(["*.gbx"].iter(), git2::IndexAddOption::DEFAULT, None);
+        let _ = index.write();
+        
+        let signature = git2::Signature::now("Max Mustermann", "max@mustermann.de").map_err(|e| format!("{e}"))?;
+
+        let id = index.write_tree().map_err(|e| format!("{e}"))?;
+        let tree = repo.find_tree(id).map_err(|e| format!("{e}"))?;
+
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|c| c.target())
+            .and_then(|head_target| repo.find_commit(head_target).ok());
+
+        let parents = match parent.as_ref() {
+            Some(s) => vec![s],
+            None => Vec::new(),
+        };
+
+        let commit_id = repo
+            .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &parents)
+            .map_err(|e| format!("{e}"))?;
+        
+        for neu in self.neu.iter() {
+            let file_name = format!("{}_{}.gbx", neu.titelblatt.grundbuch_von, neu.titelblatt.blatt);
+            let json_alt = serde_json::to_string(&neu)
+                .map_err(|e| format!("{e}"))?;
+            let _ = std::fs::write(dir.clone().join(file_name), json_alt.as_bytes())
+                .map_err(|e| format!("{e}"))?;
+        }
+        
+        for geaendert in self.geaendert.iter() {
+            let file_name = format!("{}_{}.gbx", geaendert.neu.titelblatt.grundbuch_von, geaendert.neu.titelblatt.blatt);
+            let json_alt = serde_json::to_string(&geaendert.neu)
+                .map_err(|e| format!("{e}"))?;
+            let _ = std::fs::write(dir.clone().join(file_name), json_alt.as_bytes())
+                .map_err(|e| format!("{e}"))?;
+        }
+        
+        let diff = repo.diff_tree_to_workdir(Some(&tree), None)
+            .map_err(|e| format!("{e}"))?;
+            
+        let mut diff_str = String::new();    
+        diff.print(
+            git2::DiffFormat::Patch, 
+            |_, _, line| {
+                match line.origin() {
+                    '+' | '-' | ' ' => diff_str.push_str(&format!("{}", line.origin())),
+                    _ => { }
+                }
+                diff_str.push_str(&format!("{}", std::str::from_utf8(line.content()).unwrap_or("")));
+                true
+            }
+        ).map_err(|e| format!("{e}"))?;
+        
+        std::fs::remove_dir(dir).map_err(|e| format!("{e}"))?;
+        
+        Ok(diff_str)
+    }
+}
+
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status")]
 pub enum UploadChangesetResponse {
+    #[serde(rename = "ok")]
     StatusOk(UploadChangesetResponseOk),
+    #[serde(rename = "error")]
     StatusError(UploadChangesetResponseError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadChangesetResponseOk {
-    pub neu: BTreeMap<FileName, PdfFile>,
-    pub geaendert: BTreeMap<FileName, PdfFile>,
+    pub neu: Vec<PdfFile>,
+    pub geaendert: Vec<PdfFile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,14 +223,16 @@ impl RpcData {
     pub fn reset_diff_backup_files(&self, changed_files: &UploadChangesetResponseOk) {
         let path = Path::new(&Konfiguration::backup_dir()).join("backup");
         
-        for (file_name, new_state) in changed_files.neu.iter() {
+        for new_state in changed_files.neu.iter() {
             if let Ok(json) = serde_json::to_string_pretty(&new_state) {
+                let file_name = format!("{}_{}.gbx", new_state.titelblatt.grundbuch_von, new_state.titelblatt.blatt);
                 let _ = fs::write(path.clone().join(&format!("{file_name}.gbx")), json.as_bytes());
             }
         }
         
-        for (file_name, new_state) in changed_files.geaendert.iter() {
+        for new_state in changed_files.geaendert.iter() {
             if let Ok(json) = serde_json::to_string_pretty(&new_state) {
+                let file_name = format!("{}_{}.gbx", new_state.titelblatt.grundbuch_von, new_state.titelblatt.blatt);
                 let _ = fs::write(path.clone().join(&format!("{file_name}.gbx")), json.as_bytes());
             }
         }
@@ -544,6 +644,61 @@ fn default_passwort_speichern() -> bool {
     true 
 }
 
+pub mod pgp {
+
+    use std::io::Write;
+    use sequoia_openpgp::cert::prelude::*;
+    use sequoia_openpgp::serialize::stream::*;
+    use sequoia_openpgp::parse::{Parse, stream::*};
+    use sequoia_openpgp::policy::Policy;
+    use sequoia_openpgp::policy::StandardPolicy as P;
+
+    pub fn parse_cert(cert: &[u8]) -> Result<sequoia_openpgp::Cert, String> {
+        use std::convert::TryFrom;
+        use sequoia_openpgp::cert::prelude::*;
+        use sequoia_openpgp::parse::PacketParser;
+
+        let ppr = PacketParser::from_bytes(cert)
+        .map_err(|e| format!("{e}"))?;
+        
+        sequoia_openpgp::Cert::try_from(ppr)
+        .map_err(|e| format!("{e}"))
+    }
+
+    pub fn sign(
+        p: &dyn Policy, 
+        sink: &mut (dyn Write + Send + Sync), 
+        plaintext: &str, 
+        tsk: &sequoia_openpgp::Cert
+    ) -> sequoia_openpgp::Result<()> {
+        
+        // Get the keypair to do the signing from the Cert.
+        let keypair = tsk
+            .keys().unencrypted_secret()
+            .with_policy(p, None).supported().alive().revoked(false).for_signing()
+            .next().unwrap().key().clone().into_keypair()?;
+
+        // Start streaming an OpenPGP message.
+        let message = Message::new(sink);
+
+        // We want to sign a literal data packet.
+        let signer = Signer::new(message, keypair).detached().build()?;
+
+        // Emit a literal data packet.
+        let mut literal_writer = LiteralWriter::new(signer).build()?;
+
+        // Sign the data.
+        literal_writer.write_all(plaintext.as_bytes())?;
+
+        // Finalize the OpenPGP message to make sure that all data is
+        // written.
+        literal_writer.finalize()?;
+
+        Ok(())
+    }
+
+}
+
 impl Konfiguration {
 
     const DEFAULT: &'static str = include_str!("../Konfiguration.json");
@@ -553,6 +708,54 @@ impl Konfiguration {
         let _ = std::fs::create_dir_all(&format!("{}/backup/", Konfiguration::backup_dir()));
         let target_path = format!("{}/backup/{}.gbx", Konfiguration::backup_dir(), file_name);
         let _ = std::fs::write(&target_path, "".as_bytes());
+    }
+    
+    pub fn get_cert(&self) -> Result<sequoia_openpgp::Cert, String> {
+        
+        use sequoia_openpgp::policy::StandardPolicy as P;
+    
+        let p = &P::new();
+
+        let base64 = self.server_privater_schluessel_base64.as_ref()
+            .ok_or(format!("Kein privater Schlüssel in Konfiguration eingestellt"))?;
+        
+        let privater_schluessel_dekodiert = base64::decode(&base64)
+            .map_err(|e| format!("Privater Schlüssel ist nicht im richtigen Format: {e}"))?;
+        
+        let cert = self::pgp::parse_cert(&privater_schluessel_dekodiert)
+            .map_err(|e| format!("Privater Schlüssel ist nicht im richtigen Format: {e}"))?;
+    
+        let policy_cert = cert.with_policy(p, None)
+            .map_err(|e| format!("Privater Schlüssel ist nicht im richtigen Format: {e}"))?;
+        
+        if let Err(e) = policy_cert.alive() {
+            return Err(format!("Zertifikat ist abgelaufen: {e}"));
+        }
+        
+        Ok(cert)
+    }
+    
+    pub fn get_private_key_fingerprint(&self) -> Result<String, String> {
+        let cert = self.get_cert()?;
+        Ok(cert.fingerprint().to_hex())
+    }
+    
+    pub fn sign_message(&self, msg: &str) -> Result<Vec<String>, String> {
+    
+        use sequoia_openpgp::policy::StandardPolicy as P;
+    
+        let p = &P::new();
+        
+        let cert = self.get_cert()?;
+        let mut signature = Vec::new();
+        
+        self::pgp::sign(p, &mut signature, msg, &cert)
+            .map_err(|e| format!("{e}"))?;
+        
+        let sig_str = String::from_utf8(signature)
+            .map_err(|e| format!("Ungültige Signatur: {e}"))?;
+        
+        Ok(sig_str.lines().map(|s| s.trim().to_string()).collect())
     }
     
     pub fn get_passwort(&self) -> Option<String> {
@@ -1188,14 +1391,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
-            let download_id = urlencoding::encode(&download_id);
+            let download_id = download_id;
             let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+            
+            println!("url: {}", url);
             
             let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
                 Err(e) => {
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
-                    println!("fehler in response: {e:?}");
                     let fehler = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
                         &format!("Fehler beim Herunterladen von {download_id}"), 
@@ -1210,7 +1414,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(s) => s,
                 Err(e) => {
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
-                    println!("fehler in response: {e:?}");
                     let fehler = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
                         &format!("Fehler beim Herunterladen von {download_id}"), 
@@ -1220,14 +1423,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     return;
                 }
             };
-            
-            println!("json response:\r\n{text}");
-            
+                        
             let json = match serde_json::from_str::<PdfFileOrEmpty>(&text) {
                 Ok(s) => s,
                 Err(e) => {
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
-                    println!("fehler in json: {e:?}");
                     let fehler = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
                         &format!("Fehler beim Herunterladen von {download_id}"), 
@@ -1247,7 +1447,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     let _ = std::fs::write(&format!("{target_folder_path}/{file_name}.gbx"), serde_json::to_string_pretty(&json).unwrap_or_default());
                     data.create_diff_save_point(&file_name, json.clone());
                     data.loaded_files.insert(file_name.clone(), json.clone());
-                    data.open_page = Some((file_name.clone(), 2));                    
+                    data.open_page = Some((file_name.clone(), 2));       
+                    data.popover_state = None;
                     webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                     webview.eval("startCheckingForPdfErrors()");
                 },
@@ -1261,7 +1462,57 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
         },
         Cmd::UploadGbx => {
-        
+            
+            let fingerprint = match data.konfiguration.get_private_key_fingerprint() {
+                Ok(o) => o,
+                Err(e) => {
+                    tinyfiledialogs::message_box_ok(
+                        "Kein gültiges Zertifikat", 
+                        &format!("Zum Hochladen von Daten ist ein gültiges Schlüsselzertifikat notwendig.\r\nDas momentane Zertifikat ist ungültig oder existiert nicht (siehe Einstellungen / Konfigurations):\r\n{}", e), 
+                        MessageBoxIcon::Error
+                    );
+                    return;
+                }
+            };
+                    
+            let aenderungen = data.get_aenderungen();
+            if aenderungen.ist_leer() {
+                data.popover_state = None;
+                webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                return;
+            }
+
+            let d = UploadChangesetData {
+                neu: aenderungen.neue_dateien.values().cloned().collect(),
+                geaendert: aenderungen.geaenderte_dateien.values().cloned().collect(),
+            };
+
+            let patch = match d.format_patch() {
+                Ok(o) => o,
+                Err(e) => {
+                    tinyfiledialogs::message_box_ok(
+                        "Konnte Patch nicht erstellen", 
+                        &format!("Konnte .patch-Datei nicht erstellen:\r\n{e}"), 
+                        MessageBoxIcon::Error
+                    );
+                    return;
+                }
+            };
+            
+            println!("patch:\r\n{}", patch);
+            
+            let signatur = match data.konfiguration.sign_message(&patch) {
+                Ok(o) => o,
+                Err(e) => {
+                    tinyfiledialogs::message_box_ok(
+                        "Konnte Patch nicht unterzeichnen", 
+                        &format!("Konnte .patch-Datei nicht mit Schlüsselzertifikat unterschreiben:\r\n{e}"), 
+                        MessageBoxIcon::Error
+                    );
+                    return;
+                }
+            };
+            
             let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
                 None => return,
@@ -1273,23 +1524,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let url = format!("{server_url}/upload?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
-                    
-            let aenderungen = data.get_aenderungen();
-            if aenderungen.ist_leer() {
-                data.popover_state = None;
-                webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
-                return;
-            }
             
             let data_changes = UploadChangeset {
-                aenderung_titel: data.commit_title.clone(),
-                aenderung_beschreibung: data.commit_msg.clone(),
-                neue_dateien: aenderungen.neue_dateien,
-                geaenderte_dateien: aenderungen.geaenderte_dateien,
+                titel: data.commit_title.clone(),
+                beschreibung: data.commit_msg.lines().map(|s| s.trim().to_string()).collect(),
+                fingerprint,
+                signatur,
+                data: d,
             };
-            
-            println!("data_changes:\r\n{}\r\n{}", data.commit_title, data.commit_msg);
-            
+                        
             let client = reqwest::blocking::Client::new();
             let res = match client.post(url.clone())
                 .json(&data_changes)
@@ -2207,11 +2450,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 if (element) {{ element.focus(); }};
             }})();", next_focus));
         },
-        Cmd::EditCommitDescription { value } => {
-            data.commit_msg = value.clone();
-        },
         Cmd::EditCommitTitle { value } => {
             data.commit_title = value.trim().to_string();
+        },
+        Cmd::EditCommitDescription { value } => {
+            data.commit_msg = value.clone();
         },
         Cmd::EditKonfigurationTextField { id, value } => {
             match id.as_str() {
@@ -4098,8 +4341,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
                     ocr_text_final = Some(o); 
                 },
                 Err(e) => {
-                    println!("error: {:?}", e);
-                    continue
+                    continue;
                 },
             }
         } else {
@@ -4536,7 +4778,7 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     let server_email = urlencoding::encode(&konfiguration.server_email);
     let pkey = konfiguration.server_privater_schluessel_base64
         .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
-    let download_id = urlencoding::encode(&format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt));
+    let download_id = format!("{}/{}/{}.gbx", titelblatt.amtsgericht, titelblatt.grundbuch_von, titelblatt.blatt);
     let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
     let resp = reqwest::blocking::get(&url).ok()?;
     let json = resp.json::<PdfFileOrEmpty>().ok()?;
@@ -4577,8 +4819,6 @@ fn main() {
     };
     
     let _ = env::set_var("RAYON_NUM_THREADS", format!("{}", max_threads));
-
-    println!("setting RAYON_NUM_THREADS = {}", max_threads);
     
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(max_threads)

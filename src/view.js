@@ -168,6 +168,10 @@ setInterval(function(){
     }
 }, 100);
 
+function editCommitTitle(event) {
+    rpc.edit_commit_title(event.target.value);
+}
+
 function startCheckingForPdfErrors() {
     setInterval(function(){
         rpc.check_pdf_for_errors();
@@ -800,6 +804,18 @@ function editRechteArtScript(e) {
         rpc.edit_rechteart_script(innerText);        
     }
 
+}
+
+function editCommitDescription(e) {
+    // using innerText here because it preserves newlines
+    var innerText = e.target.innerText;
+    if(innerText[innerText.length-1] === '\n') {
+        innerText = innerText.slice(0,-1);     
+    }
+    
+    if (innerText) {
+        rpc.edit_commit_description(innerText);        
+    }
 }
 
 function editRangvermerkAuslesenAbt2Script(e) {
