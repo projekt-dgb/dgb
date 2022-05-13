@@ -601,8 +601,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                                 <input type='text' id='__application_konfiguration_datenbank_email' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;min-width:300px;' value='{server_email}' data-konfiguration-textfield='email' onchange='editKonfigurationTextField(event)'></input>
                             </div>
                             
-                            <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                            <div style='display:flex;flex-direction:row;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                                 <label style='font-size:20px;font-style:italic;'>Zertifikatsdatei</label>
+                                <div style='width:200px;'><p>{cert_sig}</p></div>
                                 <input type='file' class='btn btn_neu' id='__application_konfiguration_datenbank_private_key' onchange='editKonfigurationSchluesseldatei(event)' accept='.pfx'></input>
                                 <input type='button' value='Datei auswählen...' class='btn btn_neu' data-file-input-id='__application_konfiguration_datenbank_private_key' onclick='document.getElementById(event.target.dataset.fileInputId).click();' />
                             </div>´
@@ -612,6 +613,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     server_url = rpc_data.konfiguration.server_url,
                     server_benutzername = rpc_data.konfiguration.server_benutzer,
                     server_email = rpc_data.konfiguration.server_email,
+                    cert_sig = rpc_data.konfiguration.get_cert().map(|cert| cert.fingerprint().to_spaced_hex()).unwrap_or_default(),
                     vorschau_ohne_geroetet = if rpc_data.konfiguration.vorschau_ohne_geroetet { "checked" } else { "" },
                     spalten_einblenden = if !rpc_data.konfiguration.spalten_ausblenden { "checked" } else { "" },
                     zeilenumbrueche_in_ocr_text = if rpc_data.konfiguration.zeilenumbrueche_in_ocr_text { "checked" } else { "" },

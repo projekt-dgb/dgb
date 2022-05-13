@@ -34,6 +34,7 @@ reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"] }
 prettydiff = "0.6.1"
 sequoia-openpgp = { version = "1.8.0", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto", "compression"] }
 git2 = "0.14.4"
+rand = "0.8.5"
 
 [profile.release]
 opt-level = 3
@@ -53,7 +54,7 @@ features = ["auto-initialize"]
 
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
-depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6)"
+depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1)"
 section = "utility"
 priority = "optional"
 assets = [

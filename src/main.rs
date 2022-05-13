@@ -73,17 +73,27 @@ pub type DateTime = chrono::DateTime<chrono::Local>;
 
 impl UploadChangesetData {
     pub fn format_patch(&self) -> Result<String, String> {
+
+        use git2::RepositoryInitOptions;
+    
+        let random = rand::random::<u64>();
+        let dir = std::env::temp_dir().join("dgb").join(format!("{random}"));
+        let _ = std::fs::create_dir_all(&format!("{}", dir.display()));
+        let _ = std::process::Command::new("git")
+            .args(["init", &format!("{}", dir.display())])
+            .status();
         
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        let repo = match git2::Repository::open(&format!("{}", dir.display())) {
+            Ok(o) => o,
+            Err(_) => {
+                match git2::Repository::init_opts(format!("{}", dir.display()), &RepositoryInitOptions::new().mkdir(true).mkpath(true)) {
+                    Ok(o) => o,
+                    Err(e) => { return Err(format!("git init: {e}")); },
+                }
+            }
+        };
         
-        let hash_self = serde_json::to_string(&self).unwrap_or_default();        
-        let mut hasher = DefaultHasher::new();
-        hash_self.hash(&mut hasher);
-        let hash_self = hasher.finish();
-        let dir = std::env::temp_dir().join(format!("{:x}", hash_self));
-        let _ = std::fs::create_dir_all(dir.clone());
-        let repo = git2::Repository::init(dir.clone()).map_err(|e| format!("{e}"))?;
+        println!("repo erstellt: {}", dir.display());
         
         for geaendert in self.geaendert.iter() {
             let file_name = format!("{}_{}.gbx", geaendert.alt.titelblatt.grundbuch_von, geaendert.alt.titelblatt.blatt);
@@ -117,6 +127,8 @@ impl UploadChangesetData {
             .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &parents)
             .map_err(|e| format!("{e}"))?;
         
+        println!("commit erstellt!");
+        
         for neu in self.neu.iter() {
             let file_name = format!("{}_{}.gbx", neu.titelblatt.grundbuch_von, neu.titelblatt.blatt);
             let json_alt = serde_json::to_string(&neu)
@@ -135,7 +147,9 @@ impl UploadChangesetData {
         
         let diff = repo.diff_tree_to_workdir(Some(&tree), None)
             .map_err(|e| format!("{e}"))?;
-            
+        
+        println!("diff erstellt!");
+
         let mut diff_str = String::new();    
         diff.print(
             git2::DiffFormat::Patch, 
@@ -149,7 +163,7 @@ impl UploadChangesetData {
             }
         ).map_err(|e| format!("{e}"))?;
         
-        std::fs::remove_dir(dir).map_err(|e| format!("{e}"))?;
+        // std::fs::remove_dir(dir).map_err(|e| format!("{e}"))?;
         
         Ok(diff_str)
     }
@@ -1252,13 +1266,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let konfiguration = data.konfiguration.clone();
             
             for (_, d) in dateien {
-                if try_download_file_database(konfiguration.clone(), d.titelblatt.clone()).is_none() {
-                    let file_name = format!("{}_{}", d.titelblatt.grundbuch_von, d.titelblatt.blatt);
-                    tinyfiledialogs::message_box_ok(
-                        "Fehler beim Synchronisieren mit Datenbank", 
-                        &format!("Der aktuelle Stand von {file_name}.gbx konnte nicht aus der Datenbank geladen werden.\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
-                        MessageBoxIcon::Error
-                    );
+                if let Err(e) = try_download_file_database(konfiguration.clone(), d.titelblatt.clone()) {
+                    if let Some(msg) = e {
+                        let file_name = format!("{}_{}", d.titelblatt.grundbuch_von, d.titelblatt.blatt);
+                        tinyfiledialogs::message_box_ok(
+                            "Fehler beim Synchronisieren mit Datenbank", 
+                            &format!("Der aktuelle Stand von {file_name}.gbx konnte nicht aus der Datenbank geladen werden:\r\n{msg}\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
+                            MessageBoxIcon::Error
+                        );
+                    }
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                     return;
                 }
@@ -1392,10 +1408,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pkey = data.konfiguration.server_privater_schluessel_base64
                 .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let download_id = download_id;
-            let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
-            
-            println!("url: {}", url);
-            
+            let server_url = &data.konfiguration.server_url;
+            let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let url = format!("{server_url}/download/gbx/{download_id}?&email={server_email}&passwort={passwort}");
+                    
             let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
                 Err(e) => {
@@ -1452,10 +1468,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                     webview.eval("startCheckingForPdfErrors()");
                 },
-                PdfFileOrEmpty::NichtVorhanden => {
+                PdfFileOrEmpty::NichtVorhanden(err) => {
                     tinyfiledialogs::message_box_ok(
                         &format!("Fehler beim Herunterladen von {download_id}.gbx"), 
-                        &format!("{download_id}.gbx konnte nicht heruntergeladen werden:\r\nDatei ist auf Server nicht vorhanden."), 
+                        &format!("{download_id}.gbx konnte nicht heruntergeladen werden:\r\nE{}: {}", err.code, err.text), 
                         MessageBoxIcon::Error
                     );
                 }
@@ -4762,26 +4778,33 @@ pub enum PdfFileOrEmpty {
     #[serde(rename = "ok")]
     Pdf(PdfFile),
     #[serde(rename = "error")]
-    NichtVorhanden,
+    NichtVorhanden(PdfFileNichtVorhanden),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PdfFileNichtVorhanden {
+    pub code: usize,
+    pub text: String,
 }
 
 // Versucht eine Synchronisierung von  ~/.config/dgb/backup/XXX.gbx mit der Datenbank
-fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelblatt) -> Option<()> {
+fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelblatt) -> Result<(), Option<String>> {
 
     let passwort = match konfiguration.get_passwort() {
         Some(s) => s,
-        None => return None,
+        None => return Err(None),
     };
     
     let server_url = &konfiguration.server_url;
-    let server_benutzer = urlencoding::encode(&konfiguration.server_benutzer);
     let server_email = urlencoding::encode(&konfiguration.server_email);
-    let pkey = konfiguration.server_privater_schluessel_base64
-        .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
-    let download_id = format!("{}/{}/{}.gbx", titelblatt.amtsgericht, titelblatt.grundbuch_von, titelblatt.blatt);
-    let url = format!("{server_url}/download/{download_id}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
-    let resp = reqwest::blocking::get(&url).ok()?;
-    let json = resp.json::<PdfFileOrEmpty>().ok()?;
+    let download_id = format!("{}/{}/{}", titelblatt.amtsgericht, titelblatt.grundbuch_von, titelblatt.blatt);
+    let url = format!("{server_url}/download/gbx/{download_id}?&email={server_email}&passwort={passwort}");
+
+    let resp = reqwest::blocking::get(&url)
+        .map_err(|e| Some(format!("Fehler beim Downloaden von {url}: {e}")))?;
+    
+    let json = resp.json::<PdfFileOrEmpty>()
+        .map_err(|e| Some(format!("Ungültige Antwort: {e}")))?;
     
     match json {
         PdfFileOrEmpty::Pdf(json) => {
@@ -4789,13 +4812,18 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
             let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
             let _ = std::fs::write(target_folder_path.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
         },
-        PdfFileOrEmpty::NichtVorhanden => {
+        PdfFileOrEmpty::NichtVorhanden(err) => {
             let file_name = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
             konfiguration.create_empty_diff_save_point(&file_name);
+            if err.code == 404 {
+                return Ok(());
+            } else {
+                return Err(Some(format!("E{}: {}", err.code, err.text)));            
+            }
         }
     }
     
-    Some(())
+    Ok(())
 }
 
 fn main() {
