@@ -557,8 +557,8 @@ pub fn get_belastete_flurstuecke<'py>(
         );
     }
         
-    log.push(format!("<strong>&nbsp;&nbsp;Global Filter</strong>"));
-    debug_log.push_str(&format!("Global Filter:\r\n"));
+    log.push(format!("<strong>&nbsp;&nbsp;Filter:</strong>"));
+    debug_log.push_str(&format!("Filter:\r\n"));
 
     // Nur lastend an Flur X, Flurstück Y (-> keine BV-Nr.!)
     let mut global_nur_lastend = Vec::new();

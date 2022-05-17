@@ -119,18 +119,39 @@ pub fn export_grundbuch(config: GrundbuchExportConfig) -> Result<(), String> {
 fn export_grundbuch_single_file(options: PdfGrundbuchOptions, source: &PdfExportTyp, datei: String) -> Result<(), String> {
     match source {
         PdfExportTyp::AlleOriginalPdf(gb) => {
-            let mut files = Vec::new();
+            use std::process::Command;
+
+            // qpdf --empty --pages *.pdf -- out.pdf
+            if Command::new("qpdf").arg("--version").status().is_ok() {                
+                let mut command = Command::new("qpdf");
+                
+                command.arg("--empty");
+                command.arg("--pages");
+                
+                for d in gb {
+                    command.arg(d);
+                }
+                
+                command
+                .arg("--")
+                .arg(datei)
+                .status()
+                .map_err(|e| format!("Fehler beim PDF-Export: {e}"))?;
+                
+            } else {
+                let mut files = Vec::new();
             
-            for d in gb {
-                let bytes = std::fs::read(&d).map_err(|e| format!("Fehler: {}: {}", d, e))?;
-                let document = lopdf::Document::load_mem(&bytes).map_err(|e| format!("Fehler: {}: {}", d, e))?;
-                files.push(document);
+                for d in gb {
+                    let bytes = std::fs::read(&d).map_err(|e| format!("Fehler: {}: {}", d, e))?;
+                    let document = lopdf::Document::load_mem(&bytes).map_err(|e| format!("Fehler: {}: {}", d, e))?;
+                    files.push(document);
+                }
+                
+                let merged = merge_pdf_files(files).map_err(|e| format!("Fehler: {}: {}", datei, e))?;
+                
+                let _ = std::fs::write(Path::new(&datei), &merged)
+                .map_err(|e| format!("Fehler: {}: {}", datei, e))?;
             }
-            
-            let merged = merge_pdf_files(files).map_err(|e| format!("Fehler: {}: {}", datei, e))?;
-            
-            let _ = std::fs::write(Path::new(&datei), &merged)
-            .map_err(|e| format!("Fehler: {}: {}", datei, e))?;
         },
         PdfExportTyp::OffenesGrundbuch(gb) => {
             
