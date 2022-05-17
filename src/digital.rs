@@ -3615,9 +3615,7 @@ pub fn bv_eintraege_roeten(
         if bv.get_automatisch_geroetet().is_some() {
             return;
         }
-        
-        println!("automatisch röten!");
-        
+                
         let ist_geroetet = {
             if let Some(position_in_pdf) = bv.get_position_in_pdf() {
                 
@@ -3630,7 +3628,7 @@ pub fn bv_eintraege_roeten(
                 .join(&format!("{gemarkung}/{blatt}", gemarkung = titelblatt.grundbuch_von, blatt = titelblatt.blatt));
                 
                 let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-                let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(position_in_pdf.seite, max_seitenzahl)));
+                let pdftoppm_output_path = temp_ordner.clone().join(format!("page-{}.png", crate::digital::formatiere_seitenzahl(position_in_pdf.seite, max_seitenzahl)));
                 
                 match image::open(&pdftoppm_output_path).ok()
                 .and_then(|o| {
@@ -3646,8 +3644,16 @@ pub fn bv_eintraege_roeten(
                     Some(o.crop_imm(
                         (bv_rect.min_x / page_width * im_width).round() as u32, 
                         (bv_rect.min_y / page_height * im_height).round() as u32, 
-                        ((bv_rect.max_x - bv_rect.min_x).abs() / page_width * im_width).round() as u32, 
-                        ((bv_rect.max_y - bv_rect.min_y).abs() / page_height * im_height).round() as u32, 
+                        (
+                            (bv_rect.max_x - bv_rect.min_x).abs() / 
+                            page_width * 
+                            im_width
+                        ).round() as u32, 
+                        (
+                            (bv_rect.max_y - bv_rect.min_y).abs() / 
+                            page_height * 
+                            im_height
+                        ).round() as u32, 
                     ).to_rgb8())
                 }) {
                     Some(cropped) => cropped.pixels().any(|px| {                        

@@ -1,5 +1,5 @@
 use crate::{Titelblatt, Grundbuch, Abt2Eintrag, Abt3Eintrag};
-use crate::digitalisiere::BvEintrag;
+use crate::digital::BvEintrag;
 use printpdf::{
     BuiltinFont, PdfDocument, Mm, IndirectFontRef,
     PdfDocumentReference, PdfLayerReference,

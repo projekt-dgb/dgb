@@ -1,8 +1,9 @@
-<!doctype html>
-<html>
-    <head>
-        <meta charset="utf-8"/>
-        <style type="text/css">/*
+
+    <!doctype html>
+    <html>
+        <head>
+            <meta charset="utf-8" />
+            <style type="text/css">/*
  * The default style sheet used to render HTML.
  *
  * Copyright (C) 2000 Lars Knoll (knoll@kde.org)
@@ -1441,153 +1442,156 @@ slot {
 }
 
 /* noscript is handled internally, as it depends on settings. */
-* {
-    padding: 0px;
-    margin: 0px;
-    font-size: 14px;
 
-    cursor: default;
-    border: none;
-    outline: none;
-    color: #222222;
-    box-sizing: border-box;
-}
+    * {
+        padding: 0px;
+        margin: 0px;
+        font-size: 14px;
 
-body, html {
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  height: 100%;
-}
+        cursor: default;
+        border: none;
+        outline: none;
+        color: #222222;
+        box-sizing: border-box;
+    }
 
-body, body > * {
-  display: flex;
-  flex-direction: row;
-  margin: 0px;
-}
-
-body {
-  background: white;
-  max-height: 100%;
-  overflow: hidden;
-  flex-direction: column;
-}
-
-html {
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden;
-}
-
-textarea {
-    resize: none;
-}
-
-script {
-    display: none;
-}
-
-/* Chrome, Safari, Edge, Opera */
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-/* Firefox */
-input[type=number] {
-  -moz-appearance: textfield;
-}
-
-input[type="file"] {
-    display: none;
-}
-/* RIBBON BODY */
-.__application-ribbon-body {
-    height: 90px;
-    display: flex;
-    overflow:hidden;
-    flex-direction: row;
-    border-bottom: 1px solid #D5D5D5;
-    font-family: sans-serif;
-    padding: 2px;
-    font-size: 12px;
-    user-select:none;
-    -webkit-user-select:none;
-}
-
-.__application-ribbon-section {
-    padding: 0px 2px;
-    border-right: 1px solid #E1E1E1;
+    body, html {
     display: flex;
     flex-direction: column;
-}
-
-.__application-ribbon-section-content {
     flex-grow: 1;
-}
+    height: 100%;
+    }
 
-.__application-ribbon-section-name {
-    font-size: 11px;
-    color: #444444;
-    text-align: center;
-    min-width: 80px;
-}
-
-/* RIBBON BUTTONS*/
-.__application-ribbon-action-vertical-large {
-    flex-direction: column;
-    padding: 4px;
-    margin: 4px;
+    body, body > * {
     display: flex;
+    flex-direction: row;
+    margin: 0px;
+    }
+
+    body {
     background: white;
-    cursor: pointer;
-    border-radius: 2px;
-}
+    max-height: 100%;
+    overflow: hidden;
+    flex-direction: column;
+    }
 
-.__application-ribbon-action-vertical-large:hover {
-    box-shadow: 0px 0px 10px #ccc;
-    cursor: pointer;
-}
+    html {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    }
 
-.__application-ribbon-action-vertical-large .icon-wrapper {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    align-content: center;
-    font-size: 12px;
-    display: flex;
-    cursor: pointer;
-}
+    textarea {
+        resize: none;
+    }
 
-.__application-ribbon-action-vertical-large .icon-wrapper img.icon {
-    height: 32px;
-    width: 32px;
-    margin: 4px;
-    cursor: pointer;
-}
+    script {
+        display: none;
+    }
 
-.__application-ribbon-action-vertical-large p {
-    text-align: center;
-    align-items: center;
-    font-size: 12px;
-    cursor: pointer;
-}
+    /* Chrome, Safari, Edge, Opera */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+    }
 
-.__application-ribbon-action-vertical-large .dropdown {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    align-content: center;
-    cursor: pointer;
-}
+    /* Firefox */
+    input[type=number] {
+    -moz-appearance: textfield;
+    }
 
-.__application-ribbon-action-vertical-large .dropdown .icon {
-    height: 5px;
-    width: 5px;
-    background: salmon;
-    cursor: pointer;
-}
+    input[type="file"] {
+        display: none;
+    }
+
+
+    /* RIBBON BODY */
+    .__application-ribbon-body {
+        height: 90px;
+        display: flex;
+        overflow:hidden;
+        flex-direction: row;
+        border-bottom: 1px solid #D5D5D5;
+        font-family: sans-serif;
+        padding: 2px;
+        font-size: 12px;
+        user-select:none;
+        -webkit-user-select:none;
+    }
+
+    .__application-ribbon-section {
+        padding: 0px 2px;
+        border-right: 1px solid #E1E1E1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .__application-ribbon-section-content {
+        flex-grow: 1;
+    }
+
+    .__application-ribbon-section-name {
+        font-size: 11px;
+        color: #444444;
+        text-align: center;
+        min-width: 80px;
+    }
+
+    /* RIBBON BUTTONS*/
+    .__application-ribbon-action-vertical-large {
+        flex-direction: column;
+        padding: 4px;
+        margin: 4px;
+        display: flex;
+        background: white;
+        cursor: pointer;
+        border-radius: 2px;
+    }
+
+    .__application-ribbon-action-vertical-large:hover {
+        box-shadow: 0px 0px 10px #ccc;
+        cursor: pointer;
+    }
+
+    .__application-ribbon-action-vertical-large .icon-wrapper {
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        align-content: center;
+        font-size: 12px;
+        display: flex;
+        cursor: pointer;
+    }
+
+    .__application-ribbon-action-vertical-large .icon-wrapper img.icon {
+        height: 32px;
+        width: 32px;
+        margin: 4px;
+        cursor: pointer;
+    }
+
+    .__application-ribbon-action-vertical-large p {
+        text-align: center;
+        align-items: center;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    .__application-ribbon-action-vertical-large .dropdown {
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        align-content: center;
+        cursor: pointer;
+    }
+
+    .__application-ribbon-action-vertical-large .dropdown .icon {
+        height: 5px;
+        width: 5px;
+        background: salmon;
+        cursor: pointer;
+    }
 #__application-main {
 	display: flex;
 	flex-grow: 1;
@@ -2078,7 +2082,7 @@ img {
 }
         
 </style>
-        <script type="text/javascript">
+            <script type="text/javascript">
 "use strict";
 
 let rpc = {
@@ -3556,12 +3560,7 @@ document.querySelectorAll('*').forEach(function(node) {
 });*/
 
 </script>
-    </head>
- 
-    <!-- Body filled by JS / Rust -->
-    <body>
+        </head>
+        <body></body>
+    </html>
     
-      <!-- REPLACED_ON_STARTUP -->
-  
-    </body>
-</html>

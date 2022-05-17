@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use urlencoding::encode;
 use web_view::*;
 use serde_derive::{Serialize, Deserialize};
-use crate::digitalisiere::{
+use crate::digital::{
     SeiteParsed, Nebenbeteiligter, NebenbeteiligterExport,
     NebenbeteiligterExtra, NebenbeteiligterTyp, 
     Titelblatt, SeitenTyp, Grundbuch, Fehler,
@@ -20,7 +20,7 @@ use crate::digitalisiere::{
     Abt2Eintrag, Abt2Veraenderung, Abt2Loeschung,
     Abt3Eintrag, Abt3Veraenderung, Abt3Loeschung,
 };
-use crate::analysiere::GrundbuchAnalysiert;
+use crate::analyse::GrundbuchAnalysiert;
 use crate::kurztext::{PyBetrag, SchuldenArtPyWrapper, RechteArtPyWrapper};
 use pyo3::{Python, PyClass, PyAny, pyclass, pymethods, IntoPy, ToPyObject};
 use tinyfiledialogs::MessageBoxIcon;
@@ -31,8 +31,8 @@ const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
 type FileName = String;
 
 pub mod ui;
-pub mod digitalisiere;
-pub mod analysiere;
+pub mod digital;
+pub mod analyse;
 pub mod kurztext;
 pub mod pdf;
 
@@ -406,7 +406,6 @@ impl Default for RpcData {
                 vorschau_ohne_geroetet: false,
                 
                 server_url: default_server_url(),
-                server_benutzer: default_server_benutzer(),
                 server_email: default_server_email(),
                 server_privater_schluessel_base64: None,
                 passwort_speichern: true,
@@ -430,7 +429,6 @@ impl Default for RpcData {
 
 fn default_server_url() -> String { format!("https://127.0.0.1") }
 fn default_server_email() -> String { format!("max@mustermann.de") }
-fn default_server_benutzer() -> String { format!("Max Mustermann") }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdfFile {
@@ -558,7 +556,7 @@ impl PdfFile {
     }
     
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
-        let analysiert = crate::analysiere::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
         
         self.ist_geladen()
         && analysiert.abt2.iter().all(|e| e.fehler.is_empty())
@@ -566,7 +564,7 @@ impl PdfFile {
     }
     
     pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
-        let analysiert = crate::analysiere::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
 
         let any_abt2 = analysiert.abt2.iter()
             .any(|e| e.warnungen.iter().any(|w| w == "Konnte keine Ordnungsnummer finden"));
@@ -580,7 +578,7 @@ impl PdfFile {
     pub fn get_nebenbeteiligte(&self, konfiguration: &Konfiguration) -> Vec<NebenbeteiligterExport> {
         let mut v = Vec::new();
         
-        let analysiert = crate::analysiere::analysiere_grundbuch(&self.analysiert, &[], konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, &[], konfiguration);
         
         for abt2 in &analysiert.abt2 {
             if !abt2.rechtsinhaber.is_empty() {
@@ -622,8 +620,6 @@ pub struct Konfiguration {
     pub vorschau_ohne_geroetet: bool,
     #[serde(default = "default_server_url")]
     pub server_url: String,
-    #[serde(default = "default_server_benutzer")]
-    pub server_benutzer: String,
     #[serde(default = "default_server_email")]
     pub server_email: String,
     #[serde(default)]
@@ -1149,7 +1145,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     }
                 } else {
                 
-                    let mut seitenzahlen = match digitalisiere::lese_seitenzahlen(&datei_bytes) {
+                    let mut seitenzahlen = match digital::lese_seitenzahlen(&datei_bytes) {
                         Ok(o) => o,
                         Err(e) => {
                             continue;
@@ -1158,7 +1154,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     
                     let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
 
-                    let titelblatt = match digitalisiere::lese_titelblatt(&datei_bytes) {
+                    let titelblatt = match digital::lese_titelblatt(&datei_bytes) {
                         Ok(o) => o,
                         Err(_) => {
                             continue;
@@ -1240,7 +1236,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
             }
                         
-            digitalisiere_dateien(pdf_zu_laden);
+            digital_dateien(pdf_zu_laden);
         },
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
@@ -1346,12 +1342,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let server_url = &data.konfiguration.server_url;
-            let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let pkey = data.konfiguration.server_privater_schluessel_base64
-                .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let search_text = urlencoding::encode(&search_text);
-            let url = format!("{server_url}/suche/{search_text}?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+            let url = format!("{server_url}/suche/{search_text}?email={server_email}&passwort={passwort}");
 
             let client = reqwest::blocking::Client::new();
             let res = client
@@ -1403,14 +1396,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let server_url = &data.konfiguration.server_url;
-            let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let pkey = data.konfiguration.server_privater_schluessel_base64
-                .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
             let download_id = download_id;
             let server_url = &data.konfiguration.server_url;
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let url = format!("{server_url}/download/gbx/{download_id}?&email={server_email}&passwort={passwort}");
+            let url = format!("{server_url}/download/gbx/{download_id}?email={server_email}&passwort={passwort}");
                     
             let resp = match reqwest::blocking::get(&url) {
                 Ok(s) => s,
@@ -1535,11 +1525,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             };
             
             let server_url = &data.konfiguration.server_url;
-            let server_benutzer = urlencoding::encode(&data.konfiguration.server_benutzer);
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let pkey = data.konfiguration.server_privater_schluessel_base64
-                .as_ref().map(|b| format!("&pkey={b}")).unwrap_or_default();
-            let url = format!("{server_url}/upload?benutzer={server_benutzer}&email={server_email}&passwort={passwort}{pkey}");
+            let url = format!("{server_url}/upload?email={server_email}&passwort={passwort}");
             
             let data_changes = UploadChangeset {
                 titel: data.commit_title.clone(),
@@ -1613,15 +1600,15 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
             let pdftoppm_output_path = if data.konfiguration.vorschau_ohne_geroetet {
-                temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+                temp_ordner.clone().join(format!("page-clean-{}.png", crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
             } else {
-                temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+                temp_ordner.clone().join(format!("page-{}.png", crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
             };
             
             if !pdftoppm_output_path.exists() {
                 if let Some(pdf) = file.datei.as_ref() {
                     if let Ok(o) = std::fs::read(&pdf) {
-                        let _ = crate::digitalisiere::konvertiere_pdf_seite_zu_png_prioritaet(
+                        let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                             &o, 
                             &[open_file.1], 
                             &file.titelblatt, 
@@ -1673,7 +1660,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 }
             }
             
-            use crate::digitalisiere::FlurstueckGroesse;
+            use crate::digital::FlurstueckGroesse;
             
             let new_value = new_value
                 .lines()
@@ -2056,7 +2043,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },
         Cmd::BvEintragTypAendern { path, value } => {
         
-            use crate::digitalisiere::{BvEintragFlurstueck, BvEintragRecht};
+            use crate::digital::{BvEintragFlurstueck, BvEintragRecht};
 
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
                 Some(s) => s,
@@ -2480,9 +2467,6 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "email" => {
                     data.konfiguration.server_email = value.trim().to_string();
                 },
-                "benutzername" => {
-                    data.konfiguration.server_benutzer = value.trim().to_string();
-                },
                 _ => { return; }
             }
             
@@ -2638,7 +2622,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 let default_bv = Vec::new();
                 let open_file = data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file));
             
-                let bv_eintraege = crate::analysiere::get_belastete_flurstuecke(
+                let bv_eintraege = crate::analyse::get_belastete_flurstuecke(
                     py,
                     bv_nr,
                     &text_sauber,
@@ -2880,7 +2864,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             seite, 
             klassifikation_neu 
         } => {
-            use crate::digitalisiere::SeitenTyp::*;
+            use crate::digital::SeitenTyp::*;
                         
             let open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
                 Some(s) => s,
@@ -2955,7 +2939,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             use std::fs::File;
             use std::process::Command;
             use image::ImageOutputFormat;
-            use crate::digitalisiere::{formatiere_seitenzahl, zeilen_aus_tesseract_hocr};
+            use crate::digital::{formatiere_seitenzahl, zeilen_aus_tesseract_hocr};
             
             let file = match data.loaded_files.get_mut(file_name.as_str()) {
                 Some(s) => s,
@@ -2974,12 +2958,12 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
 
-            let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(*page as u32, max_seitenzahl)));
+            let pdftoppm_output_path = temp_ordner.clone().join(format!("page-clean-{}.png", crate::digital::formatiere_seitenzahl(*page as u32, max_seitenzahl)));
             
             if !Path::new(&pdftoppm_output_path).exists() {
                 if let Some(pdf) = file.datei.as_ref() {
                     if let Ok(o) = std::fs::read(&pdf) {
-                        let _ = crate::digitalisiere::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], max_seitenzahl, &file.titelblatt);
+                        let _ = crate::digital::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], max_seitenzahl, &file.titelblatt);
                     }
                 }
             }
@@ -3639,7 +3623,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             let analysiert = data.loaded_files.values().map(|file| {
                 LefisDateiExport {
-                    rechte: crate::analysiere::analysiere_grundbuch(&file.analysiert, &data.loaded_nb, &data.konfiguration),
+                    rechte: crate::analyse::analysiere_grundbuch(&file.analysiert, &data.loaded_nb, &data.konfiguration),
                     titelblatt: file.analysiert.titelblatt.clone(),
                 }
             }).collect::<Vec<_>>();
@@ -3771,7 +3755,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
                 rayon::spawn(move || {
 
-                    use crate::digitalisiere::konvertiere_pdf_seiten_zu_png;
+                    use crate::digital::konvertiere_pdf_seiten_zu_png;
         
                     let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
 
@@ -3923,7 +3907,7 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
     
     for (f_name, f) in data.loaded_files.iter() {
         
-        let gb_analysiert = crate::analysiere::analysiere_grundbuch(
+        let gb_analysiert = crate::analyse::analysiere_grundbuch(
             &f.analysiert, 
             &data.loaded_nb, 
             &data.konfiguration
@@ -4051,7 +4035,7 @@ fn get_rangvermerke_tsv(data: &RpcData) -> String {
     let mut entries = Vec::new();
     
     for (f_name, f) in data.loaded_files.iter() {
-        let analysiert = crate::analysiere::analysiere_grundbuch(&f.analysiert, &[], &data.konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(&f.analysiert, &[], &data.konfiguration);
         
         for a2 in analysiert.abt2 {
             if let Some(s) = a2.rangvermerk {
@@ -4117,7 +4101,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
     tsv
 }
 
-fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
+fn digital_dateien(pdfs: Vec<PdfFile>) {
     
     std::thread::spawn(move || {
         for mut pdf in pdfs {
@@ -4171,13 +4155,13 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                             
                 let _ = std::fs::write(&cache_output_path, json.as_bytes());
                 
-                let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &seitenzahlen_zu_laden, max_sz, &pdf.titelblatt);
+                let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &seitenzahlen_zu_laden, max_sz, &pdf.titelblatt);
                         
                 for sz in seitenzahlen_zu_laden {
                     
                     pdf.seiten_versucht_geladen.insert(sz);
                     
-                    let pdftotext_layout = match digitalisiere::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { 
+                    let pdftotext_layout = match digital::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { 
                         Ok(o) => o, 
                         Err(_) => continue, 
                     };
@@ -4193,7 +4177,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                     let mut ocr_text_final = None;
                     
                     if ocr_text_cached.is_none() {
-                        match digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz) {
+                        match digital::ocr_seite(&pdf.titelblatt, sz, max_sz) {
                             Ok(o) => { 
                                 pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
                                 ocr_text_final = Some(o); 
@@ -4207,14 +4191,14 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                     let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)) {
                         Some(s) => *s,
                         None => {
-                            match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
+                            match digital::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
                                 Ok(o) => o, 
                                 Err(_) => continue, 
                             }
                         }
                     };
                     
-                    let spalten = match digitalisiere::formularspalten_ausschneiden(
+                    let spalten = match digital::formularspalten_ausschneiden(
                         &pdf.titelblatt, 
                         sz, 
                         max_sz, 
@@ -4226,9 +4210,9 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         Err(_) => continue, 
                     };
                     
-                    if digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
+                    if digital::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
                     
-                    let textbloecke = match digitalisiere::textbloecke_aus_spalten(
+                    let textbloecke = match digital::textbloecke_aus_spalten(
                         &pdf.titelblatt, 
                         sz, 
                         max_sz,
@@ -4245,7 +4229,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                         texte: textbloecke,
                     });
 
-                    pdf.analysiert = match analysiere_grundbuch(&pdf) { 
+                    pdf.analysiert = match analyse_grundbuch(&pdf) { 
                         Some(o) => o, 
                         None => continue, 
                     };
@@ -4258,7 +4242,7 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
                     let _ = std::fs::write(&cache_output_path, json.as_bytes());
                 }
                 
-                crate::digitalisiere::bv_eintraege_roeten(
+                crate::digital::bv_eintraege_roeten(
                     &mut pdf.analysiert.bestandsverzeichnis.eintraege, 
                     &pdf.titelblatt, 
                     max_sz, 
@@ -4278,12 +4262,12 @@ fn digitalisiere_dateien(pdfs: Vec<PdfFile>) {
     });
 }
 
-fn analysiere_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
+fn analyse_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
 
-    let bestandsverzeichnis = digitalisiere::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite).ok()?;
-    let mut abt1 = digitalisiere::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
-    let abt2 = digitalisiere::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
-    let abt3 = digitalisiere::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let bestandsverzeichnis = digital::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite).ok()?;
+    let mut abt1 = digital::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let abt2 = digital::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let abt3 = digital::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
     
     abt1.migriere_v2();
     
@@ -4337,7 +4321,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
     let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
     let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
     
-    crate::digitalisiere::bv_eintraege_roetungen_loeschen(
+    crate::digital::bv_eintraege_roetungen_loeschen(
         &mut pdf.analysiert.bestandsverzeichnis.eintraege
     );
     
@@ -4345,13 +4329,13 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         
         pdf.seiten_versucht_geladen.insert(sz);
 
-        let _ = digitalisiere::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], max_sz, &pdf.titelblatt)?;
+        let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], max_sz, &pdf.titelblatt)?;
                    
         let ocr_text_cached = pdf.seiten_ocr_text.get(&format!("{}", sz)).cloned();
         let mut ocr_text_final = None;
         
         if ocr_text_cached.is_none() {
-            match digitalisiere::ocr_seite(&pdf.titelblatt, sz, max_sz) {
+            match digital::ocr_seite(&pdf.titelblatt, sz, max_sz) {
                 Ok(o) => { 
                     pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
                     ocr_text_final = Some(o); 
@@ -4367,7 +4351,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)).cloned() {
             Some(s) => s,
             None => {
-                match digitalisiere::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
+                match digital::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
                     Ok(o) => o, 
                     Err(_) => continue, 
                 }
@@ -4376,7 +4360,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         
         pdf.klassifikation_neu.insert(format!("{}", sz), seitentyp);
                         
-        let spalten = match digitalisiere::formularspalten_ausschneiden(
+        let spalten = match digital::formularspalten_ausschneiden(
             &pdf.titelblatt, 
             sz, 
             max_sz, 
@@ -4388,9 +4372,9 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             Err(e) => continue, 
         };
                 
-        let _ = digitalisiere::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten)?;
+        let _ = digital::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten)?;
 
-        let textbloecke = digitalisiere::textbloecke_aus_spalten(
+        let textbloecke = digital::textbloecke_aus_spalten(
             &pdf.titelblatt, 
             sz, 
             max_sz,
@@ -4404,12 +4388,12 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             texte: textbloecke.clone(),
         });
 
-        pdf.analysiert = match analysiere_grundbuch(&pdf) { 
+        pdf.analysiert = match analyse_grundbuch(&pdf) { 
             Some(o) => o, 
             None => continue, 
         };
         
-        crate::digitalisiere::bv_eintraege_roeten(
+        crate::digital::bv_eintraege_roeten(
             &mut pdf.analysiert.bestandsverzeichnis.eintraege, 
             &pdf.titelblatt, 
             max_sz, 
@@ -4424,12 +4408,12 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         let _ = std::fs::write(&cache_output_path, json.as_bytes());
     }
         
-    pdf.analysiert = match analysiere_grundbuch(&pdf) { 
+    pdf.analysiert = match analyse_grundbuch(&pdf) { 
         Some(o) => o, 
         None => return Ok(()), 
     };
     
-    crate::digitalisiere::bv_eintraege_roeten(
+    crate::digital::bv_eintraege_roeten(
         &mut pdf.analysiert.bestandsverzeichnis.eintraege, 
         &pdf.titelblatt, 
         max_sz, 
@@ -4798,7 +4782,7 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     let server_url = &konfiguration.server_url;
     let server_email = urlencoding::encode(&konfiguration.server_email);
     let download_id = format!("{}/{}/{}", titelblatt.amtsgericht, titelblatt.grundbuch_von, titelblatt.blatt);
-    let url = format!("{server_url}/download/gbx/{download_id}?&email={server_email}&passwort={passwort}");
+    let url = format!("{server_url}/download/gbx/{download_id}?email={server_email}&passwort={passwort}");
 
     let resp = reqwest::blocking::get(&url)
         .map_err(|e| Some(format!("Fehler beim Downloaden von {url}: {e}")))?;

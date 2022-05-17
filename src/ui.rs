@@ -1,7 +1,7 @@
 use crate::{
     RpcData, PdfFile, GrundbuchSucheResponse,
     Konfiguration, PopoverState, GbxAenderungen,
-    digitalisiere::{
+    digital::{
         Nebenbeteiligter,
         BvZuschreibung,
         BvAbschreibung,
@@ -592,11 +592,6 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             </div>
                     
                             <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
-                                <label style='font-size:20px;font-style:italic;'>Benutzername</label>
-                                <input type='text' id='__application_konfiguration_datenbank_benutzername' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;min-width:300px;' value='{server_benutzername}' data-konfiguration-textfield='benutzername' onchange='editKonfigurationTextField(event)'></input>
-                            </div>
-                            
-                            <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                                 <label style='font-size:20px;font-style:italic;'>E-Mail</label>
                                 <input type='text' id='__application_konfiguration_datenbank_email' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;min-width:300px;' value='{server_email}' data-konfiguration-textfield='email' onchange='editKonfigurationTextField(event)'></input>
                             </div>
@@ -611,7 +606,6 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     </div>
                 ",
                     server_url = rpc_data.konfiguration.server_url,
-                    server_benutzername = rpc_data.konfiguration.server_benutzer,
                     server_email = rpc_data.konfiguration.server_email,
                     cert_sig = rpc_data.konfiguration.get_cert().map(|cert| cert.fingerprint().to_spaced_hex()).unwrap_or_default(),
                     vorschau_ohne_geroetet = if rpc_data.konfiguration.vorschau_ohne_geroetet { "checked" } else { "" },
@@ -1575,7 +1569,7 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
     
     let pages_div = open_file.seitenzahlen.iter().map(|page_num| {
     
-        use crate::digitalisiere::SeitenTyp;
+        use crate::digital::SeitenTyp;
         
         let page_is_loaded = open_file.geladen.contains_key(&format!("{}", page_num));
         let page_is_active = rpc_data.open_page.as_ref().map(|s| s.1) == Some(*page_num);
@@ -1759,7 +1753,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
     let warnung_str = format!("data:image/png;base64,{}", base64::encode(&WARNUNG_PNG));
     let fehler_str = format!("data:image/png;base64,{}", base64::encode(&FEHLER_PNG));
 
-    let gb_analysiert = crate::analysiere::analysiere_grundbuch(&open_file.analysiert, nb, konfiguration);
+    let gb_analysiert = crate::analyse::analysiere_grundbuch(&open_file.analysiert, nb, konfiguration);
     
     normalize_for_js(format!("
         <div style='margin:10px;min-width:600px;'>
@@ -1815,7 +1809,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                 },
                 belastete_flurstuecke = 
                     a2a.belastete_flurstuecke.iter().map(|belastet| {
-                        use crate::digitalisiere::BvEintrag;
+                        use crate::digital::BvEintrag;
                         match belastet {
                             BvEintrag::Flurstueck(flst) => {
                                 format!("<span style='display:flex;align-items:center;max-width:200px;'>
@@ -1921,7 +1915,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                 },
                 belastete_flurstuecke = 
                     a3a.belastete_flurstuecke.iter().map(|belastet| {
-                        use crate::digitalisiere::BvEintrag;
+                        use crate::digital::BvEintrag;
                         match belastet {
                             BvEintrag::Flurstueck(flst) => {
                                 format!("<span style='display:flex;align-items:center;'>
@@ -1990,7 +1984,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
 
 pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfiguration) -> String {
     
-    use crate::digitalisiere::BvEintrag;
+    use crate::digital::BvEintrag;
 
     let mut bestandsverzeichnis = open_file.analysiert.bestandsverzeichnis.clone();
     if bestandsverzeichnis.eintraege.is_empty() {
@@ -2292,7 +2286,7 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
 }
 
 pub fn render_abt_1(open_file: &PdfFile) -> String {
-    use crate::digitalisiere::Abt1Eintrag;
+    use crate::digital::Abt1Eintrag;
     
     let mut abt1_eintraege = open_file.analysiert.abt1.eintraege.clone();
     if abt1_eintraege.is_empty() {
@@ -2363,7 +2357,7 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
 
 pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
     
-    use crate::digitalisiere::Abt1GrundEintragung;
+    use crate::digital::Abt1GrundEintragung;
     
     let mut abt1_eintraege = open_file.analysiert.abt1.grundlagen_eintragungen.clone();
     if abt1_eintraege.is_empty() {
@@ -2552,7 +2546,7 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_abt_2(open_file: &PdfFile) -> String {
-    use crate::digitalisiere::Abt2Eintrag;
+    use crate::digital::Abt2Eintrag;
     
     let mut abt2_eintraege = open_file.analysiert.abt2.eintraege.clone();
     if abt2_eintraege.is_empty() {
@@ -2745,7 +2739,7 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
-    use crate::digitalisiere::Abt3Eintrag;
+    use crate::digital::Abt3Eintrag;
 
     let mut abt3_eintraege = open_file.analysiert.abt3.eintraege.clone();
     if abt3_eintraege.is_empty() {
@@ -2991,9 +2985,9 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     
     let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
     let pdftoppm_output_path = if rpc_data.konfiguration.vorschau_ohne_geroetet {
-        temp_ordner.clone().join(format!("page-clean-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+        temp_ordner.clone().join(format!("page-clean-{}.png", crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
     } else {
-        temp_ordner.clone().join(format!("page-{}.png", crate::digitalisiere::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
+        temp_ordner.clone().join(format!("page-{}.png", crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
     };
     
     let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {

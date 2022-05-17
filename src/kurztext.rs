@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde_derive::{Serialize, Deserialize};
-use crate::{Konfiguration, analysiere::{Betrag, Waehrung}};
+use crate::{Konfiguration, analyse::{Betrag, Waehrung}};
 use pyo3::pyclass;
 use pyo3::prelude::*;
 

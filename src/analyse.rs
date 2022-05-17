@@ -1,5 +1,5 @@
 use crate::{Grundbuch, Titelblatt, Konfiguration};
-use crate::digitalisiere::{Nebenbeteiligter, NebenbeteiligterExtra, BvEintrag};
+use crate::digital::{Nebenbeteiligter, NebenbeteiligterExtra, BvEintrag};
 use crate::kurztext::{self, SchuldenArt, RechteArt};
 use serde_derive::{Serialize, Deserialize};
 use std::collections::BTreeMap;
