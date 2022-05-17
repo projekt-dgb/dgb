@@ -335,6 +335,7 @@ pub struct PdfTextRow {
     pub geroetet: Geroetet,
     pub teil_geroetet: BTreeMap<usize, String>,
     pub force_single_line: Vec<usize>,
+    pub hvm_exception: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -363,6 +364,7 @@ const EXTENT_PER_LINE: f32 = 3.53;
 const EXTENT_PER_LINE_X: f32 = 2.2;
 const RED: Cmyk = Cmyk { c: 0.0, m: 0.7, y: 0.4, k: 0.0, icc_profile: None };
 const BLACK: Cmyk = Cmyk { c: 0.0, m: 0.0, y: 0.0, k: 1.0, icc_profile: None };
+const WHITE: Cmyk = Cmyk { c: 0.0, m: 0.0, y: 0.0, k: 0.0, icc_profile: None };
 
 impl PdfTextRow {
     
@@ -382,6 +384,7 @@ impl PdfTextRow {
         .map(|s| (s * 1000.0).round() as usize)
         .max()
         .unwrap_or(0) as f32 / 1000.0_f32
+        + if self.hvm_exception { 5.0 } else { 0.0 }
     }
     
     fn add_to_page(&self, layer: &mut PdfLayerReference, fonts: &PdfFonts, y_start: f32) {
@@ -395,10 +398,28 @@ impl PdfTextRow {
         layer.set_line_height(10.0);
 
         let max_width_mm = self.header.get_max_width_mm();
-        
+        let self_height = self.get_height_mm();
         let x_start_mm = self.header.get_starting_x_spalte_mm(0);
-        
         let col_id_half = self.texts.len() / 2;
+        
+        if self.hvm_exception {
+            layer.save_graphics_state();
+            layer.set_outline_thickness(0.75);
+            layer.set_fill_color(Color::Cmyk(WHITE));
+            layer.add_shape(Line {
+                points: vec![
+                    (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64)), false),
+                    (Point::new(Mm(x_start_mm as f64), Mm(y_start as f64 - self_height as f64)), false),
+                    (Point::new(Mm(x_start_mm as f64 + max_width_mm as f64), Mm(y_start as f64 - self_height as f64)), false),
+                    (Point::new(Mm(x_start_mm as f64 + max_width_mm as f64), Mm(y_start as f64 - self_height as f64)), false)
+                ],
+                is_closed: true,
+                has_fill: true,
+                has_stroke: true,
+                is_clipping_path: false,
+            });
+            layer.restore_graphics_state();
+        }
         
         for (col_id, text) in self.texts.iter().enumerate() {
             
@@ -417,7 +438,7 @@ impl PdfTextRow {
             layer.begin_text_section();
             layer.set_text_cursor(
                 Mm((self.header.get_starting_x_spalte_mm(col_id) + 1.0) as f64),
-                Mm(y_start as f64),
+                Mm(y_start as f64 + if self.hvm_exception { 5.0 } else { 0.0 }),
             );
             
             if self.force_single_line.contains(&col_id) {
@@ -2692,10 +2713,24 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                         header: PdfHeader::Bestandsverzeichnis,
                         geroetet: Geroetet::Ganz(bv.ist_geroetet()),
                         teil_geroetet: BTreeMap::new(),
-                        force_single_line: vec![6]
+                        force_single_line: vec![6],
+                        hvm_exception: false,
                     });
                 },
                 BvEintrag::Recht(hvm) => {
+                    rows.push(PdfTextRow {
+                        texts: vec![
+                            format!("{}", hvm.lfd_nr),
+                            hvm.bisherige_lfd_nr.clone().map(|b| format!("{}", b)).unwrap_or_default(),
+                            hvm.zu_nr.clone().into(),
+                            hvm.text.clone().into(),
+                        ],
+                        header: PdfHeader::Bestandsverzeichnis,
+                        geroetet: Geroetet::Ganz(bv.ist_geroetet()),
+                        teil_geroetet: BTreeMap::new(),
+                        force_single_line: vec![6],
+                        hvm_exception: true,
+                    });
                 }
             }
         }
@@ -2718,6 +2753,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 ),
                 teil_geroetet: BTreeMap::new(),
                 force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
     }
@@ -2741,6 +2777,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 ),
                 teil_geroetet: BTreeMap::new(),
                 force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
         
@@ -2761,6 +2798,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 ),
                 teil_geroetet: BTreeMap::new(),
                 force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
     }
@@ -2776,7 +2814,8 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 header: PdfHeader::Abteilung2,
                 geroetet: Geroetet::Ganz(abt2.ist_geroetet()),
                 teil_geroetet: BTreeMap::new(),
-                force_single_line: Vec::new()
+                force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
         
@@ -2797,6 +2836,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 ),
                 teil_geroetet: BTreeMap::new(),
                 force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
     }
@@ -2813,7 +2853,8 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 header: PdfHeader::Abteilung3,
                 geroetet: Geroetet::Ganz(abt3.ist_geroetet()),
                 teil_geroetet: BTreeMap::new(),
-                force_single_line: Vec::new()
+                force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
         
@@ -2834,6 +2875,7 @@ fn get_text_rows(grundbuch: &Grundbuch, options: &PdfGrundbuchOptions) -> Vec<Pd
                 ),
                 teil_geroetet: BTreeMap::new(),
                 force_single_line: Vec::new(),
+                hvm_exception: false,
             });
         }
     }

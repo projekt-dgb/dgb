@@ -2105,7 +2105,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <option value='recht' selected='selected'>Recht</option>
                     </select>
                     
-                    <div style='background:#edfafe;padding:5px;padding-top:20px;display:flex;flex-direction:column;'>
+                    <div style='background:#edfafe;padding:5px;display:flex;flex-direction:column;'>
                         <div style='padding:5px 0px;display:flex;flex-direction:row;flex-grow:1;'>
                             <p style='width:30px;font-weight:bold;'>Nr.</p>
                             <p style='width:80px;margin-left:10px;font-weight:bold;'>Nr. (alt)</p>
