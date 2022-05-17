@@ -3556,6 +3556,46 @@ function saveState() {
     rpc.save_state();
 }
 
+function selectAllOnFocusIn(event) {
+    window.setTimeout(function() {
+        var sel, range;
+        if (window.getSelection && document.createRange) {
+            range = document.createRange();
+            range.selectNodeContents(event.target);
+            sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else if (document.body.createTextRange) {
+            range = document.body.createTextRange();
+            range.moveToElementText(event.target);
+            range.select();
+        }
+    }, 1);    
+}
+
+
+// Hotkeys
+document.onkeydown = function(e) {
+    var evtobj = window.event? event : e
+    if (event.ctrlKey && event.key === 'z') {
+        if (event.shiftKey) {
+            rpc.redo();            
+        } else {
+            rpc.undo();
+        }
+    } else if (event.ctrlKey && event.key === 'o') {
+        rpc.load_pdf();
+    } else if (event.ctrlKey && event.key === 'n') {
+        rpc.create_new_grundbuch();
+    } else if (event.ctrlKey && event.key === 'e') {
+        rpc.open_export_pdf();
+    } else if (event.ctrlKey && event.key === 'h') {
+        rpc.toggle_lefis_analyse();
+    } else if (event.key === "Escape") {
+        rpc.close_pop_over();        
+    }
+};
+
 // Init
 window.onload = function() { rpc.init(); };
 /*

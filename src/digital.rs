@@ -2545,13 +2545,18 @@ pub enum TextInputType {
     Number,
 }
 
+pub enum FocusType {
+    Focus,
+    NoFocus,
+}
+
 impl StringOrLines {
 
     // id: bv_{zeile_nr}_bezeichnung
     // width:
     // bv_geroetet
     // input_id: bv:{zeile_nr}:bezeichnung
-    pub fn get_html_editable_textfield(&self, width: usize, geroetet: bool, id: String, input_id: String, input_type: TextInputType) -> String {
+    pub fn get_html_editable_textfield(&self, width: usize, geroetet: bool, id: String, input_id: String, input_type: TextInputType, focus_type: FocusType) -> String {
         
         let lines = self.lines().iter()
             .map(|l| l.replace(" ", "\u{00a0}"))
@@ -2581,15 +2586,25 @@ impl StringOrLines {
             TextInputType::Number => "number",
         };
         
+        let insert_tab_at_caret = match focus_type {
+            FocusType::NoFocus => "onkeydown='insertTabAtCaret(event);'",
+            FocusType::Focus => "",
+        };
+        
+        let select_on_click = match focus_type {
+            FocusType::NoFocus => "",
+            FocusType::Focus => "onfocus='selectAllOnFocusIn(event);'",
+        };
+        
         format!("
             <div class='stringorlines-textfield' id='{id}'  data-textInputType='{input_type}'  focusable='true' 
                 style='font-size:16px;user-select: initial;-webkit-user-select: initial;flex-direction:column;{width}{bv_geroetet}' 
-                onkeydown='insertTabAtCaret(event);' 
+                {insert_tab_at_caret}
+                {select_on_click}
                 oninput='editStringOrLines(event, \"{input_id}\");' 
                 contenteditable='true'
                 focusable='true'
-                onfocus='saveState();'
-                onfocusout='saveState();'
+                tabindex='1'
             >{lines}</div>
         ")
     }

@@ -12,6 +12,7 @@ use crate::{
         Abt3Veraenderung,
         Abt3Loeschung,
         TextInputType,
+        FocusType,
         StringOrLines,
     },
 };
@@ -2031,35 +2032,40 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_lfd-nr"),
                         format!("bv:{zeile_nr}:lfd-nr"),
-                        TextInputType::Number
+                        TextInputType::Number,
+                        FocusType::Focus,
                     ),
                     bisherige_lfd_nr_textfield = StringOrLines::SingleLine(flst.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default()).get_html_editable_textfield(
                         60, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_bisherige-lfd-nr"),
                         format!("bv:{zeile_nr}:bisherige-lfd-nr"),
-                        TextInputType::Number
+                        TextInputType::Number,
+                        FocusType::Focus,
                     ),
                     gemarkung_textfield = StringOrLines::SingleLine(flst.gemarkung.clone().unwrap_or_default()).get_html_editable_textfield(
                         150, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_gemarkung"),
                         format!("bv:{zeile_nr}:gemarkung"),
-                        TextInputType::Text
+                        TextInputType::Text,
+                        FocusType::Focus,
                     ),
                     flur_textfield = StringOrLines::SingleLine(flst.flur.to_string()).get_html_editable_textfield(
                         60, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_flur"),
                         format!("bv:{zeile_nr}:flur"),
-                        TextInputType::Number
+                        TextInputType::Number,
+                        FocusType::Focus,
                     ),
                     flurstueck_textfield = StringOrLines::SingleLine(flst.flurstueck.clone()).get_html_editable_textfield(
                         60, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_flurstueck"),
                         format!("bv:{zeile_nr}:flurstueck"),
-                        TextInputType::Text
+                        TextInputType::Text,
+                        FocusType::Focus,
                     ),
                     input_beschreibung_textfield = if konfiguration.lefis_analyse_einblenden {
                         String::new()
@@ -2073,20 +2079,25 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                                 bve.ist_geroetet(),
                                 format!("bv_{zeile_nr}_bezeichnung"),
                                 format!("bv:{zeile_nr}:bezeichnung"),
-                                TextInputType::Text
+                                TextInputType::Text,
+                                FocusType::Focus,
                             ),
                             groesse_textfield = StringOrLines::SingleLine(flst.groesse.get_m2().to_string()).get_html_editable_textfield(
                                 90, // px width
                                 bve.ist_geroetet(),
                                 format!("bv_{zeile_nr}_groesse"),
                                 format!("bv:{zeile_nr}:groesse"),
-                                TextInputType::Number
+                                TextInputType::Number,
+                                FocusType::Focus,
                             ),
                         )
                     }
                 )
             },
             BvEintrag::Recht(recht) => {
+                let lfd_nr: StringOrLines = format!("{}", recht.lfd_nr).into();
+                let bisherige_lfd_nr: StringOrLines = recht.bisherige_lfd_nr.map(|s| format!("{}", s)).unwrap_or_default().into();
+
                 format!("
                 <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
                     <select style='width: 60px;{bv_geroetet}' id='bv_{zeile_nr}_typ' onchange='bvEintragTypAendern(\"bv:{zeile_nr}:typ\", this.options[this.selectedIndex].value)'>
@@ -2094,20 +2105,20 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <option value='recht' selected='selected'>Recht</option>
                     </select>
                     
-                    <input type='number' style='margin-left:10px;width: 30px;{bv_geroetet}' value='{lfd_nr}' 
-                        id='bv_{zeile_nr}_lfd-nr'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:lfd-nr\", event)' 
-                        oninput='editText(\"bv:{zeile_nr}:lfd-nr\", event)'
-                    />
-                    
-                    <input type='number' placeholder='Bisherige lfd. Nr.' style='width: 80px;{bv_geroetet}' value='{bisherige_lfd_nr}' 
-                        id='bv_{zeile_nr}_bisherige-lfd-nr'
-                        onkeyup='inputOnKeyDown(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
-                        oninput='editText(\"bv:{zeile_nr}:bisherige-lfd-nr\", event)'
-                    />
-                    {zu_nr_textfield}
-
-                    {text_recht_textfield}
+                    <div style='background:#edfafe;padding:5px;padding-top:20px;display:flex;flex-direction:column;'>
+                        <div style='padding:5px 0px;display:flex;flex-direction:row;flex-grow:1;'>
+                            <p style='width:30px;font-weight:bold;'>Nr.</p>
+                            <p style='width:80px;margin-left:10px;font-weight:bold;'>Nr. (alt)</p>
+                            <p style='width:80px;margin-left:10px;font-weight:bold;'>Zu lfd. Nr.</p>
+                            <p style='width:320px;margin-left:10px;font-weight:bold;'>Text Herrschvermerk</p>
+                        </div>
+                        <div style='display:flex;flex-direction:row;flex-grow:1;'>
+                            {lfd_nr_textfield}
+                            {bisherige_lfd_nr_textfield}
+                            {zu_nr_textfield}
+                            {text_recht_textfield}
+                        </div>
+                    </div>
 
                     <div style='display:flex;flex-direction:row;flex-grow:1;'>
                         <div style='display:flex;flex-grow:1'></div>
@@ -2116,24 +2127,39 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
                         <button onclick='eintragLoeschen(\"bv:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
                     </div>
                 </div>",
-                    bv_geroetet = bv_geroetet,
                     zeile_nr = zeile_nr,
-                    lfd_nr = format!("{}", recht.lfd_nr),
+                    lfd_nr_textfield = lfd_nr.get_html_editable_textfield(
+                        30, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_lfd-nr"),
+                        format!("bv:{zeile_nr}:lfd-nr"),
+                        TextInputType::Number,
+                        FocusType::Focus,
+                    ),
+                    bisherige_lfd_nr_textfield = bisherige_lfd_nr.get_html_editable_textfield(
+                        80, // px width
+                        bve.ist_geroetet(),
+                        format!("bv_{zeile_nr}_bisherige-lfd-nr"),
+                        format!("bv:{zeile_nr}:bisherige-lfd-nr"),
+                        TextInputType::Number,
+                        FocusType::Focus,
+                    ),
                     zu_nr_textfield = recht.zu_nr.clone().get_html_editable_textfield(
-                        320, // px width
+                        80, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_zu-nr"),
                         format!("bv:{zeile_nr}:zu-nr"),
-                        TextInputType::Text
+                        TextInputType::Text,
+                        FocusType::Focus,
                     ),
                     text_recht_textfield = recht.text.clone().get_html_editable_textfield(
-                        320, // px width
+                        if konfiguration.lefis_analyse_einblenden { 320 } else { 620 }, // px width
                         bve.ist_geroetet(),
                         format!("bv_{zeile_nr}_recht-text"),
                         format!("bv:{zeile_nr}:recht-text"),
-                        TextInputType::Text
+                        TextInputType::Text,
+                        FocusType::NoFocus,
                     ),
-                    bisherige_lfd_nr = recht.bisherige_lfd_nr.map(|f| format!("{}", f)).unwrap_or_default(),
                 )
             },
         }
@@ -2201,14 +2227,16 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
                 bvz.ist_geroetet(),
                 format!("bv-zuschreibung_{zeile_nr}_bv-nr"),
                 format!("bv-zuschreibung:{zeile_nr}:bv-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             bv_veraenderung_text_textfield = bvz.text.clone().get_html_editable_textfield(
                 0, // px width
                 bvz.ist_geroetet(),
                 format!("bv-zuschreibung_{zeile_nr}_text"),
                 format!("bv-zuschreibung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2261,14 +2289,16 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
                 bva.ist_geroetet(),
                 format!("bv-abschreibung_{zeile_nr}_bv-nr"),
                 format!("bv-abschreibung:{zeile_nr}:bv-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             bv_abschreibung_text_textfield = bva.text.clone().get_html_editable_textfield(
                 0, // px width
                 bva.ist_geroetet(),
                 format!("bv-abschreibung_{zeile_nr}_text"),
                 format!("bv-abschreibung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2330,14 +2360,16 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
                 abt1.ist_geroetet(),
                 format!("abt1_{zeile_nr}_lfd-nr"),
                 format!("abt1:{zeile_nr}:lfd-nr"),
-                TextInputType::Number
+                TextInputType::Number,
+                FocusType::Focus,
             ),
             eigentuemer_textfield = abt1.eigentuemer.get_html_editable_textfield(
                 0, // px width
                 abt1.ist_geroetet(),
                 format!("abt1_{zeile_nr}_eigentuemer"),
                 format!("abt1:{zeile_nr}:eigentuemer"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     })
@@ -2398,7 +2430,8 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
                 abt1.ist_geroetet(),
                 format!("abt1-grundlage-eintragung_{zeile_nr}_bv-nr"),
                 format!("abt1-grundlage-eintragung:{zeile_nr}:bv-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             grundlage_der_eintragung_textfield = abt1.text.get_html_editable_textfield(
@@ -2406,7 +2439,8 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
                 abt1.ist_geroetet(),
                 format!("abt1-grundlage-eintragung_{zeile_nr}_text"),
                 format!("abt1-grundlage-eintragung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     })
@@ -2461,14 +2495,16 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
                 abt1_a.ist_geroetet(),
                 format!("abt1-veraenderung_{zeile_nr}_lfd-nr"),
                 format!("abt1-veraenderung:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             text_textfield = abt1_a.text.get_html_editable_textfield(
                 0, // px width
                 abt1_a.ist_geroetet(),
                 format!("abt1-veraenderung_{zeile_nr}_text"),
                 format!("abt1-veraenderung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2521,14 +2557,16 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
                 abt1_l.ist_geroetet(),
                 format!("abt1-loeschung_{zeile_nr}_lfd-nr"),
                 format!("abt1-loeschung:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             text_textfield = abt1_l.text.get_html_editable_textfield(
                 0, // px width
                 abt1_l.ist_geroetet(),
                 format!("abt1-loeschung_{zeile_nr}_text"),
                 format!("abt1-loeschung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2583,21 +2621,24 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
                 abt2.ist_geroetet(),
                 format!("abt2_{zeile_nr}_lfd-nr"),
                 format!("abt2:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             bv_nr_textfield = abt2.bv_nr.get_html_editable_textfield(
                 90, // px width
                 abt2.ist_geroetet(),
                 format!("abt2_{zeile_nr}_bv-nr"),
                 format!("abt2:{zeile_nr}:bv-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             recht_textfield = abt2.text.get_html_editable_textfield(
                 0, // px width
                 abt2.ist_geroetet(),
                 format!("abt2_{zeile_nr}_text"),
                 format!("abt2:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     })
@@ -2654,14 +2695,16 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
                 abt2_a.ist_geroetet(),
                 format!("abt2-veraenderung_{zeile_nr}_lfd-nr"),
                 format!("abt2-veraenderung:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             recht_textfield = abt2_a.text.get_html_editable_textfield(
                 320, // px width
                 abt2_a.ist_geroetet(),
                 format!("abt2-veraenderung_{zeile_nr}_text"),
                 format!("abt2-veraenderung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2714,14 +2757,16 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
                 abt2_l.ist_geroetet(),
                 format!("abt2-loeschung_{zeile_nr}_lfd-nr"),
                 format!("abt2-loeschung:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             recht_textfield = abt2_l.text.get_html_editable_textfield(
                 320, // px width
                 abt2_l.ist_geroetet(),
                 format!("abt2-loeschung_{zeile_nr}_text"),
                 format!("abt2-loeschung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2757,13 +2802,8 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
         format!("
         <div class='__application-abt2-eintrag' style='display:flex;margin-top:5px;'>
             
-            <input type='number' style='width: 30px;{bv_geroetet}' value='{lfd_nr}' 
-                id='abt3_{zeile_nr}_lfd-nr'
-                onkeyup='inputOnKeyDown(\"abt3:{zeile_nr}:lfd-nr\", event)' 
-                oninput='editText(\"abt3:{zeile_nr}:lfd-nr\", event)' 
-            />
-            
             <div style='display:flex;flex-direction:row;flex-grow:1;max-width: none;width: 100%;'>
+                {lfd_nr_textfield}
                 {bv_nr_textfield}
                 {betrag_textfield}
                 {recht_textfield}
@@ -2776,16 +2816,23 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
                 <button onclick='eintragLoeschen(\"abt3:{zeile_nr}\")' tabindex='-1' class='btn btn_loeschen'>löschen</button>
             </div>
         </div>",
-            bv_geroetet = bv_geroetet,
-            zeile_nr = zeile_nr,
-            lfd_nr = abt3.lfd_nr,
+            zeile_nr = zeile_nr,            
+            lfd_nr_textfield = abt3.bv_nr.get_html_editable_textfield(
+                30, // px width
+                abt3.ist_geroetet(),
+                format!("abt3_{zeile_nr}_lfd-nr"),
+                format!("abt3:{zeile_nr}:lfd-nr"),
+                TextInputType::Number,
+                FocusType::Focus,
+            ),
             
             bv_nr_textfield = abt3.bv_nr.get_html_editable_textfield(
                 if show_lefis { 40 } else { 60 }, // px width
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_bv-nr"),
                 format!("abt3:{zeile_nr}:bv-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             betrag_textfield = abt3.betrag.get_html_editable_textfield(
@@ -2793,7 +2840,8 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_betrag"),
                 format!("abt3:{zeile_nr}:betrag"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             recht_textfield = abt3.text.get_html_editable_textfield(
@@ -2801,7 +2849,8 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
                 abt3.ist_geroetet(),
                 format!("abt3_{zeile_nr}_text"),
                 format!("abt3:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2857,7 +2906,8 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 abt3_a.ist_geroetet(),
                 format!("abt3-veraenderung_{zeile_nr}_lfd-nr"),
                 format!("abt3-veraenderung:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             betrag_textfield = abt3_a.betrag.get_html_editable_textfield(
@@ -2865,7 +2915,8 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 abt3_a.ist_geroetet(),
                 format!("abt3-veraenderung_{zeile_nr}_betrag"),
                 format!("abt3-veraenderung:{zeile_nr}:betrag"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             recht_textfield = abt3_a.text.get_html_editable_textfield(
@@ -2873,7 +2924,8 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
                 abt3_a.ist_geroetet(),
                 format!("abt3-veraenderung_{zeile_nr}_text"),
                 format!("abt3-veraenderung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
@@ -2928,7 +2980,8 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 abt3_l.ist_geroetet(),
                 format!("abt3-loeschung_{zeile_nr}_lfd-nr"),
                 format!("abt3-loeschung:{zeile_nr}:lfd-nr"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             betrag_textfield = abt3_l.betrag.get_html_editable_textfield(
@@ -2936,7 +2989,8 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 abt3_l.ist_geroetet(),
                 format!("abt3-loeschung_{zeile_nr}_betrag"),
                 format!("abt3-loeschung:{zeile_nr}:betrag"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::Focus,
             ),
             
             recht_textfield = abt3_l.text.get_html_editable_textfield(
@@ -2944,7 +2998,8 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 abt3_l.ist_geroetet(),
                 format!("abt3-loeschung_{zeile_nr}_text"),
                 format!("abt3-loeschung:{zeile_nr}:text"),
-                TextInputType::Text
+                TextInputType::Text,
+                FocusType::NoFocus,
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");

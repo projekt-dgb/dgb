@@ -47,7 +47,6 @@ pub struct RpcData {
     pub commit_msg: String,
     
     pub loaded_files: BTreeMap<FileName, PdfFile>,
-    pub back_forward: BTreeMap<FileName, BackForwardBuf>,
     pub loaded_nb: Vec<Nebenbeteiligter>,
     pub loaded_nb_paths: Vec<String>,
     
@@ -325,27 +324,6 @@ pub struct ContextMenuData {
 }
 
 impl RpcData {
-    
-    pub fn save_state(&mut self, file: &FileName) {
-        let state_clone = match self.loaded_files.get(file) {
-            Some(s) => s.clone(),
-            None => return,
-        };
-        let mut back_forward = match self.back_forward.get_mut(file) {
-            Some(s) => s,
-            None => return,
-        };
-        
-        back_forward.last_states.push(state_clone);
-        
-        if back_forward.last_states.len() > back_forward.max_states {
-            back_forward.last_states.rotate_left(1);
-            back_forward.last_states.pop();
-        }
-        
-        back_forward.current_index = back_forward.last_states.len().wrapping_sub(1);
-    }
-    
     pub fn create_diff_save_point(&self, file_name: &FileName, file: PdfFile) {
         let json = match serde_json::to_string_pretty(&file) { Ok(o) => o, Err(_) => return, };
         let _ = std::fs::create_dir_all(&format!("{}/backup/", Konfiguration::backup_dir()));
@@ -370,21 +348,6 @@ impl RpcData {
         .map(|(file_name, lf)| (file_name.clone(), lf.clone()))
         .collect()
     }
-    
-    pub fn undo(&mut self, file_name: &FileName) {
-    
-    }
-    
-    pub fn redo(&mut self, file_name: &FileName) {
-    
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BackForwardBuf {
-    max_states: usize,
-    last_states: Vec<PdfFile>,
-    current_index: usize,
 }
 
 impl Default for RpcData {
@@ -394,7 +357,6 @@ impl Default for RpcData {
             open_page: None,
             popover_state: None,
             loaded_files: BTreeMap::new(),
-            back_forward: BTreeMap::new(),
             commit_title: String::new(),
             commit_msg: String::new(),
             loaded_nb: Vec::new(),
@@ -458,6 +420,11 @@ pub struct PdfFile {
     klassifikation_neu: BTreeMap<String, SeitenTyp>,
     #[serde(default)]
     nebenbeteiligte_dateipfade: Vec<String>,
+    
+    #[serde(skip, default)]
+    next_state: Option<Box<PdfFile>>,
+    #[serde(skip, default)]
+    previous_state: Option<Box<PdfFile>>,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -1195,6 +1162,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                         nebenbeteiligte_dateipfade: Vec::new(),
                         anpassungen_seite: BTreeMap::new(),
                         seiten_versucht_geladen: BTreeSet::new(),
+                        previous_state: None,
+                        next_state: None,
                     };
                                     
                     if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
@@ -1324,6 +1293,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 nebenbeteiligte_dateipfade: Vec::new(),
                 anpassungen_seite: BTreeMap::new(),
                 seiten_versucht_geladen: BTreeSet::new(),
+                previous_state: None,
+                next_state: None,
             };
             pdf_parsed.speichern();
             data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
@@ -2038,6 +2009,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             open_file.speichern();
+            webview.eval("saveState();");
             open_file.icon = None;
             if data.konfiguration.lefis_analyse_einblenden {
                 webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
@@ -2088,7 +2060,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
-            
+            webview.eval("saveState();");
+
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
@@ -2178,7 +2151,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
-                       
+            webview.eval("saveState();");
+
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
@@ -2432,7 +2406,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
             // speichern
             open_file.speichern();
-    
+            webview.eval("saveState();");
+
             // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
             webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
             webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
@@ -2904,7 +2879,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
-                        
+            webview.eval("saveState();");
             webview.eval(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
 
         },
@@ -2920,13 +2895,53 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             webview.eval("saveState();");
         },
         Cmd::SaveState => {
-            println!("save state!");
+        
+            let mut open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let mut current_state = open_file.clone();
+            open_file.previous_state = Some(Box::new(current_state));
+            open_file.next_state = None;
         },
         Cmd::Undo => {
-            println!("undo");
+        
+            let mut open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let mut previous_state = match open_file.previous_state.clone() {
+                Some(s) => s,
+                None => return,
+            };
+            
+            previous_state.next_state = Some(Box::new(open_file.clone()));
+            *open_file = *previous_state;
+            open_file.speichern();
+            
+            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.eval(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
         },
         Cmd::Redo => {
-            println!("redo");
+        
+            let mut open_file = match data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file)) { 
+                Some(s) => s,
+                None => return,
+            };
+            
+            let mut next_state = match open_file.next_state.clone() {
+                Some(s) => s,
+                None => return,
+            };
+            
+            next_state.previous_state = Some(Box::new(open_file.clone()));
+            *open_file = *next_state;
+            open_file.speichern();
+                        
+            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.eval(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
         },
         Cmd::ResetOcrSelection => {
             webview.eval(&format!("resetOcrSelection()"));
@@ -3143,6 +3158,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
+            webview.eval("saveState();");
         },
         Cmd::ZeileLoeschen { file, page, zeilen_id } => {
         
@@ -3173,6 +3189,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
+            webview.eval("saveState();");
         },
         Cmd::ResizeColumn {
             direction,
@@ -3267,7 +3284,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
             // speichern
             open_file.speichern();
-        
+            webview.eval("saveState();");
+
             webview.eval(&format!("adjustColumn(`{}`,`{}`,`{}`,`{}`,`{}`)", column_id, new_width, new_height, new_x, new_y));
         },
         Cmd::ToggleCheckBox { checkbox_id } => {
