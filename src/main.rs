@@ -1028,6 +1028,8 @@ pub enum Cmd {
     
     #[serde(rename = "copy_text_to_clipboard")]
     CopyTextToClipboard { text: String },
+    #[serde(rename = "save_state")]
+    SaveState,
     
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
@@ -1236,7 +1238,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
             }
                         
-            digital_dateien(pdf_zu_laden);
+            digital_dateien(pdf_zu_laden, data.konfiguration.clone());
         },
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
@@ -2915,6 +2917,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             data.popover_state = None;
             webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.eval("saveState();");
+        },
+        Cmd::SaveState => {
+            println!("save state!");
         },
         Cmd::Undo => {
             println!("undo");
@@ -3096,7 +3102,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
             let output_parent = open_file.get_gbx_datei_parent();
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-            let _ = reload_grundbuch(open_file.clone());
+            let _ = reload_grundbuch(open_file.clone(), data.konfiguration.clone());
             
             webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
         },
@@ -4101,11 +4107,13 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
     tsv
 }
 
-fn digital_dateien(pdfs: Vec<PdfFile>) {
+fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
     
     std::thread::spawn(move || {
-        for mut pdf in pdfs {
         
+        let konfiguration = konfiguration.clone();
+        for mut pdf in pdfs {
+
             let output_parent = pdf.get_gbx_datei_parent();
             let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
@@ -4121,8 +4129,12 @@ fn digital_dateien(pdfs: Vec<PdfFile>) {
                 Some(pfad) => pfad,
             };
     
+            let konfiguration_clone = konfiguration.clone();
+
             rayon::spawn(move || {
             
+                let konfiguration = konfiguration_clone.clone();
+
                 let mut pdf = pdf;
                 
                 let datei_bytes = match fs::read(&pdf_datei_pfad).ok() {
@@ -4229,7 +4241,7 @@ fn digital_dateien(pdfs: Vec<PdfFile>) {
                         texte: textbloecke,
                     });
 
-                    pdf.analysiert = match analyse_grundbuch(&pdf) { 
+                    pdf.analysiert = match analyse_grundbuch(&pdf, &konfiguration) { 
                         Some(o) => o, 
                         None => continue, 
                     };
@@ -4262,12 +4274,12 @@ fn digital_dateien(pdfs: Vec<PdfFile>) {
     });
 }
 
-fn analyse_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
+fn analyse_grundbuch(pdf: &PdfFile, konfguration: &Konfiguration) -> Option<Grundbuch> {
 
-    let bestandsverzeichnis = digital::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite).ok()?;
-    let mut abt1 = digital::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
-    let abt2 = digital::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
-    let abt3 = digital::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis).ok()?;
+    let bestandsverzeichnis = digital::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite, konfguration).ok()?;
+    let mut abt1 = digital::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
+    let abt2 = digital::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
+    let abt3 = digital::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
     
     abt1.migriere_v2();
     
@@ -4282,12 +4294,13 @@ fn analyse_grundbuch(pdf: &PdfFile) -> Option<Grundbuch> {
     Some(gb)
 }
 
-fn reload_grundbuch(pdf: PdfFile) {
+fn reload_grundbuch(pdf: PdfFile, konfiguration: Konfiguration) {
 
     use tinyfiledialogs::MessageBoxIcon;
             
     std::thread::spawn(move || {
-        if let Err(e) = reload_grundbuch_inner(pdf) {
+        let konfiguration = konfiguration;
+        if let Err(e) = reload_grundbuch_inner(pdf, &konfiguration) {
             tinyfiledialogs::message_box_ok(
                 "Fehler",
                 &format!("Fehler beim Laden des Grundbuchs: {:?}", e),
@@ -4297,7 +4310,7 @@ fn reload_grundbuch(pdf: PdfFile) {
     });
 }
 
-fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
+fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Result<(), Fehler> {
     
     let pdf_datei = match pdf.datei.clone() {
         Some(s) => s,
@@ -4388,7 +4401,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
             texte: textbloecke.clone(),
         });
 
-        pdf.analysiert = match analyse_grundbuch(&pdf) { 
+        pdf.analysiert = match analyse_grundbuch(&pdf, konfiguration) { 
             Some(o) => o, 
             None => continue, 
         };
@@ -4408,7 +4421,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile) -> Result<(), Fehler> {
         let _ = std::fs::write(&cache_output_path, json.as_bytes());
     }
         
-    pdf.analysiert = match analyse_grundbuch(&pdf) { 
+    pdf.analysiert = match analyse_grundbuch(&pdf, konfiguration) { 
         Some(o) => o, 
         None => return Ok(()), 
     };

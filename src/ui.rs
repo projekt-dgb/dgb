@@ -2158,7 +2158,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
             "" 
         } else { 
             "
-            <p style='flex-grow:1;display:flex;'>Bezeichnung</p>
+            <p style='flex-grow:1;display:flex;max-width:500px;'>Bezeichnung</p>
             <p style='width: 90px;margin-right:162px;'>Größe (m2)</p>
             " 
         }

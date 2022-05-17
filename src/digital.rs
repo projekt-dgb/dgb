@@ -7,7 +7,7 @@ use lopdf::Error as LoPdfError;
 use image::ImageError;
 use serde_derive::{Serialize, Deserialize};
 use rayon::prelude::*;
-use crate::{Rect, AnpassungSeite};
+use crate::{Rect, AnpassungSeite, Konfiguration};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2587,6 +2587,9 @@ impl StringOrLines {
                 onkeydown='insertTabAtCaret(event);' 
                 oninput='editStringOrLines(event, \"{input_id}\");' 
                 contenteditable='true'
+                focusable='true'
+                onfocus='saveState();'
+                onfocusout='saveState();'
             >{lines}</div>
         ")
     }
@@ -2764,7 +2767,8 @@ pub fn analysiere_bv(
     titelblatt: &Titelblatt,
     pdftotext_layout: &PdfToTextLayout,
     seiten: &BTreeMap<String, SeiteParsed>, 
-    anpassungen_seite: &BTreeMap<String, AnpassungSeite>
+    anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
+    konfiguration: &Konfiguration,
 ) -> Result<Bestandsverzeichnis, Fehler> {
 
     let seitenzahlen = seiten.keys().cloned()
@@ -2861,7 +2865,11 @@ pub fn analysiere_bv(
                     })
                     .unwrap_or_default();
                     
-                    let bezeichnung = if bezeichnung.is_empty() { None } else { Some(bezeichnung.into()) };
+                    let bezeichnung = if bezeichnung.is_empty() { 
+                        None 
+                    } else {
+                        clean_text_python(bezeichnung.trim(), konfiguration).ok().map(|o| o.into())
+                    };
                     
                     let ha = s.texte
                     .get(6)
@@ -3882,6 +3890,7 @@ pub fn analysiere_abt1(
     seiten: &BTreeMap<String, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
+    konfiguration: &Konfiguration,
 ) -> Result<Abteilung1, Fehler> {
     
     let default_texte = Vec::new();
@@ -3899,7 +3908,7 @@ pub fn analysiere_abt1(
             .unwrap_or_default();
         
         if !zeilen_auf_seite.is_empty() {
-            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+            (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                 
                 let lfd_nr = s.texte
                     .get(0)
@@ -3915,14 +3924,14 @@ pub fn analysiere_abt1(
                 .map(|t| t.text.trim().to_string())
                 .unwrap_or_default();
                 
-                Abt1Eintrag::V2(Abt1EintragV2 {
+                Some(Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
-                    eigentuemer: eigentuemer.into(),
+                    eigentuemer: clean_text_python(eigentuemer.trim(), konfiguration).ok()?.into(),
                     version: 2,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
-                })
+                }))
             }).collect::<Vec<_>>()
         } else {
             let mut texte = s.texte.clone();
@@ -3959,7 +3968,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
-                    eigentuemer: eigentuemer.into(),
+                    eigentuemer: clean_text_python(eigentuemer.trim(), konfiguration).ok()?.into(),
                     version: 2,
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
@@ -3983,7 +3992,7 @@ pub fn analysiere_abt1(
             .unwrap_or_default();
         
         if !zeilen_auf_seite.is_empty() {
-            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+            (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                 
                 let bv_nr = s.texte
                 .get(2)
@@ -3997,13 +4006,13 @@ pub fn analysiere_abt1(
                 .map(|t| t.text.trim().to_string())
                 .unwrap_or_default();
                 
-                Abt1GrundEintragung {
+                Some(Abt1GrundEintragung {
                     bv_nr: bv_nr.into(),
-                    text: grundlage_der_eintragung.into(),
+                    text: clean_text_python(grundlage_der_eintragung.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
-                }
+                })
             }).collect::<Vec<_>>()
         } else {
             let mut texte = s.texte.clone();
@@ -4030,7 +4039,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1GrundEintragung {
                     bv_nr: bv_nr.into(),
-                    text: grundlage_der_eintragung.into(),
+                    text: clean_text_python(grundlage_der_eintragung.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4435,6 +4444,7 @@ pub fn analysiere_abt2(
     seiten: &BTreeMap<String, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
+    konfiguration: &Konfiguration,
 ) -> Result<Abteilung2, Fehler> {
         
     let default_texte = Vec::new();
@@ -4452,7 +4462,7 @@ pub fn analysiere_abt2(
         .unwrap_or_default();
         
         if !zeilen_auf_seite.is_empty() {
-            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+            (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                 
                 let lfd_nr = s.texte
                 .get(0)
@@ -4474,13 +4484,13 @@ pub fn analysiere_abt2(
                 .map(|t| t.text.trim().to_string())
                 .unwrap_or_default();
                 
-                Abt2Eintrag {
+                Some(Abt2Eintrag {
                     lfd_nr,
                     bv_nr: bv_nr.into(),
-                    text: text.into(),
+                    text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
-                }
+                })
             }).collect::<Vec<_>>()
         
         } else {
@@ -4518,7 +4528,7 @@ pub fn analysiere_abt2(
                 Some(Abt2Eintrag {
                     lfd_nr,
                     bv_nr: bv_nr.to_string().into(),
-                    text: text.text.trim().to_string().into(),
+                    text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                 })
@@ -4541,7 +4551,7 @@ pub fn analysiere_abt2(
         .unwrap_or_default();
         
         if !zeilen_auf_seite.is_empty() {
-            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+            (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                 
                 let lfd_nr = s.texte
                 .get(0)
@@ -4555,13 +4565,13 @@ pub fn analysiere_abt2(
                 .map(|t| t.text.trim().to_string())
                 .unwrap_or_default();
                 
-                Abt2Veraenderung {
+                Some(Abt2Veraenderung {
                     lfd_nr: lfd_nr.into(),
-                    text: text.trim().to_string().into(),
+                    text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
-                }
+                })
             }).collect::<Vec<_>>()
         } else {
             let mut texte = s.texte.clone();
@@ -4586,7 +4596,7 @@ pub fn analysiere_abt2(
                 
                 Some(Abt2Veraenderung {
                     lfd_nr: lfd_nr.into(),
-                    text: text.text.trim().to_string().into(),
+                    text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4694,7 +4704,8 @@ impl Abt3Loeschung {
 pub fn analysiere_abt3(
     seiten: &BTreeMap<String, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
-    bestandsverzeichnis: &Bestandsverzeichnis
+    bestandsverzeichnis: &Bestandsverzeichnis,
+    konfiguration: &Konfiguration,
 ) -> Result<Abteilung3, Fehler> {
     
     use crate::SeitenTyp::Abt3HorzVeraenderungenLoeschungen;
@@ -4717,7 +4728,7 @@ pub fn analysiere_abt3(
         .unwrap_or_default();
         
         if !zeilen_auf_seite.is_empty() {
-            (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+            (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                 
                 let lfd_nr = s.texte
                 .get(0)
@@ -4745,15 +4756,15 @@ pub fn analysiere_abt3(
                 .map(|t| t.text.trim().to_string())
                 .unwrap_or_default();
                 
-                Abt3Eintrag {
+                Some(Abt3Eintrag {
                     lfd_nr: lfd_nr.into(),
                     bv_nr: bv_nr.to_string().into(),
                     betrag: betrag.trim().to_string().into(),
-                    text: text.trim().to_string().into(),
+                    text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
-                }
+                })
             }).collect::<Vec<_>>()
         
         } else {
@@ -4807,7 +4818,7 @@ pub fn analysiere_abt3(
                     lfd_nr: lfd_nr.into(),
                     bv_nr: bv_nr.to_string().into(),
                     betrag: betrag.trim().to_string().into(),
-                    text: text.text.trim().to_string().into(),
+                    text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: false,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4833,7 +4844,7 @@ pub fn analysiere_abt3(
             .unwrap_or_default();
             
             if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                     
                     let lfd_nr = s.texte
                     .get(0)
@@ -4853,20 +4864,20 @@ pub fn analysiere_abt3(
                     .map(|t| t.text.trim().to_string())
                     .unwrap_or_default();
                     
-                    Abt3Veraenderung {
+                    Some(Abt3Veraenderung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: text.trim().to_string().into(),
+                        text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
-                    }
+                    })
                 }).collect::<Vec<_>>()
             } else {
                 let mut texte = s.texte.clone();
                 texte.get_mut(2).unwrap().retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
 
-                texte.get(2).unwrap_or(&default_texte).iter().enumerate().map(|(text_num, text)| {
+                texte.get(2).unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
                     
                     let text_start_y = text.start_y;
                     let text_end_y = text.end_y;
@@ -4886,14 +4897,14 @@ pub fn analysiere_abt3(
                         text_end_y,
                     ).map(|s| s.text.trim().to_string()).unwrap_or_default();
                     
-                    Abt3Veraenderung {
+                    Some(Abt3Veraenderung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: text.text.trim().to_string().into(),
+                        text: clean_text_python(&text.text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
-                    }
+                    })
                 })
                 .collect::<Vec<_>>()
             }
@@ -4923,7 +4934,7 @@ pub fn analysiere_abt3(
             .unwrap_or_default();
             
             if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1)).map(|i| {
+                (0..(zeilen_auf_seite.len() + 1)).filter_map(|i| {
                     
                     let lfd_nr = s.texte
                     .get(0 + column_shift)
@@ -4943,14 +4954,14 @@ pub fn analysiere_abt3(
                     .map(|t| t.text.trim().to_string())
                     .unwrap_or_default();
                     
-                    Abt3Loeschung {
+                    Some(Abt3Loeschung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: text.trim().to_string().into(),
+                        text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
-                    }
+                    })
                 }).collect::<Vec<_>>()
             } else {
                 let mut texte = s.texte.clone();
@@ -4962,7 +4973,7 @@ pub fn analysiere_abt3(
 
                 texte
                 .get(2 + column_shift)
-                .unwrap_or(&default_texte).iter().enumerate().map(|(text_num, text)| {
+                .unwrap_or(&default_texte).iter().enumerate().filter_map(|(text_num, text)| {
                     
                     let text_start_y = text.start_y;
                     let text_end_y = text.end_y;
@@ -4982,14 +4993,14 @@ pub fn analysiere_abt3(
                         text_end_y,
                     ).map(|s| s.text.trim().to_string()).unwrap_or_default();
                     
-                    Abt3Loeschung {
+                    Some(Abt3Loeschung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: text.text.trim().to_string().into(),
+                        text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: false,
                         manuell_geroetet: None,
                         position_in_pdf: None,
-                    }
+                    })
                 })
                 .collect::<Vec<_>>()
             }
@@ -5003,6 +5014,18 @@ pub fn analysiere_abt3(
         veraenderungen: abt3_veraenderungen,
         loeschungen: abt3_loeschungen,
     })
+}
+
+fn clean_text_python(text: &str, konfiguration: &Konfiguration) -> Result<String, String> {
+    
+    use pyo3::Python;
+    use crate::kurztext::python_text_saubern;
+    
+    let text_sauber = Python::with_gil(|py| {
+        python_text_saubern(py, text, konfiguration)
+        .map_err(|e| format!("In Funktion text_säubern(): {}", e))
+    })?;
+    Ok(text_sauber)
 }
 
 fn get_erster_text_bei_ca(texte: &[Textblock], skip: usize, start: f32, ziel: f32) -> Option<&Textblock> {    

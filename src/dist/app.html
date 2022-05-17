@@ -2138,6 +2138,7 @@ let rpc = {
   open_export_pdf: function() { rpc.invoke({ cmd : 'open_export_pdf' }); },
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
   set_configuration_view: function(section_id) { rpc.invoke({ cmd : 'set_configuration_view', section_id: section_id }); },
+  save_state: function() { rpc.invoke({ cmd : 'save_state' }); },
   
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
@@ -3551,6 +3552,9 @@ function grundbuchExportieren(event) {
     return false;
 }
 
+function saveState() {
+    rpc.save_state();
+}
 
 // Init
 window.onload = function() { rpc.init(); };
