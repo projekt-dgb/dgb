@@ -324,7 +324,7 @@ pub fn formatiere_betrag(b: &Betrag) -> String {
     }
 }
 
-fn python_text_saubern<'py>(
+pub fn python_text_saubern<'py>(
     py: Python<'py>,
     input: &str, 
     konfiguration: &Konfiguration

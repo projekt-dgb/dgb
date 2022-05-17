@@ -7,6 +7,9 @@ use printpdf::{
 };
 use std::path::Path;
 use std::collections::BTreeMap;
+use hyphenation::{Language, Load, Standard};
+use textwrap::{Options, WordSplitter};
+use regex::Regex;
 
 pub struct GrundbuchExportConfig {
     pub exportiere: PdfExportTyp,
@@ -104,7 +107,8 @@ impl PdfFonts {
 pub fn export_grundbuch(config: GrundbuchExportConfig) -> Result<(), String> {
     match config.optionen {
         GenerateGrundbuchConfig::EinzelneDatei { ref datei, ..  } => {
-            export_grundbuch_single_file(config.optionen.get_options(), &config.exportiere, datei.clone())
+            let datei = if datei.ends_with(".pdf") { datei.clone() } else { format!("{datei}.pdf") };
+            export_grundbuch_single_file(config.optionen.get_options(), &config.exportiere, datei)
         },
         GenerateGrundbuchConfig::MehrereDateien { ref ordner, ..  } => {
             export_grundbuch_multi_files(config.optionen.get_options(), &config.exportiere, ordner.clone())
@@ -3012,91 +3016,51 @@ fn merge_pdf_files(documents: Vec<lopdf::Document>) -> Result<Vec<u8>, String> {
 
 // Format a string so that it fits into N characters per line
 fn wordbreak_text(s: &str, max_cols: usize) -> String {
-    
-    let mut lines = s.lines()
-    .map(|l| l.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>())
-    .collect::<Vec<_>>();
-    
-    let mut output = String::new();
-    
-    for words in lines {
-        let mut line_len = 0;
+    hyphenate(&unhyphenate(s), max_cols).join("\r\n")
+}
 
-        for w in words {
-            
-            let word_len = w.chars().count() + 1;
-            let (before, after) = split_hyphenate(&w, max_cols.saturating_sub(line_len).saturating_sub(1));
-            
-            if !before.is_empty() {
-               if !after.is_empty() {
-                    output.push_str(&before);
-                    output.push_str("-\r\n");
-                    output.push_str(&after);
-                    output.push_str(" ");
-                    line_len = after.chars().count() + 1;
-                } else {
-                    output.push_str(&before);
-                    output.push_str(" ");
-                    line_len += before.chars().count() + 1;
-                }
-            } else if !after.is_empty() {
-                output.push_str("\r\n");
-                output.push_str(&after);
-                output.push_str(" ");
-                line_len = after.chars().count() + 1;
+lazy_static::lazy_static! {
+    static ref DICT_DE: hyphenation::Standard = Standard::from_embedded(Language::German1996).unwrap();
+    static ref REGEX_UNHYPHENATE: Regex = {
+        regex::RegexBuilder::new("(.*)-\\s([a-züäö])(.*)")
+                .multi_line(true)
+                .case_insensitive(false)
+                .build().unwrap()
+    };
+}
+
+fn unhyphenate(text: &str) -> String {
+
+    let mut und_saetze = text.lines().map(|s| {
+        s.split("- und ")
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+    }).collect::<Vec<_>>();
+    
+    let mut text_sauber = String::new();
+    
+    for l in und_saetze.into_iter() {
+        let und_len = l.len();
+        for (index, mut s) in l.into_iter().enumerate() {
+            while REGEX_UNHYPHENATE.is_match(&s) {
+                s = REGEX_UNHYPHENATE.replace_all(&s, "$1$2$3").to_string();
+            }
+            text_sauber.push_str(&s);
+            if index +1 != und_len {
+                text_sauber.push_str("- und ");
             }
         }
-        
-        output.push_str("\r\n");
     }
-        
-    output.trim().to_string()
+    
+    text_sauber
 }
 
-fn split_hyphenate(word: &str, remaining: usize) -> (String, String) {
+fn hyphenate(text: &str, wrap_at_chars: usize) -> Vec<String> {
+    let options = Options::new(wrap_at_chars)
+        .word_splitter(WordSplitter::Hyphenation(DICT_DE.clone()));
     
-    if remaining == 0 {
-        return (String::new(), word.to_string());
-    }
-    
-    let mut before = String::new();
-    let mut after = String::new();
-    let mut counter = 0;
-    
-    for syllable in get_syllables(word) {
-        let syllable_len = syllable.chars().count();
-        if counter + syllable_len > remaining {
-            after.push_str(&syllable);
-        } else {
-            before.push_str(&syllable);
-        }
-        counter += syllable_len;
-    }
-    
-    (before, after)
-}
-
-fn get_syllables(s: &str) -> Vec<String> {
-    let vocals = ['a', 'e', 'i', 'o', 'u', 'ö', 'ä', 'ü', 'y'];
-    let vocals2 = ['a', 'e', 'i', 'o', 'u', 'y'];
-
-    let mut results = Vec::new();
-    let chars = s.chars().collect::<Vec<_>>();
-    let mut current_position = chars.len() - 1;
-    let mut last_split = 0;
-    for i in 0..current_position {
-        if i != 0 && 
-            vocals.contains(&chars[i]) && 
-            !vocals2.contains(&chars[i - 1]) && 
-            i - last_split > 1 {
-            let a = &chars[last_split..i];
-            let b = &chars[i..];
-            last_split = i;
-            results.push(a.iter().collect::<String>());
-        }
-    }
-    
-    results.push((&chars[last_split..]).iter().collect::<String>());
-    
-    results
+    textwrap::wrap(text, &options)
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect()
 }
