@@ -837,15 +837,7 @@ pub struct LefisDateiExport {
     pub rechte: GrundbuchAnalysiert,
 }
 
-fn webview_cb(webview: &mut WebView, arg: &str, data: &mut RpcData) {
-        
-    let arg = match serde_json::from_str::<Cmd>(arg) {
-        Ok(arg) => arg,
-        Err(e) => { 
-            return; 
-        },
-    };
-        
+fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
     match &arg {
         Cmd::Init => { 
             webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
@@ -4636,9 +4628,17 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     Ok(())
 }
 
-fn main() {
+fn main() -> wry::Result<()> {
 
     use std::env;
+    use wry::{
+        application::{
+        event::{Event, StartCause, WindowEvent},
+        event_loop::{ControlFlow, EventLoop},
+        window::WindowBuilder,
+        },
+        webview::WebViewBuilder,
+    };
     
     let num = num_cpus::get();
     let max_threads = (num as f32 / 2.0).ceil().max(2.0) as usize;
@@ -4674,30 +4674,39 @@ fn main() {
     let resizable = true;
     let debug = true;
     let app_html = include_str!("dist/app.html").to_string().replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
-    
-    /*
-    let (_, launched_successful) = run(
-        APP_TITLE, 
-        &url, 
-        Some((9999, 9999)), // = maximized
-        resizable, 
-        debug, 
-        |webview| { webview.dispatch(|webview, _| { 
-            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", initial_screen)); }); 
-        }, 
-        |webview, arg, data: &mut RpcData| { webview_cb(webview, arg, data); }, 
-        userdata
-    );
 
-    if !launched_successful {
-        println!("failed to launch {}", env!("CARGO_PKG_NAME"));
-        return;
-    }
-    */
+    let event_loop = EventLoop::with_user_event();
+    let proxy = event_loop.create_proxy();
+    let window = WindowBuilder::new()
+        .with_title(APP_TITLE)
+        .with_maximized(true)
+        .build(&event_loop)?;
+    
+    let webview = WebViewBuilder::new(window)?
+        .with_html(app_html)?
+        .with_ipc_handler(move |_window, cmd| {
+            if let Ok(cmd) = serde_json::from_str(&cmd) {
+                let _ = proxy.send_event(cmd);
+            }
+        })
+        .build()?;
+        
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+
+        match event {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *control_flow = ControlFlow::Exit,
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => { let _ = webview.resize(); },
+            Event::UserEvent(cmd) => { webview_cb(&webview, &cmd, &mut userdata); },
+            _ => { },
+        }
+    });
     
     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
     
     if let Ok(original_value) = original_value {
         env::set_var(GTK_OVERLAY_SCROLLING, original_value);
     }
+    
+    Ok(())
 }

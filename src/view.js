@@ -3,7 +3,7 @@
 
 let rpc = {
     
-  invoke : function(arg) { window.webkit.messageHandlers.external.postMessage(JSON.stringify(arg)); },
+  invoke : function(arg) { window.ipc.postMessage(JSON.stringify(arg)); },
   init: function() { rpc.invoke({ cmd: 'init' }); },
   
   load_pdf: function() { rpc.invoke({ cmd : 'load_pdf' }); },
