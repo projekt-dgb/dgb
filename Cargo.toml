@@ -56,7 +56,7 @@ features = ["auto-initialize"]
 
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
-depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.9.1)"
+depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
 section = "utility"
 priority = "optional"
 assets = [
