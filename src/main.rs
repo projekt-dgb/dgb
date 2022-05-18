@@ -6,9 +6,9 @@ use std::fs;
 use std::sync::Mutex;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use wry::webview::WebView;
 
 use urlencoding::encode;
-use web_view::*;
 use serde_derive::{Serialize, Deserialize};
 use crate::digital::{
     SeiteParsed, Nebenbeteiligter, NebenbeteiligterExport,
@@ -35,6 +35,9 @@ pub mod digital;
 pub mod analyse;
 pub mod kurztext;
 pub mod pdf;
+pub mod cmd;
+
+use crate::cmd::Cmd;
 
 #[derive(Debug, Clone)]
 pub struct RpcData {
@@ -800,213 +803,6 @@ impl Konfiguration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "cmd")]
-pub enum Cmd {
-    #[serde(rename = "init")]
-    Init,
-    // Open file dialog for file(s) to load
-    #[serde(rename = "load_pdf")]
-    LoadPdf,
-    #[serde(rename = "create_new_grundbuch")]
-    CreateNewGrundbuch,
-    #[serde(rename = "grundbuch_anlegen")]
-    GrundbuchAnlegen { 
-        land: String,
-        grundbuch_von: String, 
-        amtsgericht: String, 
-        blatt: usize, 
-    },
-    #[serde(rename = "undo")]
-    Undo,
-    #[serde(rename = "redo")]
-    Redo,
-    #[serde(rename = "export_nb")]
-    ExportNebenbeteiligte,
-    #[serde(rename = "import_nb")]
-    ImportNebenbeteiligte,
-    #[serde(rename = "delete_nb")]
-    DeleteNebenbeteiligte,
-    #[serde(rename = "export_lefis")]
-    ExportLefis,
-    #[serde(rename = "export_alle_rechte")]
-    ExportAlleRechte,
-    #[serde(rename = "export_alle_fehler")]
-    ExportAlleFehler,   
-    #[serde(rename = "export_alle_abt1")]
-    ExportAlleAbt1,
-    #[serde(rename = "export_alle_teilbelastungen")]
-    ExportAlleTeilbelastungen,    
-    #[serde(rename = "open_grundbuch_suchen_dialog")]
-    OpenGrundbuchSuchenDialog,
-    #[serde(rename = "open_grundbuch_upload_dialog")]
-    OpenGrundbuchUploadDialog,  
-    #[serde(rename = "grundbuch_exportieren")]
-    GrundbuchExportieren {
-        was_exportieren: String, 
-        exportiere_bv: bool,
-        exportiere_abt_1: bool,
-        exportiere_abt_2: bool,
-        exportiere_abt_3: bool,
-        exportiere_geroetete_eintraege: bool,
-        exportiere_pdf_leere_seite: bool,
-        exportiere_in_eine_einzelne_datei: bool,
-    },
-    #[serde(rename = "open_configuration")]
-    OpenConfiguration,
-    #[serde(rename = "set_configuration_view")]
-    SetConfigurationView { section_id: String },
-    #[serde(rename = "open_info")]
-    OpenInfo,
-    #[serde(rename = "open_help")]
-    OpenHelp,
-    #[serde(rename = "open_export_pdf")]
-    OpenExportPdf,
-    #[serde(rename = "close_file")]
-    CloseFile { file_name: String },
-    #[serde(rename = "klassifiziere_seite_neu")]
-    KlassifiziereSeiteNeu { seite: usize, klassifikation_neu: String },
-    #[serde(rename = "check_pdf_image_sichtbar")]
-    CheckPdfImageSichtbar,
-    #[serde(rename = "toggle_lefis_analyse")]
-    ToggleLefisAnalyse,
-    #[serde(rename = "check_pdf_for_errors")]
-    CheckPdfForErrors,
-    #[serde(rename = "search")]
-    Search { search_text: String },
-    #[serde(rename = "download_gbx")]
-    DownloadGbx { download_id: String },
-    #[serde(rename = "upload_gbx")]
-    UploadGbx,
-    #[serde(rename = "edit_abkuerzungen_script")]
-    EditAbkuerzungenScript { script: String },
-    #[serde(rename = "edit_text_saubern_script")]
-    EditTextSaubernScript { script: String },
-    #[serde(rename = "edit_flurstuecke_auslesen_script")]
-    EditFlurstueckeAuslesenScript { script: String },
-    #[serde(rename = "edit_commit_description")]
-    EditCommitDescription { value: String },
-    #[serde(rename = "edit_commit_title")]
-    EditCommitTitle { value: String },
-    #[serde(rename = "edit_konfiguration_textfield")]
-    EditKonfigurationTextField { id: String, value: String },
-    #[serde(rename = "edit_konfiguration_schluesseldatei")]
-    EditKonfigurationSchluesseldatei { base64: String },
-    
-    #[serde(rename = "flurstueck_auslesen_script_testen")]
-    FlurstueckAuslesenScriptTesten { text: String, bv_nr: String },
-    #[serde(rename = "edit_text_kuerzen_abt2_script")]
-    EditTextKuerzenAbt2Script { script: String },
-    #[serde(rename = "kurztext_abt2_script_testen")]
-    KurzTextAbt2ScriptTesten { text: String },
-    #[serde(rename = "edit_rechteart_script")]
-    EditRechteArtScript { neu: String },
-    #[serde(rename = "rechteart_script_testen")]
-    RechteArtScriptTesten { text: String },
-    #[serde(rename = "edit_rechtsinhaber_auslesen_abt2_script")]
-    EditRechtsinhaberAuslesenAbt2Script { neu: String },
-    #[serde(rename = "rechtsinhaber_auslesen_abt2_script_testen")]
-    RechtsinhaberAuslesenAbt2ScriptTesten { text: String },
-    #[serde(rename = "edit_rangvermerk_auslesen_abt2_script")]
-    EditRangvermerkAuslesenAbt2Script { neu: String },
-    #[serde(rename = "rangvermerk_auslesen_abt2_script_testen")]
-    RangvermerkAuslesenAbt2ScriptTesten { text: String },
-        
-    #[serde(rename = "edit_text_kuerzen_abt3_script")]
-    EditTextKuerzenAbt3Script { script: String },
-    #[serde(rename = "kurztext_abt3_script_testen")]
-    KurzTextAbt3ScriptTesten { text: String },
-    #[serde(rename = "edit_betrag_auslesen_script")]
-    EditBetragAuslesenScript { neu: String },
-    #[serde(rename = "betrag_auslesen_script_testen")]
-    BetragAuslesenScriptTesten { text: String },
-    #[serde(rename = "edit_schuldenart_script")]
-    EditSchuldenArtScript { neu: String },
-    #[serde(rename = "schuldenart_script_testen")]
-    SchuldenArtScriptTesten { text: String },
-    #[serde(rename = "edit_rechtsinhaber_auslesen_abt3_script")]
-    EditRechtsinhaberAuslesenAbt3Script { neu: String },
-    #[serde(rename = "rechtsinhaber_auslesen_abt3_script_testen")]
-    RechtsinhaberAuslesenAbt3ScriptTesten { text: String },
-    #[serde(rename = "switch_aenderung_view")]
-    SwitchAenderungView { i: usize },
-    
-    #[serde(rename = "teste_regex")]
-    TesteRegex { regex_id: String, text: String },
-    #[serde(rename = "edit_regex_key")]
-    EditRegexKey { old_key: String, new_key: String },
-    #[serde(rename = "edit_regex_value")]
-    EditRegexValue { key: String, value: String },
-    #[serde(rename = "insert_regex")]
-    InsertRegex { regex_key: String },
-    #[serde(rename = "regex_loeschen")]
-    RegexLoeschen { regex_key: String },
-
-    // Check whether a "{file_name}".json with analyzed texts exists
-    #[serde(rename = "check_for_pdf_loaded")]
-    CheckForPdfLoaded { file_path: String, file_name: String },
-    // Check whether a "{file_name}".json with analyzed texts exists
-    #[serde(rename = "check_for_image_loaded")]
-    CheckForImageLoaded { file_path: String, file_name: String },
-
-    #[serde(rename = "edit_text")]
-    EditText { path: String, new_value: String },
-    #[serde(rename = "eintrag_neu")]
-    EintragNeu { path: String },
-    #[serde(rename = "eintrag_roeten")]
-    EintragRoeten { path: String },
-    #[serde(rename = "eintrag_loeschen")]
-    EintragLoeschen { path: String },
-    #[serde(rename = "open_context_menu")]
-    OpenContextMenu { x: f32, y: f32, seite: usize },
-    #[serde(rename = "close_pop_over")]
-    ClosePopOver,
-
-    #[serde(rename = "reset_ocr_selection")]
-    ResetOcrSelection,
-    #[serde(rename = "select_ocr")]
-    SelectOcr {
-        file_name: String,
-        page: usize,
-        min_x: f32,
-        min_y: f32,
-        max_x: f32,
-        max_y: f32,
-        page_width: f32,
-        page_height: f32,
-    },
-    #[serde(rename = "resize_column")]
-    ResizeColumn {
-        direction: String,
-        column_id: String,
-        x: f32,
-        y: f32,
-    },
-    #[serde(rename = "toggle_checkbox")]
-    ToggleCheckBox { checkbox_id: String },
-    #[serde(rename = "reload_grundbuch")]
-    ReloadGrundbuch,
-    #[serde(rename = "zeile_neu")]
-    ZeileNeu { file: String, page: usize, y: f32 },
-    #[serde(rename = "zeile_loeschen")]
-    ZeileLoeschen { file: String, page: usize, zeilen_id: usize },
-    #[serde(rename = "bv_eintrag_typ_aendern")]
-    BvEintragTypAendern { path: String, value: String },
-    
-    #[serde(rename = "copy_text_to_clipboard")]
-    CopyTextToClipboard { text: String },
-    #[serde(rename = "save_state")]
-    SaveState,
-    
-    // UI stuff
-    #[serde(rename = "set_active_ribbon_tab")]
-    SetActiveRibbonTab { new_tab: usize },
-    #[serde(rename = "set_open_file")]
-    SetOpenFile { new_file: String },
-    #[serde(rename = "set_open_page")]
-    SetOpenPage { active_page: u32 },
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status")]
 pub enum GrundbuchSucheResponse {
@@ -1040,8 +836,8 @@ pub struct LefisDateiExport {
     pub titelblatt: Titelblatt,
     pub rechte: GrundbuchAnalysiert,
 }
-            
-fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcData) {
+
+fn webview_cb(webview: &mut WebView, arg: &str, data: &mut RpcData) {
         
     let arg = match serde_json::from_str::<Cmd>(arg) {
         Ok(arg) => arg,
@@ -1052,7 +848,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         
     match &arg {
         Cmd::Init => { 
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
         },
         Cmd::LoadPdf => {
                        
@@ -1197,25 +993,25 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             let html_inner = ui::render_entire_screen(data);
-            webview.eval(&format!("replaceEntireScreen(`{}`)", html_inner));
-            webview.eval("startCheckingForPdfErrors()");
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", html_inner));
+            webview.evaluate_script("startCheckingForPdfErrors()");
 
             for pdf_parsed in &pdf_zu_laden {
                 let output_parent = pdf_parsed.get_gbx_datei_parent();
                 let file_name = format!("{}_{}", pdf_parsed.titelblatt.grundbuch_von, pdf_parsed.titelblatt.blatt);
                 let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-                webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
+                webview.evaluate_script(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
             }
                         
             digital_dateien(pdf_zu_laden, data.konfiguration.clone());
         },
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenGrundbuchSuchenDialog => {
             data.popover_state = Some(PopoverState::GrundbuchSuchenDialog);
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenGrundbuchUploadDialog => {
             use rayon::prelude::*;
@@ -1258,7 +1054,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             data.popover_state = Some(PopoverState::GrundbuchUploadDialog(0));
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::GrundbuchAnlegen { land, grundbuch_von, amtsgericht, blatt } => {
 
@@ -1304,8 +1100,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             data.popover_state = None;
             let _ = std::fs::create_dir_all(Path::new(&Konfiguration::backup_dir()).join("backup"));
             let _ = std::fs::write(Path::new(&Konfiguration::backup_dir()).join("backup").join("{file_name}.gbx"), "".as_bytes());
-            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
-            webview.eval("startCheckingForPdfErrors()");
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+            webview.evaluate_script("startCheckingForPdfErrors()");
         },
         Cmd::Search { search_text } => {
         
@@ -1328,7 +1124,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let resp = match res {
                 Ok(s) => s,
                 Err(e) => {
-                    webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
+                    webview.evaluate_script(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
                         code: 0,
                         text: format!("HTTP GET {url}: {}", e),
                     }))));
@@ -1340,7 +1136,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let json = match resp.json::<GrundbuchSucheResponse>() {
                 Ok(s) => s,
                 Err(e) => {
-                    webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
+                    webview.evaluate_script(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&GrundbuchSucheResponse::StatusErr(GrundbuchSucheError {
                         code: 0,
                         text: format!("HTTP GET {url}: {}", e),
                     }))));
@@ -1349,7 +1145,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
             };
         
-            webview.eval(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&json)));
+            webview.evaluate_script(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&json)));
         },
         Cmd::DownloadGbx { download_id } => {
             
@@ -1428,8 +1224,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     data.loaded_files.insert(file_name.clone(), json.clone());
                     data.open_page = Some((file_name.clone(), 2));       
                     data.popover_state = None;
-                    webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
-                    webview.eval("startCheckingForPdfErrors()");
+                    webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                    webview.evaluate_script("startCheckingForPdfErrors()");
                 },
                 PdfFileOrEmpty::NichtVorhanden(err) => {
                     tinyfiledialogs::message_box_ok(
@@ -1457,7 +1253,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let aenderungen = data.get_aenderungen();
             if aenderungen.ist_leer() {
                 data.popover_state = None;
-                webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                 return;
             }
 
@@ -1520,7 +1316,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                             data.popover_state = None;
                             data.commit_title.clear();
                             data.commit_msg.clear();
-                            webview.eval(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
+                            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                         },
                         Ok(UploadChangesetResponse::StatusError(e)) => {
                             tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("E{}: {}", e.code, e.text), MessageBoxIcon::Error);
@@ -1547,7 +1343,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         },    
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO
-            webview.eval(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
+            webview.evaluate_script(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
         },
         Cmd::CheckPdfImageSichtbar => {
             
@@ -1591,7 +1387,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 }
             }
         
-            webview.eval(&format!("replacePdfImage(`{}`)", ui::render_pdf_image(data)));
+            webview.evaluate_script(&format!("replacePdfImage(`{}`)", ui::render_pdf_image(data)));
         },
         Cmd::CheckForPdfLoaded { file_path, file_name } => {
                         
@@ -1607,17 +1403,17 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             data.loaded_files.insert(file_name.clone(), pdf_parsed.clone());
             
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             
             if pdf_parsed.ist_geladen() {
                 let _ = std::fs::remove_file(&cache_output_path);
                 if data.open_page.is_none() {
                     data.open_page = Some((file_name.clone(), 2));
-                    webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
+                    webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
                 } else if data.open_page.as_ref().map(|s| s.0.clone()).unwrap_or_default() == *file_name {
-                    webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
+                    webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data))); 
                 }
-                webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
+                webview.evaluate_script(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
             }
         },
         Cmd::EditText { path, new_value } => {
@@ -2009,10 +1805,10 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             }
             
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
             open_file.icon = None;
             if data.konfiguration.lefis_analyse_einblenden {
-                webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
+                webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
             }
         },
         Cmd::BvEintragTypAendern { path, value } => {
@@ -2060,24 +1856,24 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
 
-            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
-            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
-            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
-            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
-            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
-            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
-            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
-            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
+            // webview.evaluate_script(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
+            webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
         },
         Cmd::EintragNeu { path } => {
             
@@ -2151,26 +1947,26 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
 
-            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
-            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
-            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
-            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
-            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
-            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
-            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
-            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
+            // webview.evaluate_script(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
+            webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
-            webview.eval(&format!("document.getElementById(`{}`).focus();", next_focus));
+            webview.evaluate_script(&format!("document.getElementById(`{}`).focus();", next_focus));
         },
         Cmd::EintragLoeschen { path } | 
         Cmd::EintragRoeten { path } => {
@@ -2406,26 +2202,26 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
 
-            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
-            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
-            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
-            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
-            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
-            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
-            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
-            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
+            // webview.evaluate_script(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
+            webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
-            webview.eval(&format!("(function() {{ 
+            webview.evaluate_script(&format!("(function() {{ 
                 let element = document.getElementById(`{}`); 
                 if (element) {{ element.focus(); }};
             }})();", next_focus));
@@ -2456,8 +2252,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::SwitchAenderungView { i } => {
             data.popover_state = Some(PopoverState::GrundbuchUploadDialog(*i));
             let aenderungen = data.get_aenderungen();
-            webview.eval(&format!("replaceAenderungDateien(`{}`)", ui::render_aenderungen_dateien(&aenderungen, *i)));
-            webview.eval(&format!("replaceAenderungDiff(`{}`)", ui::render_aenderung_diff(&aenderungen, *i)));
+            webview.evaluate_script(&format!("replaceAenderungDateien(`{}`)", ui::render_aenderungen_dateien(&aenderungen, *i)));
+            webview.evaluate_script(&format!("replaceAenderungDiff(`{}`)", ui::render_aenderung_diff(&aenderungen, *i)));
         },
         Cmd::OpenContextMenu { x, y, seite } => {
             data.popover_state = Some(PopoverState::ContextMenu(ContextMenuData {
@@ -2465,11 +2261,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 y: *y,
                 seite_ausgewaehlt: *seite,
             }));
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenConfiguration => {
             data.popover_state = Some(PopoverState::Configuration(ConfigurationView::Allgemein));
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::SetConfigurationView { section_id } => {
             data.popover_state = Some(PopoverState::Configuration(match section_id.as_str() {
@@ -2488,26 +2284,26 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 "text-kuerzen-abt3" => ConfigurationView::TextKuerzenAbt3,
                 _ => { return; }
             }));
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenInfo => {
             data.popover_state = Some(PopoverState::Info);
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenHelp => {
             data.popover_state = Some(PopoverState::Help);
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::OpenExportPdf => {
             if data.loaded_files.is_empty() { return; }
             data.popover_state = Some(PopoverState::ExportPdf);
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
         },
         Cmd::CloseFile { file_name } => {
             let _ = data.loaded_files.remove(file_name);
             data.popover_state = None;
-            webview.eval(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.evaluate_script(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::CheckPdfForErrors => {
             let mut new_icons = BTreeMap::new();
@@ -2533,13 +2329,13 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                     s.icon = Some(v);
                     let konfiguration = data.konfiguration.clone();
                     let titelblatt = s.titelblatt.clone();
-                    webview.eval(&format!("replaceIcon(`{}`, `{}`)", k, v.get_base64()));
+                    webview.evaluate_script(&format!("replaceIcon(`{}`, `{}`)", k, v.get_base64()));
                 }
             }
         },
         Cmd::ToggleLefisAnalyse => {
             data.konfiguration.lefis_analyse_einblenden = !data.konfiguration.lefis_analyse_einblenden;
-            webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.evaluate_script(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
         },
         Cmd::EditTextKuerzenAbt2Script { script } => {
             data.konfiguration.text_kuerzen_abt2_script = script.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
@@ -2626,7 +2422,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{}\r\nLOG:\r\n{}\r\nAusgabe berechnet in {:?}", o, debug_log, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceFlurstueckAuslesenTestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceFlurstueckAuslesenTestOutput(`{}`);", result));
         },
         Cmd::RangvermerkAuslesenAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2644,7 +2440,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceRangvermerkAuslesenAbt2TestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceRangvermerkAuslesenAbt2TestOutput(`{}`);", result));
         }, 
         Cmd::RechtsinhaberAuslesenAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2662,7 +2458,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceRechtsinhaberAbt2TestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceRechtsinhaberAbt2TestOutput(`{}`);", result));
         },
         Cmd::RechtsinhaberAuslesenAbt3ScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2680,7 +2476,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceRechtsinhaberAbt3TestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceRechtsinhaberAbt3TestOutput(`{}`);", result));
         },
         Cmd::BetragAuslesenScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2697,7 +2493,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{:#?}\r\nAusgabe berechnet in {:?}", o.inner, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceBetragAuslesenTestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceBetragAuslesenTestOutput(`{}`);", result));
         },
         Cmd::KurzTextAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2727,7 +2523,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceTextKuerzenAbt2TestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceTextKuerzenAbt2TestOutput(`{}`);", result));
         },
         Cmd::KurzTextAbt3ScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2782,7 +2578,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceTextKuerzenAbt3TestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceTextKuerzenAbt3TestOutput(`{}`);", result));
         },
         
         Cmd::RechteArtScriptTesten { text } => {
@@ -2797,7 +2593,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Err(e) => { format!("{}", e) },
             };
             
-            webview.eval(&format!("replaceRechteArtTestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceRechteArtTestOutput(`{}`);", result));
         },
         Cmd::SchuldenArtScriptTesten { text } => {
             let start = std::time::Instant::now();
@@ -2810,7 +2606,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 Ok(o) => { format!("{:?}\r\nAusgabe berechnet in {:?}", o.inner, time) },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceSchuldenArtTestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceSchuldenArtTestOutput(`{}`);", result));
         },
         Cmd::DeleteNebenbeteiligte => {
             use tinyfiledialogs::{YesNo, MessageBoxIcon};
@@ -2835,7 +2631,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 pdf_file.speichern();
             }
             
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::KlassifiziereSeiteNeu { 
             seite, 
@@ -2879,8 +2675,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
-            webview.eval(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
+            webview.evaluate_script("saveState();");
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`);", ui::render_entire_screen(data)));
 
         },
         Cmd::ClosePopOver { } => {
@@ -2888,11 +2684,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 for (k, v) in data.loaded_files.iter_mut() {
                     v.icon = None;
                 }
-                webview.eval(&format!("replaceFileList(`{}`)", ui::render_file_list(data)));
+                webview.evaluate_script(&format!("replaceFileList(`{}`)", ui::render_file_list(data)));
             }
             data.popover_state = None;
-            webview.eval(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
-            webview.eval("saveState();");
+            webview.evaluate_script(&format!("replacePopOver(`{}`)", ui::render_popover_content(data)));
+            webview.evaluate_script("saveState();");
         },
         Cmd::SaveState => {
         
@@ -2921,8 +2717,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             *open_file = *previous_state;
             open_file.speichern();
             
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.evaluate_script(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
         },
         Cmd::Redo => {
         
@@ -2940,11 +2736,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             *open_file = *next_state;
             open_file.speichern();
                         
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.evaluate_script(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
         },
         Cmd::ResetOcrSelection => {
-            webview.eval(&format!("resetOcrSelection()"));
+            webview.evaluate_script(&format!("resetOcrSelection()"));
         },
         Cmd::SelectOcr {
             file_name,
@@ -2965,7 +2761,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let file = match data.loaded_files.get_mut(file_name.as_str()) {
                 Some(s) => s,
                 None => {
-                    webview.eval(&format!("resetOcrSelection()"));
+                    webview.evaluate_script(&format!("resetOcrSelection()"));
                     return;
                 }
             };
@@ -2992,7 +2788,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
                 Ok(o) => o,
                 Err(_) => {
-                    webview.eval(&format!("resetOcrSelection()"));
+                    webview.evaluate_script(&format!("resetOcrSelection()"));
                     return;
                 },
             };
@@ -3001,7 +2797,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e)){
                 Ok(o) => o,
                 Err(_) => {
-                    webview.eval(&format!("resetOcrSelection()"));
+                    webview.evaluate_script(&format!("resetOcrSelection()"));
                     return;
                 }
             };
@@ -3023,7 +2819,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e)) {
                 Ok(o) => o,
                 Err(_) => {
-                    webview.eval(&format!("resetOcrSelection()"));
+                    webview.evaluate_script(&format!("resetOcrSelection()"));
                     return;
                 },
             };
@@ -3069,11 +2865,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 }
             };
     
-            webview.eval(&format!("copyTextToClipboard(`{}`)", text));
-            webview.eval(&format!("resetOcrSelection()"));
+            webview.evaluate_script(&format!("copyTextToClipboard(`{}`)", text));
+            webview.evaluate_script(&format!("resetOcrSelection()"));
         },
         Cmd::CopyTextToClipboard { text } => {
-            webview.eval(&format!("copyTextToClipboard(`{}`)", text));
+            webview.evaluate_script(&format!("copyTextToClipboard(`{}`)", text));
         },
         Cmd::ReloadGrundbuch => {
             
@@ -3107,7 +2903,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 open_file.analysiert = Grundbuch::default();
             }
             
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
             
             let open_file = match data.loaded_files.get(&file_id) { 
                 Some(s) => s,
@@ -3119,7 +2915,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
             let _ = reload_grundbuch(open_file.clone(), data.konfiguration.clone());
             
-            webview.eval(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
+            webview.evaluate_script(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
         },
         Cmd::ZeileNeu { file, page, y } => {
             
@@ -3154,11 +2950,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             ap.zeilen.sort_by(|a, b| ((a * 1000.0) as usize).cmp(&((b * 1000.0) as usize)));
             ap.zeilen.dedup();
 
-            webview.eval(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
+            webview.evaluate_script(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
             
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
         },
         Cmd::ZeileLoeschen { file, page, zeilen_id } => {
         
@@ -3183,13 +2979,13 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
             if let Some(ap) = open_file.anpassungen_seite.get_mut(&format!("{}", page)) {
                 if *zeilen_id < ap.zeilen.len() {
                     let _ = ap.zeilen.remove(*zeilen_id);                    
-                    webview.eval(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
+                    webview.evaluate_script(&format!("replacePdfImageZeilen(`{}`)", crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)));            
                 }
             }
             
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
         },
         Cmd::ResizeColumn {
             direction,
@@ -3284,9 +3080,9 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
 
             // speichern
             open_file.speichern();
-            webview.eval("saveState();");
+            webview.evaluate_script("saveState();");
 
-            webview.eval(&format!("adjustColumn(`{}`,`{}`,`{}`,`{}`,`{}`)", column_id, new_width, new_height, new_x, new_y));
+            webview.evaluate_script(&format!("adjustColumn(`{}`,`{}`,`{}`,`{}`,`{}`)", column_id, new_width, new_height, new_x, new_y));
         },
         Cmd::ToggleCheckBox { checkbox_id } => {
             match checkbox_id.as_str() {
@@ -3369,7 +3165,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
+            webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
         },
         Cmd::ExportNebenbeteiligte => {
         
@@ -3724,7 +3520,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
         Cmd::InsertRegex { regex_key } => {
             data.konfiguration.regex.insert(format!("{}_1", regex_key), "(.*)".to_string());
             data.konfiguration.speichern();
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::RegexLoeschen { regex_key } => {
             data.konfiguration.regex.remove(regex_key);
@@ -3732,7 +3528,7 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 data.konfiguration.regex.insert("REGEX_ID".to_string(), "(.*)".to_string());
             }       
             data.konfiguration.speichern();
-            webview.eval(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
         },
         Cmd::TesteRegex { regex_id, text } => {
             let result = teste_regex(&regex_id, text.trim(), &data.konfiguration);
@@ -3750,11 +3546,11 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 },
                 Err(e) => { format!("{}", e) },
             };
-            webview.eval(&format!("replaceRegexTestOutput(`{}`);", result));
+            webview.evaluate_script(&format!("replaceRegexTestOutput(`{}`);", result));
         },
         Cmd::SetActiveRibbonTab { new_tab } => {
             data.active_tab = *new_tab;
-            webview.eval(&format!("replaceRibbon(`{}`);", ui::render_ribbon(&data)));
+            webview.evaluate_script(&format!("replaceRibbon(`{}`);", ui::render_ribbon(&data)));
         },
         Cmd::SetOpenFile { new_file } => {
             data.open_page = Some((new_file.clone(), 2));
@@ -3792,8 +3588,8 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 });
             }
             
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.evaluate_script(&format!("replaceMainNoFiles(`{}`);", ui::render_application_main_no_files(data)));
         },
         Cmd::SetOpenPage { active_page } => {
             
@@ -3807,24 +3603,24 @@ fn webview_cb<'a>(webview: &mut WebView<'a, RpcData>, arg: &str, data: &mut RpcD
                 None => return,
             };
             
-            // webview.eval(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
-            webview.eval(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
-            webview.eval(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
-            webview.eval(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
-            webview.eval(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
-            webview.eval(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
-            webview.eval(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
-            webview.eval(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
-            webview.eval(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
-            webview.eval(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
-            webview.eval(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            webview.eval(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
-            webview.eval(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
-            webview.eval(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
-            webview.eval(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
+            // webview.evaluate_script(&format!("replaceMainContainer(`{}`);", ui::render_main_container(data)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnis(`{}`);", ui::render_bestandsverzeichnis(open_file, &data.konfiguration)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisZuschreibungen(`{}`);", ui::render_bestandsverzeichnis_zuschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceBestandsverzeichnisAbschreibungen(`{}`);", ui::render_bestandsverzeichnis_abschreibungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1(`{}`);", ui::render_abt_1(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1GrundlagenEintragungen(`{}`);", ui::render_abt_1_grundlagen_eintragungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Veraenderungen(`{}`);", ui::render_abt_1_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt1Loeschungen(`{}`);", ui::render_abt_1_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2(`{}`);", ui::render_abt_2(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Veraenderungen(`{}`);", ui::render_abt_2_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt2Loeschungen(`{}`);", ui::render_abt_2_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
+            webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
+            webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
+            webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            webview.evaluate_script(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
+            webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
+            webview.evaluate_script(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
         },
     }
 }
@@ -3923,7 +3719,6 @@ fn get_alle_rechte_html(data: &RpcData) -> String {
     
     entries.join("\r\n")
 }
-
 
 fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
     
@@ -4876,11 +4671,11 @@ fn main() {
     
     let initial_screen = ui::render_entire_screen(&mut userdata);
     
-    let app_html = include_str!("dist/app.html").to_string().replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
-    let url = "data:text/html,".to_string() + &encode(&app_html);
     let resizable = true;
     let debug = true;
+    let app_html = include_str!("dist/app.html").to_string().replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
     
+    /*
     let (_, launched_successful) = run(
         APP_TITLE, 
         &url, 
@@ -4888,7 +4683,7 @@ fn main() {
         resizable, 
         debug, 
         |webview| { webview.dispatch(|webview, _| { 
-            webview.eval(&format!("replaceEntireScreen(`{}`)", initial_screen)); }); 
+            webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", initial_screen)); }); 
         }, 
         |webview, arg, data: &mut RpcData| { webview_cb(webview, arg, data); }, 
         userdata
@@ -4898,6 +4693,7 @@ fn main() {
         println!("failed to launch {}", env!("CARGO_PKG_NAME"));
         return;
     }
+    */
     
     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
     
