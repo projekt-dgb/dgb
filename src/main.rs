@@ -62,8 +62,14 @@ pub struct UploadChangeset {
     pub titel: String,
     pub beschreibung: Vec<String>,
     pub fingerprint: String,
-    pub signatur: Vec<String>,
+    pub signatur: PgpSignatur,
     pub data: UploadChangesetData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PgpSignatur {
+    pub hash: String,
+    pub pgp_signatur: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,113 +80,26 @@ pub struct UploadChangesetData {
 
 pub type DateTime = chrono::DateTime<chrono::Local>;
 
-pub fn init_repo() -> Result<(git2::Repository, String), String> {
-
-    use git2::RepositoryInitOptions;
-
-    let random = rand::random::<u64>();
-    let dir = std::env::temp_dir().join("dgb").join(format!("{random}"));
-    let path = format!("{}", dir.display());
-    let _ = std::fs::create_dir_all(&path);    
-    println!("init_repo in {}", dir.display());
-    
-    println!("set safe directory...");
-    
-    let mut config = git2::Config::open_default()
-        .map_err(|e| format!("git config: {e}"))?;
-    
-    println!("set safe.directory: {:?}", config.set_multivar("safe.directory", "", &path));
-    println!("set safe directory done!");
-
-    match git2::Repository::init(format!("{}", dir.display())) {
-        Ok(o) => Ok((o, format!("{}", dir.display()))),
-        Err(e) => Err(format!("{e}")),
-    }
-}
-
-
 impl UploadChangesetData {
     pub fn format_patch(&self) -> Result<String, String> {
-
-        println!("format_patch...");
-        let (repo, path) = init_repo()?;
-        let dir = Path::new(&path);
-
-        for geaendert in self.geaendert.iter() {
-            let file_name = format!("{}_{}.gbx", geaendert.alt.titelblatt.grundbuch_von, geaendert.alt.titelblatt.blatt);
-            let json_alt = serde_json::to_string(&geaendert.alt)
-                .map_err(|e| format!("{e}"))?;
-            let _ = std::fs::write(dir.clone().join(file_name), json_alt.as_bytes())
-                .map_err(|e| format!("{e}"))?;
+        Ok(serde_json::to_string_pretty(&self)
+        .map_err(|e| format!("{e}"))?
+        .lines()
+        .map(|l| l.to_string())
+        .collect::<Vec<_>>()
+        .join("\r\n"))
+    }
+    pub fn clear_personal_info(&mut self) {
+        for n in self.neu.iter_mut() {
+            n.clear_personal_info();
         }
         
-        let mut index = repo.index().map_err(|e| format!("{e}"))?;
-        let _ = index.add_all(["*.gbx"].iter(), git2::IndexAddOption::DEFAULT, None);
-        let _ = index.write();
-        
-        let signature = git2::Signature::now("Max Mustermann", "max@mustermann.de").map_err(|e| format!("{e}"))?;
-
-        let id = index.write_tree().map_err(|e| format!("{e}"))?;
-        let tree = repo.find_tree(id).map_err(|e| format!("{e}"))?;
-
-        let parent = repo
-            .head()
-            .ok()
-            .and_then(|c| c.target())
-            .and_then(|head_target| repo.find_commit(head_target).ok());
-
-        let parents = match parent.as_ref() {
-            Some(s) => vec![s],
-            None => Vec::new(),
-        };
-
-        let commit_id = repo
-            .commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &parents)
-            .map_err(|e| format!("{e}"))?;
-        
-        println!("commit erstellt!");
-        
-        for neu in self.neu.iter() {
-            let file_name = format!("{}_{}.gbx", neu.titelblatt.grundbuch_von, neu.titelblatt.blatt);
-            let json_alt = serde_json::to_string(&neu)
-                .map_err(|e| format!("{e}"))?;
-            let _ = std::fs::write(dir.clone().join(file_name), json_alt.as_bytes())
-                .map_err(|e| format!("{e}"))?;
+        for g in self.geaendert.iter_mut() {
+            g.alt.clear_personal_info();
+            g.neu.clear_personal_info();
         }
-        
-        for geaendert in self.geaendert.iter() {
-            let file_name = format!("{}_{}.gbx", geaendert.neu.titelblatt.grundbuch_von, geaendert.neu.titelblatt.blatt);
-            let json_alt = serde_json::to_string(&geaendert.neu)
-                .map_err(|e| format!("{e}"))?;
-            let _ = std::fs::write(dir.clone().join(file_name), json_alt.as_bytes())
-                .map_err(|e| format!("{e}"))?;
-        }
-        
-        let diff = repo.diff_tree_to_workdir(Some(&tree), None)
-            .map_err(|e| format!("{e}"))?;
-        
-        println!("diff erstellt!");
-
-        let mut diff_str = String::new();    
-        diff.print(
-            git2::DiffFormat::Patch, 
-            |_, _, line| {
-                match line.origin() {
-                    '+' | '-' | ' ' => diff_str.push_str(&format!("{}", line.origin())),
-                    _ => { }
-                }
-                diff_str.push_str(&format!("{}", std::str::from_utf8(line.content()).unwrap_or("")));
-                true
-            }
-        ).map_err(|e| format!("{e}"))?;
-        
-        // std::fs::remove_dir(dir).map_err(|e| format!("{e}"))?;
-        
-        Ok(diff_str)
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status")]
@@ -497,6 +416,12 @@ impl PdfFile {
         }
     }
     
+    pub fn clear_personal_info(&mut self) {
+        self.datei = if self.datei.is_some() { Some(String::new()) } else { None };
+        self.gbx_datei_pfad = if self.gbx_datei_pfad.is_some() { Some(String::new()) } else { None };
+        self.nebenbeteiligte_dateipfade.clear();
+    }
+    
     pub fn get_gbx_datei_pfad(&self) -> PathBuf {
         let file_name = format!("{}_{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt);
         self.get_gbx_datei_parent()
@@ -683,17 +608,17 @@ pub mod pgp {
         let message = Message::new(sink);
 
         // We want to sign a literal data packet.
-        let signer = Signer::new(message, keypair).detached().build()?;
-
-        // Emit a literal data packet.
-        let mut literal_writer = LiteralWriter::new(signer).build()?;
+        let mut signer = Signer::new(message, keypair)
+            .detached()
+            .cleartext()
+            .build()?;
 
         // Sign the data.
-        literal_writer.write_all(plaintext.as_bytes())?;
+        signer.write_all(plaintext.as_bytes())?;
 
         // Finalize the OpenPGP message to make sure that all data is
         // written.
-        literal_writer.finalize()?;
+        signer.finalize()?;
 
         Ok(())
     }
@@ -741,7 +666,7 @@ impl Konfiguration {
         Ok(cert.fingerprint().to_hex())
     }
     
-    pub fn sign_message(&self, msg: &str) -> Result<Vec<String>, String> {
+    pub fn sign_message(&self, msg: &str) -> Result<(String, Vec<String>), String> {
     
         use sequoia_openpgp::policy::StandardPolicy as P;
     
@@ -756,7 +681,34 @@ impl Konfiguration {
         let sig_str = String::from_utf8(signature)
             .map_err(|e| format!("Ungültige Signatur: {e}"))?;
         
-        Ok(sig_str.lines().map(|s| s.trim().to_string()).collect())
+        let lines = sig_str
+            .lines()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
+        
+        let hash = lines
+            .get(1)
+            .map(|s| s.replace("Hash: ", "").trim().to_string())
+            .ok_or(format!("Ungültige Hashfunktion in Zeile 2: {:?}", lines.get(1)))?;
+                
+        let begin_pgp_signature_line = lines.iter().position(|l| l.contains("BEGIN PGP SIGNATURE"))
+            .ok_or(format!("Ungültige PGP-Signatur: Kein BEGIN PGP SIGNATURE gefunden"))?;
+            
+        let end_pgp_signature_line = lines.iter().position(|l| l.contains("END PGP SIGNATURE"))
+            .ok_or(format!("Ungültige PGP-Signatur: Kein END PGP SIGNATURE gefunden"))?;
+        
+        let min = begin_pgp_signature_line.min(end_pgp_signature_line);
+        let max = end_pgp_signature_line.max(begin_pgp_signature_line);
+        let mut signatur = Vec::new();
+
+        for i in min..max {
+            let line = lines.get(i).ok_or(format!("Ungültige PGP-Signatur"))?;
+            if line.trim().is_empty() { continue; }
+            if line.contains("BEGIN PGP SIGNATURE") || line.contains("END PGP SIGNATURE") { continue; }
+            signatur.push(line.trim().to_string());
+        }
+        
+        Ok((hash, signatur))
     }
     
     pub fn get_passwort(&self) -> Option<String> {
@@ -1271,11 +1223,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 return;
             }
 
-            let d = UploadChangesetData {
+            let mut d = UploadChangesetData {
                 neu: aenderungen.neue_dateien.values().cloned().collect(),
                 geaendert: aenderungen.geaenderte_dateien.values().cloned().collect(),
             };
 
+            d.clear_personal_info();
+            
             let patch = match d.format_patch() {
                 Ok(o) => o,
                 Err(e) => {
@@ -1288,9 +1242,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     return;
                 }
             };
-            
-            println!("patch:\r\n{}", patch);
-            
+                        
             let signatur = match data.konfiguration.sign_message(&patch) {
                 Ok(o) => o,
                 Err(e) => {
@@ -1317,10 +1269,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 titel: data.commit_title.clone(),
                 beschreibung: data.commit_msg.lines().map(|s| s.trim().to_string()).collect(),
                 fingerprint,
-                signatur,
+                signatur: PgpSignatur {
+                    hash: signatur.0,
+                    pgp_signatur: signatur.1,
+                },
                 data: d,
             };
-                        
+            
+            println!("data_changes:\r\n{:#?}", data_changes);
+
             let client = reqwest::blocking::Client::new();
             let res = match client.post(url.clone())
                 .json(&data_changes)
@@ -1335,7 +1292,8 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                             let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                         },
                         Ok(UploadChangesetResponse::StatusError(e)) => {
-                            tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("E{}: {}", e.code, e.text), MessageBoxIcon::Error);
+                            let err = e.text.replace("\"", "").replace("'", "");
+                            tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("E{}: {err}", e.code), MessageBoxIcon::Error);
                             let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
                             return;
                         },
