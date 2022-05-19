@@ -132,6 +132,9 @@ impl RpcData {
         for (file_name, open_file) in self.loaded_files.iter() {
             if !open_file.ist_geladen() { continue; }
             
+            let mut open_file = open_file.clone();
+            open_file.clear_personal_info();
+            
             let json = match serde_json::to_string_pretty(&open_file) {
                 Ok(o) => o,
                 Err(_) => continue,
@@ -139,15 +142,28 @@ impl RpcData {
             
             match std::fs::read_to_string(Path::new(&Konfiguration::backup_dir()).join("backup").join(&format!("{file_name}.gbx"))) {
                 Ok(o) => {
-                    if o != json {
+                
+                    let mut o_parsed: PdfFile = match serde_json::from_str(&o) {
+                        Ok(o) => o,
+                        Err(_) => {
+                            neue_dateien.insert(file_name.clone(), open_file.clone());
+                            continue;
+                        },
+                    };
+                    
+                    o_parsed.clear_personal_info();
+                    
+                    let o_json = match serde_json::to_string_pretty(&o_parsed) {
+                        Ok(o) => o,
+                        Err(_) => {
+                            neue_dateien.insert(file_name.clone(), open_file.clone());
+                            continue;
+                        },
+                    };
+                    
+                    if o_json != json {
                         geaenderte_dateien.insert(file_name.clone(), GbxAenderung {
-                            alt: match serde_json::from_str(&o) {
-                                Ok(o) => o,
-                                Err(_) => {
-                                    neue_dateien.insert(file_name.clone(), open_file.clone());
-                                    continue;
-                                },
-                            },
+                            alt: o_parsed,
                             neu: open_file.clone(),
                         });
                     }
@@ -1180,11 +1196,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             match json {
-                PdfFileOrEmpty::Pdf(json) => {
+                PdfFileOrEmpty::Pdf(mut json) => {
                     let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
                     let backup_1 = Path::new(&Konfiguration::backup_dir()).join("backup");
+                    let path = Path::new(&target_folder_path);
+                    if json.gbx_datei_pfad.is_some() { json.gbx_datei_pfad = Some(format!("{}", path.display())); } 
+                    if json.datei.is_some() { json.datei = Some(format!("{}", path.join(&format!("{file_name}.pdf")).display())); } 
                     let _ = std::fs::write(backup_1.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
-                    
                     let _ = std::fs::write(&format!("{target_folder_path}/{file_name}.gbx"), serde_json::to_string_pretty(&json).unwrap_or_default());
                     data.create_diff_save_point(&file_name, json.clone());
                     data.loaded_files.insert(file_name.clone(), json.clone());
@@ -4593,9 +4611,11 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
         .map_err(|e| Some(format!("Ungültige Antwort: {e}")))?;
     
     match json {
-        PdfFileOrEmpty::Pdf(json) => {
+        PdfFileOrEmpty::Pdf(mut json) => {
             let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
             let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
+            if json.gbx_datei_pfad.is_some() { json.gbx_datei_pfad = Some(format!("{}", target_folder_path.display())); } 
+            if json.datei.is_some() { json.datei = Some(format!("{}", target_folder_path.join(&format!("{file_name}.pdf")).display())); } 
             let _ = std::fs::write(target_folder_path.join(&format!("{file_name}.gbx")), serde_json::to_string_pretty(&json).unwrap_or_default());
         },
         PdfFileOrEmpty::NichtVorhanden(err) => {
