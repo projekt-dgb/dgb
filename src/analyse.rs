@@ -159,13 +159,21 @@ impl FlurFlurstueck {
     }
 }
 
-pub fn analysiere_grundbuch<'py>(
+pub fn analysiere_grundbuch(
     grundbuch: &Grundbuch, 
     nb: &[Nebenbeteiligter], 
     konfiguration: &Konfiguration
 ) -> GrundbuchAnalysiert {
     
     let mut abt2_analysiert = Vec::<Abt2Analysiert>::new();
+    let mut abt3_analysiert = Vec::new();
+
+    #[cfg(target_os = "windows")] {
+        return GrundbuchAnalysiert {
+            abt2: abt2_analysiert,
+            abt3: abt3_analysiert,
+        };
+    }
     
     for eintrag in grundbuch.abt2.eintraege.iter() {
         
@@ -301,7 +309,6 @@ pub fn analysiere_grundbuch<'py>(
         })
     }
     
-    let mut abt3_analysiert = Vec::new();
     for eintrag in grundbuch.abt3.eintraege.iter() {
     
         if eintrag.ist_geroetet() { continue; }

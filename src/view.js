@@ -1514,8 +1514,8 @@ document.onkeydown = function(e) {
 
 // Init
 window.onload = function() { rpc.init(); };
-/*
+
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
-});*/
+});
 

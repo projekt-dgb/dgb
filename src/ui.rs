@@ -1188,11 +1188,103 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_NEU: &[u8] = include_bytes!("./img/icons8-add-file-96.png");
     static ICON_SEARCH: &[u8] = include_bytes!("./img/icons8-search-in-cloud-96.png");
     static ICON_UPLOAD: &[u8] = include_bytes!("./img/icons8-upload-to-cloud-96.png");
+    static ICON_HVM: &[u8] = include_bytes!("./img/icons8-copy-link-96.png");
 
+    #[cfg(not(target_os = "windows"))]
+    let is_windows = false;
+    #[cfg(target_os = "windows")]
+    let is_windows = true;
+    
+    let disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" };
+    let icon_open_base64 = base64::encode(ICON_GRUNDBUCH_OEFFNEN);
+    let icon_neu_base64 = base64::encode(ICON_NEU);
+    let icon_back_base64 = base64::encode(ICON_ZURUECK);
+    let icon_forward_base64 = base64::encode(ICON_VORWAERTS);
+    let icon_settings_base64 = base64::encode(ICON_EINSTELLUNGEN);
+    let icon_help_base64 = base64::encode(ICON_HELP);
+    let icon_info_base64 = base64::encode(ICON_INFO);
+    let icon_download_base64 = base64::encode(ICON_DOWNLOAD);
+    let icon_delete_base64 = base64::encode(ICON_DELETE);
+    let icon_export_pdf = base64::encode(ICON_PDF);
+    let icon_rechte_speichern = base64::encode(ICON_RECHTE_AUSGEBEN);
+    let icon_fehler_speichern = base64::encode(ICON_FEHLER_AUSGEBEN);
+    let icon_export_teilbelastungen = base64::encode(ICON_TEILBELASTUNGEN_AUSGEBEN);
+    let icon_export_abt1 = base64::encode(ICON_ABT1_AUSGEBEN);
+    let icon_search_base64 = base64::encode(ICON_SEARCH);
+    let icon_upload_lefis = base64::encode(ICON_UPLOAD);
+    let icon_export_csv = base64::encode(ICON_EXPORT_CSV);
+    let icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS);
+    let icon_hvm = base64::encode(ICON_HVM);
+
+    let nebenbet = if is_windows {
+        String::new()
+    } else {
+        format!("
+            <div class='__application-ribbon-section 3'>
+                <div style='display:flex;flex-direction:row;'>
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_nb(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
+                            </div>
+                            <div>
+                                <p>Nebenbet.</p>
+                                <p>in CSV</p>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.import_nb(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_download_base64}'>
+                            </div>
+                            <div>
+                                <p>Nebenbet.</p>
+                                <p>importieren</p>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.delete_nb(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_delete_base64}'>
+                            </div>
+                            <div>
+                                <p>Nebenbet.</p>
+                                <p>entfernen</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        ")
+    };
+    
+    let export_lefis = if is_windows {
+        String::new()
+    } else {
+        format!("
+            <div class='__application-ribbon-section-content'>
+                <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
+                    <div class='icon-wrapper'>
+                        <img class='icon {disabled}' src='data:image/png;base64,{icon_export_lefis}'>
+                    </div>
+                    <div>
+                        <p>Export</p>
+                        <p>(.lefis)</p>
+                    </div>
+                </label>
+            </div>
+        ")
+    };
+    
     let ribbon_body = format!("
         <div class='__application-ribbon-body'>
             <div class='__application-ribbon-section 1'>
                 <div style='display:flex;flex-direction:row;'>
+                    
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.load_new_pdf(event)' class='__application-ribbon-action-vertical-large'>
                             <div class='icon-wrapper'>
@@ -1259,46 +1351,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                 </div>
             </div>
             
-            
-            <div class='__application-ribbon-section 3'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_nb(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_csv}'>
-                            </div>
-                            <div>
-                                <p>Nebenbet.</p>
-                                <p>in CSV</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.import_nb(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_download_base64}'>
-                            </div>
-                            <div>
-                                <p>Nebenbet.</p>
-                                <p>importieren</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.delete_nb(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_delete_base64}'>
-                            </div>
-                            <div>
-                                <p>Nebenbet.</p>
-                                <p>entfernen</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
+            {nebenbet}
             
             <div class='__application-ribbon-section 4'>
                 <div style='display:flex;flex-direction:row;'>
@@ -1351,23 +1404,25 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                         </label>
                     </div> 
                     
+                    <div class='__application-ribbon-section-content'>
+                        <label onmouseup='tab_functions.export_alle_hvm(event)' class='__application-ribbon-action-vertical-large'>
+                            <div class='icon-wrapper'>
+                                <img class='icon {disabled}' src='data:image/png;base64,{icon_hvm}'>
+                            </div>
+                            <div>
+                                <p>Alle HVM</p>
+                                <p>speichern unter</p>
+                            </div>
+                        </label>
+                    </div> 
+                    
                 </div>
             </div>            
             
             <div class='__application-ribbon-section 5'>
                 <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_lefis}'>
-                            </div>
-                            <div>
-                                <p>Export</p>
-                                <p>(.lefis)</p>
-                            </div>
-                        </label>
-                    </div>
-                    
+
+                    {export_lefis}
                     
                     <div class='__application-ribbon-section-content'>
                         <label onmouseup='tab_functions.open_export_pdf(event)' class='__application-ribbon-action-vertical-large'>
@@ -1416,7 +1471,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
             </div>
             
             <div style='display:flex;flex-grow:1;'></div>
-            
+            ´
             <div class='__application-ribbon-section 6'>
                 <div style='display:flex;flex-direction:row;'>
                     <div class='__application-ribbon-section-content'>
@@ -1444,28 +1499,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                 </div>
             </div>
         </div>
-        ", 
-        disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" },
-        icon_open_base64 = base64::encode(ICON_GRUNDBUCH_OEFFNEN),
-        icon_neu_base64 = base64::encode(ICON_NEU),
-        icon_back_base64 = base64::encode(ICON_ZURUECK),
-        icon_forward_base64 = base64::encode(ICON_VORWAERTS),
-        icon_settings_base64 = base64::encode(ICON_EINSTELLUNGEN),
-        icon_help_base64 = base64::encode(ICON_HELP),
-        icon_info_base64 = base64::encode(ICON_INFO),
-        icon_download_base64 = base64::encode(ICON_DOWNLOAD),
-        icon_delete_base64 = base64::encode(ICON_DELETE),
-        icon_export_pdf = base64::encode(ICON_PDF),
-        icon_rechte_speichern = base64::encode(ICON_RECHTE_AUSGEBEN),
-        icon_fehler_speichern = base64::encode(ICON_FEHLER_AUSGEBEN),
-        icon_export_teilbelastungen = base64::encode(ICON_TEILBELASTUNGEN_AUSGEBEN),
-        icon_export_abt1 = base64::encode(ICON_ABT1_AUSGEBEN),
-        icon_search_base64 = base64::encode(ICON_SEARCH),
-        icon_upload_lefis = base64::encode(ICON_UPLOAD),
-        
-        icon_export_csv = base64::encode(ICON_EXPORT_CSV),
-        icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS),
-    );
+        ");
 
     normalize_for_js(ribbon_body)
 }
@@ -1651,6 +1685,11 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
     } else {
         let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
     
+        #[cfg(not(target_os = "windows"))]
+        let is_windows = false;
+        #[cfg(target_os = "windows")]
+        let is_windows = true;
+
         normalize_for_js(format!("
                 <div style='display:flex;flex-direction:row;height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
                     <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
@@ -1687,29 +1726,33 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
                 </div>
             ", reload_icon = reload_str) },
-            lefis_analyse = if rpc_data.konfiguration.lefis_analyse_einblenden {
-                let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
-                format!("
+            lefis_analyse = if is_windows {
+                String::new()
+            } else {
+                if rpc_data.konfiguration.lefis_analyse_einblenden {
+                    let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
+                    format!("
+                        <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
+                            <div style='display:flex;flex-direction:row;'>
+                                <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
+                                <div style='padding:6px;'>
+                                    <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                                </div>
+                            </div>
+                        </div>")
+                } else {
+                    let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
+                    format!("
                     <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
+                            <div style='display:flex;flex-grow:1;'></div>
                             <div style='padding:6px;'>
-                                <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                                <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
                             </div>
                         </div>
                     </div>")
-            } else {
-                let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
-                format!("
-                <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
-                    <div style='display:flex;flex-direction:row;'>
-                        <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
-                        <div style='display:flex;flex-grow:1;'></div>
-                        <div style='padding:6px;'>
-                            <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
-                        </div>
-                    </div>
-                </div>")
+                }
             },
             
             bestandsverzeichnis = render_bestandsverzeichnis(open_file, &rpc_data.konfiguration),
@@ -1728,7 +1771,8 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3 = render_abt_3(open_file, rpc_data.konfiguration.lefis_analyse_einblenden),
             abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
-            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
+            
+            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden && !is_windows {
                 format!("
                     <div id='__application-analyse-grundbuch' style='display:flex;flex-grow:1;min-width:50%;overflow:scroll;{max_height}'>
                         {analyse}
