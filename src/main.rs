@@ -1283,9 +1283,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let url = format!("{server_url}/upload?email={server_email}&passwort={passwort}");
             
+            let commit_msg = crate::pdf::hyphenate(&crate::pdf::unhyphenate(&data.commit_msg), 80);
+            
             let data_changes = UploadChangeset {
                 titel: data.commit_title.clone(),
-                beschreibung: data.commit_msg.lines().map(|s| s.trim().to_string()).collect(),
+                beschreibung: commit_msg,
                 fingerprint,
                 signatur: PgpSignatur {
                     hash: signatur.0,

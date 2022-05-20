@@ -3202,7 +3202,7 @@ lazy_static::lazy_static! {
     };
 }
 
-fn unhyphenate(text: &str) -> String {
+pub fn unhyphenate(text: &str) -> String {
 
     let mut und_saetze = text.lines().map(|s| {
         s.split("- und ")
@@ -3228,7 +3228,7 @@ fn unhyphenate(text: &str) -> String {
     text_sauber
 }
 
-fn hyphenate(text: &str, wrap_at_chars: usize) -> Vec<String> {
+pub fn hyphenate(text: &str, wrap_at_chars: usize) -> Vec<String> {
     let options = Options::new(wrap_at_chars)
         .word_splitter(WordSplitter::Hyphenation(DICT_DE.clone()));
     
