@@ -793,6 +793,23 @@ impl Konfiguration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AboNeuAnfrage {
+    #[serde(rename = "ok")]
+    Ok(AboNeuAnfrageOk),
+    #[serde(rename = "error")]
+    Err(AboNeuAnfrageErr),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AboNeuAnfrageOk { }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AboNeuAnfrageErr {
+    pub code: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status")]
 pub enum GrundbuchSucheResponse {
     #[serde(rename = "ok")]
@@ -1131,6 +1148,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let server_url = &data.konfiguration.server_url;
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let search_text = urlencoding::encode(&search_text);
+            let passwort = urlencoding::encode(&passwort);
             let url = format!("{server_url}/suche/{search_text}?email={server_email}&passwort={passwort}");
 
             let client = reqwest::blocking::Client::new();
@@ -1165,6 +1183,91 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let _ = webview.evaluate_script(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&json)));
         },
+        Cmd::GrundbuchAbonnieren { download_id } => {
+        
+            let passwort = match data.konfiguration.get_passwort() {
+                Some(s) => s,
+                None => return,
+            };
+            
+            let server_url = &data.konfiguration.server_url;
+            let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let download_id = download_id;
+            let server_url = &data.konfiguration.server_url;
+            let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let passwort = urlencoding::encode(&passwort);
+            
+            let tag = tinyfiledialogs::input_box(
+                &format!("Aktenzeichen eingeben"), 
+                &format!("Bitte geben Sie ein (kurzes) Aktenzeichen für Ihr neues Abonnement ein:"),
+                ""
+            );
+            
+            let tag = match tag {
+                Some(s) => s.trim().to_string(),
+                None => return,
+            };
+            
+            let tag = urlencoding::encode(&tag);
+            let url = format!("{server_url}/abo-neu/email/{download_id}/{tag}?email={server_email}&passwort={passwort}");
+            
+            println!("url: {url}");
+            
+            let client = reqwest::blocking::Client::new();
+            let res = client
+                .get(&url)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .send();
+
+            let resp = match res {
+                Ok(s) => s,
+                Err(e) => {
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Abonnieren des Grundbuchs", 
+                        &format!("Grundbuch konnte nicht abonniert werden: Anfrage an Server konnte nicht abgesendet werden: {e}"), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
+                },
+            };
+
+            let json = match resp.json::<AboNeuAnfrage>() {
+                Ok(s) => s,
+                Err(e) => {
+                    let e = format!("{e}").replace("\"", "").replace("'", "");
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Abonnieren des Grundbuchs", 
+                        &format!("Grundbuch konnte nicht abonniert werden: Antwort von Server ist im falschen Format: {e}"), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
+                },
+            };
+            
+            match json {
+                AboNeuAnfrage::Ok(_) => {
+                    tinyfiledialogs::message_box_ok(
+                        "Grundbuch wurde erfolgreich abonniert", 
+                        &format!("Sie haben das Grundbuch {download_id} mit dem Aktenzeichen {tag} abonniert.\r\nIn Zukunft werden Sie bei Änderungen an diesem Grundbuch per E-Mail benachrichtigt werden."), 
+                        MessageBoxIcon::Info
+                    );
+                },
+                AboNeuAnfrage::Err(e) => {
+                    let code = e.code;
+                    let e = e.text.replace("\"", "").replace("'", "");
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Abonnieren des Grundbuchs", 
+                        &format!("Grundbuch konnte nicht abonniert werden: Interner Serverfehler (E{code}: {e}"), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                    return;
+                },
+            }
+
+        },
         Cmd::DownloadGbx { download_id } => {
             
             let file_dialog_result = tinyfiledialogs::select_folder_dialog(
@@ -1187,6 +1290,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let download_id = download_id;
             let server_url = &data.konfiguration.server_url;
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let passwort = urlencoding::encode(&passwort);
             let url = format!("{server_url}/download/gbx/{download_id}?email={server_email}&passwort={passwort}");
                     
             let resp = match reqwest::blocking::get(&url) {
@@ -1317,6 +1421,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let server_url = &data.konfiguration.server_url;
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
+            let passwort = urlencoding::encode(&passwort);
             let url = format!("{server_url}/upload?email={server_email}&passwort={passwort}");
             
             let commit_msg = crate::pdf::hyphenate(&crate::pdf::unhyphenate(&data.commit_msg), 80);

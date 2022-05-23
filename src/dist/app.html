@@ -2117,6 +2117,7 @@ let rpc = {
   edit_konfiguration_schluesseldatei: function(base64) { rpc.invoke({ cmd : 'edit_konfiguration_schluesseldatei', base64: base64 }); },
   upload_gbx: function() { rpc.invoke({ cmd : 'upload_gbx' }); },
   download_gbx: function(download_id) { rpc.invoke({ cmd : 'download_gbx', download_id: download_id }); },
+  grundbuch_abonnieren: function(download_id) { rpc.invoke({ cmd : 'grundbuch_abonnieren', download_id: download_id }); },
   
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
@@ -2574,6 +2575,18 @@ function grundbuchHerunterladen(e) {
     }
     
     rpc.download_gbx(download_id);
+    
+    return false;
+}
+
+function grundbuchAbonnieren(e) {
+    
+    let download_id = e.target.dataset.downloadId;
+    if (!download_id) {
+        return false;
+    }
+    
+    rpc.grundbuch_abonnieren(download_id);
     
     return false;
 }

@@ -1048,7 +1048,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
                             <span style='max-width:500px;'><p>{text}</p></span>
                         </div>
                         <div style='display: flex; flex-direction: row;flex-grow: 0;'>
-                            <button class='btn' data-download-id='{download_id}' onclick='grundbuchAbbonieren(event)'>Abbonieren</button>
+                            <button class='btn' data-download-id='{download_id}' onclick='grundbuchAbonnieren(event)'>Abonnieren</button>
                             <button class='btn btn_neu' data-download-id='{download_id}' onclick='grundbuchHerunterladen(event)'>Herunterladen</button>
                         </div>
                     </div>

@@ -74,6 +74,8 @@ pub enum Cmd {
     CheckPdfForErrors,
     #[serde(rename = "search")]
     Search { search_text: String },
+    #[serde(rename = "grundbuch_abonnieren")]
+    GrundbuchAbonnieren { download_id: String },
     #[serde(rename = "download_gbx")]
     DownloadGbx { download_id: String },
     #[serde(rename = "upload_gbx")]
