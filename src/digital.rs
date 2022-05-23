@@ -64,7 +64,7 @@ pub fn lese_seitenzahlen(pdf_bytes: &[u8]) -> Result<Vec<u32>, Fehler> {
     Ok(pdf.get_pages().keys().copied().collect())
 }
 
-#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Titelblatt {
     pub amtsgericht: String,
     pub grundbuch_von: String,
@@ -2556,7 +2556,15 @@ impl StringOrLines {
     // width:
     // bv_geroetet
     // input_id: bv:{zeile_nr}:bezeichnung
-    pub fn get_html_editable_textfield(&self, width: usize, geroetet: bool, id: String, input_id: String, input_type: TextInputType, focus_type: FocusType) -> String {
+    pub fn get_html_editable_textfield(
+        &self, 
+        width: usize, 
+        geroetet: bool, 
+        id: String, 
+        input_id: String, 
+        input_type: TextInputType, 
+        focus_type: FocusType
+    ) -> String {
         
         let lines = self.lines().iter()
             .map(|l| l.replace(" ", "\u{00a0}"))
@@ -2625,26 +2633,25 @@ impl StringOrLines {
     pub fn text(&self) -> String {
         self.lines().join("\r\n")
     }
-}
-
-impl Default for StringOrLines {
-    fn default() -> Self {
-        String::new().into()
-    }
-}
-
-impl StringOrLines {
+    
     pub fn lines(&self) -> Vec<String> {
         match self {
             StringOrLines::SingleLine(s) => s.lines().map(|s| s.to_string()).collect(),
             StringOrLines::MultiLine(ml) => ml.clone(),
         }
     }
+    
     pub fn is_empty(&self) -> bool {
         match self {
             StringOrLines::SingleLine(s) => s.is_empty(),
             StringOrLines::MultiLine(ml) => ml.is_empty(),
         }
+    }
+}
+
+impl Default for StringOrLines {
+    fn default() -> Self {
+        String::new().into()
     }
 }
 
@@ -4414,7 +4421,7 @@ pub struct Abt1Loeschung {
 }
 
 impl Abt1Loeschung {
-    pub fn ist_geroetet(&self) -> bool { 
+    pub fn ist_geroetet(&self) -> bool {
         self.manuell_geroetet.unwrap_or(self.automatisch_geroetet)
     }
 }

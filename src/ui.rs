@@ -275,7 +275,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         },
         Some(PopoverState::GrundbuchSuchenDialog) => {
             format!("
-            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1000px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
                 {close_button}
 
@@ -997,7 +997,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
     let pc = match data {
         GrundbuchSucheResponse::StatusOk(ok) => {
             
-            if ok.ergebnisse.is_empty() {
+            if ok.grundbuecher.is_empty() && ok.aenderungen.is_empty() {
                 return format!("
                     <div class='__application_suchergebnis'>
                         <div class='__application_suchergebnis_description'>
@@ -1008,23 +1008,44 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
                 ");
             }
             
-            ok.ergebnisse.iter().map(|e| {
+            ok.grundbuecher.iter().map(|e| {
                 
                 let file_name = format!("{}_{}", e.titelblatt.grundbuch_von, e.titelblatt.blatt);
-                let text = if !e.gefunden_text.is_empty() {
-                    e.ergebnis_text.as_str()
-                    .replace(&e.gefunden_text, &format!("<strong>{}</strong>", e.gefunden_text))
-                } else {
-                    e.ergebnis_text.clone()
+                let abteilung = match e.ergebnis.abteilung.as_str() {
+                    "bv" => "Bestandsverzeichnis",
+                    "bv-herrschvermerke" => "Bestandsverzeichnis Herrschvermerk",
+                    "bv-zuschreibungen" => "Bestandsverzeichnis Zuschreibung",
+                    "bv-abschreibungen" => "Bestandsverzeichnis Abschreibung",
+                    "abt1" => "Abteilung 1",
+                    "abt1-grundlage-der-eintragungen" => "Abteilung 1 Grundlage der Eintragung",
+                    "abt1-veraenderungen" => "Abteilung 1 Veränderung",
+                    "abt1-loeschungen" => "Abteilung 1 Löschung",
+                    
+                    "abt1" => "Abteilung 1",
+                    "abt1-veraenderungen" => "Abteilung 1 Veränderung",
+                    "abt1-loeschungen" => "Abteilung 1 Löschung",
+                    
+                    "abt1" => "Abteilung 1",
+                    "abt1-veraenderungen" => "Abteilung 1 Veränderung",
+                    "abt1-loeschungen" => "Abteilung 1 Löschung",
+                    _ => ""
                 };
                 
-                let download_id = &e.download_id;
+                let gefunden_in = format!("{abteilung} lfd. Nr. {}", e.ergebnis.lfd_nr);
+                let text = &e.ergebnis.text;
+                let download_id = format!(
+                    "{}/{}/{}", 
+                    e.ergebnis.amtsgericht, 
+                    e.ergebnis.grundbuch_von,
+                    e.ergebnis.blatt,
+                );
                 
                 format!("
                     <div class='__application_suchergebnis'>
                         <div class='__application_suchergebnis_description'>
                             <h5>{file_name}.gbx</h5>
-                            <span style='max-width:300px;'><p>{text}</p></span>
+                            <span style='max-width:500px;'><strong>{gefunden_in}</strong></span>
+                            <span style='max-width:500px;'><p>{text}</p></span>
                         </div>
                         <div style='display: flex; flex-direction: row;flex-grow: 0;'>
                             <button class='btn' data-download-id='{download_id}' onclick='grundbuchAbbonieren(event)'>Abbonieren</button>
@@ -1042,7 +1063,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
             format!("<div class='__application_suchergebnis'><p style='width: 500px;word-break: break-all;'>E{code}: {text}</p></div>")
         }
     };
-    
+        
     normalize_for_js(pc)
 }
 

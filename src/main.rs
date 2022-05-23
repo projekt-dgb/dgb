@@ -798,20 +798,56 @@ pub enum GrundbuchSucheResponse {
     #[serde(rename = "ok")]
     StatusOk(GrundbuchSucheOk),
     #[serde(rename = "error")]
-    StatusErr(GrundbuchSucheError)
+    StatusErr(GrundbuchSucheError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrundbuchSucheOk {
-    pub ergebnisse: Vec<GrundbuchSucheErgebnis>,
+    pub grundbuecher: Vec<GrundbuchSucheErgebnis>,
+    pub aenderungen: Vec<CommitSucheErgebnis>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct GrundbuchSucheErgebnis {
     pub titelblatt: Titelblatt,
-    pub ergebnis_text: String,
-    pub gefunden_text: String,
-    pub download_id: String,
+    pub ergebnis: SuchErgebnisGrundbuch,
+    pub abos: Vec<AbonnementInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct CommitSucheErgebnis {
+    pub aenderung_id: String,
+    pub ergebnis: SuchErgebnisAenderung,
+    pub titelblaetter: Vec<Titelblatt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SuchErgebnisAenderung {
+    pub aenderungs_id: String,
+    pub bearbeiter: String,
+    pub datum: String,
+    pub titel: String,
+    pub beschreibung: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SuchErgebnisGrundbuch {
+    pub land: String,
+    pub amtsgericht: String,
+    pub grundbuch_von: String,
+    pub blatt: String,
+    pub abteilung: String,
+    pub lfd_nr: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AbonnementInfo {
+    pub amtsgericht: String,
+    pub grundbuchbezirk: String,
+    pub blatt: i32,
+    pub text: String,
+    pub aktenzeichen: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1086,12 +1122,12 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script("startCheckingForPdfErrors()");
         },
         Cmd::Search { search_text } => {
-        
+            
             let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
                 None => return,
             };
-            
+
             let server_url = &data.konfiguration.server_url;
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let search_text = urlencoding::encode(&search_text);
@@ -1114,7 +1150,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     return;
                 },
             };
-            
+                        
             let json = match resp.json::<GrundbuchSucheResponse>() {
                 Ok(s) => s,
                 Err(e) => {
@@ -1126,7 +1162,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     return;
                 },
             };
-        
+
             let _ = webview.evaluate_script(&format!("replaceSuchergebnisse(`{}`)", ui::render_suchergebnisse_liste(&json)));
         },
         Cmd::DownloadGbx { download_id } => {
@@ -1296,8 +1332,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 data: d,
             };
             
-            println!("data_changes:\r\n{:#?}", data_changes);
-
             let client = reqwest::blocking::Client::new();
             let res = match client.post(url.clone())
                 .json(&data_changes)
@@ -1309,13 +1343,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                             data.popover_state = None;
                             data.commit_title.clear();
                             data.commit_msg.clear();
-                            let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
                         },
                         Ok(UploadChangesetResponse::StatusError(e)) => {
                             let err = e.text.replace("\"", "").replace("'", "");
                             tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("E{}: {err}", e.code), MessageBoxIcon::Error);
                             let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
-                            return;
                         },
                         Err(e) => {
                             let e = format!("{e}").replace("\"", "").replace("'", "");
@@ -1325,7 +1357,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                                 MessageBoxIcon::Error
                             );
                             let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
-                            return;
                         }
                     }
                 },
@@ -1333,9 +1364,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     let e = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok("Fehler beim Hochladen der Dateien", &format!("HTTP POST {url}:\r\n{}", e), MessageBoxIcon::Error);
                     let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
-                    return;
                 }
             };
+            
+            let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)",  ui::render_entire_screen(data)));
         },    
         Cmd::CheckForImageLoaded { file_path, file_name } => {
             // TODO
@@ -4679,7 +4711,8 @@ fn main() -> wry::Result<()> {
     
     let resizable = true;
     let debug = true;
-    let app_html = include_str!("dist/app.html").to_string().replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
+    let app_html = include_str!("dist/app.html").to_string()
+    .replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
 
     let event_loop = EventLoop::with_user_event();
     let proxy = event_loop.create_proxy();
@@ -4690,13 +4723,17 @@ fn main() -> wry::Result<()> {
     
     let webview = WebViewBuilder::new(window)?
         .with_html(app_html)?
+        .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| {
             if let Ok(cmd) = serde_json::from_str(&cmd) {
                 let _ = proxy.send_event(cmd);
             }
         })
         .build()?;
-        
+    
+    // webview.open_devtools();
+    webview.focus();
+    
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -4710,7 +4747,9 @@ fn main() -> wry::Result<()> {
                     env::set_var(GTK_OVERLAY_SCROLLING, original_value);
                 }
             },
-            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => { let _ = webview.resize(); },
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => { 
+                let _ = webview.resize(); 
+            },
             Event::UserEvent(cmd) => { webview_cb(&webview, &cmd, &mut userdata); },
             _ => { },
         }

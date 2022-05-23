@@ -473,8 +473,9 @@ function grundbuchSuchen(e) {
 
 function replaceSuchergebnisse(s) {
     let e = document.getElementById("__application_grundbuch_suchen_suchergebnisse");
-    if (e)
-        e.innerHTML = s;    
+    if (e) {
+        e.innerHTML = s;
+    }
 }
 
 function grundbuchHochladen(e) {
@@ -1514,8 +1515,8 @@ document.onkeydown = function(e) {
 
 // Init
 window.onload = function() { rpc.init(); };
-
+/*
 document.querySelectorAll('*').forEach(function(node) {
     node.addEventListener('contextmenu', e => e.preventDefault())
 });
-
+*/
