@@ -697,6 +697,8 @@ impl Konfiguration {
         let sig_str = String::from_utf8(signature)
             .map_err(|e| format!("Ungültige Signatur: {e}"))?;
         
+        println!("msg created:\r\n{sig_str}");
+
         let lines = sig_str
             .lines()
             .map(|s| s.to_string())
@@ -1413,6 +1415,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     return;
                 }
             };
+            
+            println!("Fingerprint:\r\n{}", fingerprint);
+            println!("Signatur:\r\n{:#?}", signatur.1);
             
             let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
