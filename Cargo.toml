@@ -38,6 +38,10 @@ rand = "0.8.5"
 hyphenation = { version = "0.8.4", features = ["embed_all", "nfc"] }
 textwrap = { version = "0.15.0", features = ["smawk", "hyphenation"] }
 
+[dependencies.pyo3]
+version = "0.15.1"
+features = ["auto-initialize"]
+
 [profile.release]
 opt-level = 3
 lto = true
@@ -50,17 +54,13 @@ incremental = false
 rpath = false
 strip = true
 
-[dependencies.pyo3]
-version = "0.15.1"
-features = ["auto-initialize"]
-
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
 depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
 section = "utility"
 priority = "optional"
 assets = [
-    ["target/release/dgb", "usr/bin/", "755"],
+    ["target/release/dgb", "usr/local/bin/", "755"],
     ["dgb.desktop", "usr/local/share/applications/", "755"],
     ["dgb.xpm", "usr/share/pixmaps/", "755"],
     ["README.md", "usr/local/share/doc/dgb/README", "644"],
