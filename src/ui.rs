@@ -1854,7 +1854,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     {warnungen}
                 </div>
                 </div>",
-                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
                 text_original = if fuer_druck { format!("<p style='margin-top:10px;font-family:sans-serif;'>{}</p>", a2a.text_original) } else { String::new() }, 
                 max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a2a.text_kurz,
@@ -1969,7 +1969,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         {warnungen}
                     </div>
                 </div>",
-                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
                 text_original = if fuer_druck { format!("<p style='margin-top:10px;font-family:sans-serif;'>{}</p>", a3a.text_original) } else { String::new() }, 
                 max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a3a.text_kurz,
@@ -3101,7 +3101,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
     
     let temp_ordner = std::env::temp_dir()
-    .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
+    .join(&format!("{gemarkung}/{blatt}", gemarkung = file.analysiert.titelblatt.grundbuch_von, blatt = file.analysiert.titelblatt.blatt));
     
     let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
     let pdftoppm_output_path = if rpc_data.konfiguration.vorschau_ohne_geroetet {

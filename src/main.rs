@@ -8,8 +8,8 @@ use std::sync::Mutex;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::Command;
-use wry::webview::WebView;
 
+use wry::webview::WebView;
 use urlencoding::encode;
 use serde_derive::{Serialize, Deserialize};
 use crate::digital::{
@@ -23,6 +23,7 @@ use crate::digital::{
     Abt3Eintrag, Abt3Veraenderung, Abt3Loeschung,
 };
 use crate::analyse::GrundbuchAnalysiert;
+use crate::digital::{Bestandsverzeichnis, Abteilung1, Abteilung2, Abteilung3};
 use crate::kurztext::{PyBetrag, SchuldenArtPyWrapper, RechteArtPyWrapper};
 use pyo3::{Python, PyClass, PyAny, pyclass, pymethods, IntoPy, ToPyObject};
 use tinyfiledialogs::MessageBoxIcon;
@@ -193,14 +194,14 @@ impl RpcData {
         
         for new_state in changed_files.neu.iter() {
             if let Ok(json) = serde_json::to_string_pretty(&new_state) {
-                let file_name = format!("{}_{}.gbx", new_state.titelblatt.grundbuch_von, new_state.titelblatt.blatt);
+                let file_name = format!("{}_{}.gbx", new_state.analysiert.titelblatt.grundbuch_von, new_state.analysiert.titelblatt.blatt);
                 let _ = fs::write(path.clone().join(&format!("{file_name}.gbx")), json.as_bytes());
             }
         }
         
         for new_state in changed_files.geaendert.iter() {
             if let Ok(json) = serde_json::to_string_pretty(&new_state) {
-                let file_name = format!("{}_{}.gbx", new_state.titelblatt.grundbuch_von, new_state.titelblatt.blatt);
+                let file_name = format!("{}_{}.gbx", new_state.analysiert.titelblatt.grundbuch_von, new_state.analysiert.titelblatt.blatt);
                 let _ = fs::write(path.clone().join(&format!("{file_name}.gbx")), json.as_bytes());
             }
         }
@@ -360,20 +361,17 @@ pub struct PdfFile {
     #[serde(default)]
     #[serde(skip_serializing_if="Option::is_none")]
     land: Option<String>,
-    titelblatt: Titelblatt,
     #[serde(skip_serializing_if="Vec::is_empty")]
     #[serde(default)]
     seitenzahlen: Vec<u32>,
     #[serde(skip_serializing_if="BTreeMap::is_empty")]
     #[serde(default)]
     geladen: BTreeMap<String, SeiteParsed>,
-    analysiert: Grundbuch,
     #[serde(skip_serializing_if="PdfToTextLayout::is_empty")]
     #[serde(default)]
     pdftotext_layout: PdfToTextLayout,
     #[serde(skip, default)]
     icon: Option<PdfFileIcon>,
-    
     /// Seitennummern von Seiten, die versucht wurden, geladen zu werden
     #[serde(default)]
     #[serde(skip_serializing_if="BTreeSet::is_empty")]
@@ -390,11 +388,12 @@ pub struct PdfFile {
     #[serde(default)]
     #[serde(skip_serializing_if="Vec::is_empty")]
     nebenbeteiligte_dateipfade: Vec<String>,
-    
     #[serde(skip, default)]
     next_state: Option<Box<PdfFile>>,
     #[serde(skip, default)]
     previous_state: Option<Box<PdfFile>>,
+    
+    analysiert: Grundbuch,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -423,7 +422,11 @@ impl PdfFileIcon {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AnpassungSeite {
+    #[serde(default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub spalten: BTreeMap<String, Rect>,    
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub zeilen: Vec<f32>,
 }
 
@@ -462,7 +465,7 @@ impl PdfFile {
     }
     
     pub fn get_gbx_datei_pfad(&self) -> PathBuf {
-        let file_name = format!("{}_{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt);
+        let file_name = format!("{}_{}", self.analysiert.titelblatt.grundbuch_von, self.analysiert.titelblatt.blatt);
         self.get_gbx_datei_parent()
         .join(&format!("{}.gbx", file_name))
     }
@@ -547,7 +550,7 @@ impl PdfFile {
             if !abt2.rechtsinhaber.is_empty() {
                 v.push(NebenbeteiligterExport {
                     ordnungsnummer: None,
-                    recht: format!("{} Blatt {}, Abt. 2/{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt, abt2.lfd_nr),
+                    recht: format!("{} Blatt {}, Abt. 2/{}", self.analysiert.titelblatt.grundbuch_von, self.analysiert.titelblatt.blatt, abt2.lfd_nr),
                     typ: NebenbeteiligterTyp::from_str(&abt2.rechtsinhaber),
                     name: abt2.rechtsinhaber.clone(),
                     extra: NebenbeteiligterExtra::default(),
@@ -559,7 +562,7 @@ impl PdfFile {
             if !abt3.rechtsinhaber.is_empty() {
                 v.push(NebenbeteiligterExport {
                     ordnungsnummer: None,
-                    recht: format!("{} Blatt {}, Abt. 3/{}", self.titelblatt.grundbuch_von, self.titelblatt.blatt, abt3.lfd_nr),
+                    recht: format!("{} Blatt {}, Abt. 3/{}", self.analysiert.titelblatt.grundbuch_von, self.analysiert.titelblatt.blatt, abt3.lfd_nr),
                     typ: NebenbeteiligterTyp::from_str(&abt3.rechtsinhaber),
                     name: abt3.rechtsinhaber.clone(),
                     extra: NebenbeteiligterExtra::default(),
@@ -956,7 +959,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 
                 if let Some(mut grundbuch_json_parsed) = String::from_utf8(datei_bytes.clone()).ok().and_then(|s| serde_json::from_str::<PdfFile>(&s).ok()) {
                     
-                    let file_name = format!("{}_{}", grundbuch_json_parsed.titelblatt.grundbuch_von, grundbuch_json_parsed.titelblatt.blatt);
+                    let file_name = format!("{}_{}", grundbuch_json_parsed.analysiert.titelblatt.grundbuch_von, grundbuch_json_parsed.analysiert.titelblatt.blatt);
 
                     for nb_datei in grundbuch_json_parsed.nebenbeteiligte_dateipfade.iter() {
                         if let Some(mut nb) = std::fs::read_to_string(&nb_datei).ok().map(|fs| parse_nb(&fs)) {
@@ -1013,7 +1016,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     let mut pdf_parsed = PdfFile {
                         datei: Some(d.to_string()),
                         gbx_datei_pfad: None,
-                        titelblatt,
                         icon: None,
                         land: None,
                         seiten_ocr_text: BTreeMap::new(),
@@ -1021,7 +1023,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         klassifikation_neu: BTreeMap::new(),
                         pdftotext_layout: PdfToTextLayout::default(),
                         geladen: BTreeMap::new(),
-                        analysiert: Grundbuch::default(),
+                        analysiert: Grundbuch {
+                            titelblatt: titelblatt.clone(),
+                            bestandsverzeichnis: Bestandsverzeichnis::default(),
+                            abt1: Abteilung1::default(),
+                            abt2: Abteilung2::default(),
+                            abt3: Abteilung3::default(),
+                        },
                         nebenbeteiligte_dateipfade: Vec::new(),
                         anpassungen_seite: BTreeMap::new(),
                         seiten_versucht_geladen: BTreeSet::new(),
@@ -1065,7 +1073,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             for pdf_parsed in &pdf_zu_laden {
                 let output_parent = pdf_parsed.get_gbx_datei_parent();
-                let file_name = format!("{}_{}", pdf_parsed.titelblatt.grundbuch_von, pdf_parsed.titelblatt.blatt);
+                let file_name = format!("{}_{}", pdf_parsed.analysiert.titelblatt.grundbuch_von, pdf_parsed.analysiert.titelblatt.blatt);
                 let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
                 let _ = webview.evaluate_script(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
             }
@@ -1096,10 +1104,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let konfiguration = data.konfiguration.clone();
             
             for (_, d) in dateien {
-                if let Err(e) = try_download_file_database(konfiguration.clone(), d.titelblatt.clone()) {
+                if let Err(e) = try_download_file_database(konfiguration.clone(), d.analysiert.titelblatt.clone()) {
                     if let Some(msg) = e {
                         let msg = msg.replace("\"", "").replace("'", "");
-                        let file_name = format!("{}_{}", d.titelblatt.grundbuch_von, d.titelblatt.blatt);
+                        let file_name = format!("{}_{}", d.analysiert.titelblatt.grundbuch_von, d.analysiert.titelblatt.blatt);
                         tinyfiledialogs::message_box_ok(
                             "Fehler beim Synchronisieren mit Datenbank", 
                             &format!("Der aktuelle Stand von {file_name}.gbx konnte nicht aus der Datenbank geladen werden:\r\n{msg}\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
@@ -1141,11 +1149,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let mut pdf_parsed = PdfFile {
                 datei: None,
                 gbx_datei_pfad: Some(gbx_folder),
-                titelblatt: Titelblatt {
-                    amtsgericht: amtsgericht.trim().to_string().clone(),
-                    grundbuch_von: grundbuch_von.trim().to_string().clone(),
-                    blatt: blatt.clone(),
-                },
                 icon: None,
                 land: Some(land.trim().to_string()),
                 seiten_ocr_text: BTreeMap::new(),
@@ -1153,7 +1156,17 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 klassifikation_neu: BTreeMap::new(),
                 pdftotext_layout: PdfToTextLayout::default(),
                 geladen: BTreeMap::new(),
-                analysiert: Grundbuch::default(),
+                analysiert: Grundbuch {
+                    titelblatt: Titelblatt {
+                        amtsgericht: amtsgericht.trim().to_string().clone(),
+                        grundbuch_von: grundbuch_von.trim().to_string().clone(),
+                        blatt: blatt.clone(),
+                    },
+                    bestandsverzeichnis: Bestandsverzeichnis::default(),
+                    abt1: Abteilung1::default(),
+                    abt2: Abteilung2::default(),
+                    abt3: Abteilung3::default(),
+                },
                 nebenbeteiligte_dateipfade: Vec::new(),
                 anpassungen_seite: BTreeMap::new(),
                 seiten_versucht_geladen: BTreeSet::new(),
@@ -1370,7 +1383,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             match json {
                 PdfFileOrEmpty::Pdf(mut json) => {
-                    let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+                    let file_name = format!("{}_{}", json.analysiert.titelblatt.grundbuch_von, json.analysiert.titelblatt.blatt);
                     let backup_1 = Path::new(&Konfiguration::backup_dir()).join("backup");
                     let path = Path::new(&target_folder_path);
                     if json.gbx_datei_pfad.is_some() { json.gbx_datei_pfad = Some(format!("{}", path.display())); } 
@@ -1534,7 +1547,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
             
             let temp_ordner = std::env::temp_dir()
-            .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
+            .join(&format!("{gemarkung}/{blatt}", gemarkung = file.analysiert.titelblatt.grundbuch_von, blatt = file.analysiert.titelblatt.blatt));
             
             let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
             let pdftoppm_output_path = if data.konfiguration.vorschau_ohne_geroetet {
@@ -1549,7 +1562,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                             &o, 
                             &[open_file.1], 
-                            &file.titelblatt, 
+                            &file.analysiert.titelblatt, 
                             !data.konfiguration.vorschau_ohne_geroetet
                         );
                     }
@@ -2186,7 +2199,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.bestandsverzeichnis.zuschreibungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2200,7 +2213,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.bestandsverzeichnis.abschreibungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2228,7 +2241,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt1.grundlagen_eintragungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2242,7 +2255,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt1.veraenderungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2256,7 +2269,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt1.loeschungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2270,7 +2283,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt2.eintraege
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2284,7 +2297,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt2.veraenderungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2298,7 +2311,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt2.loeschungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2312,7 +2325,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt3.eintraege
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2326,7 +2339,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt3.veraenderungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2340,7 +2353,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     open_file.analysiert.abt3.loeschungen
                     .get_mut(row)
                     .map(|e| {
-                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet);
+                        let cur = *e.manuell_geroetet.get_or_insert_with(|| e.automatisch_geroetet.unwrap_or(false));
                         e.manuell_geroetet = Some(!cur);
                     });
                 },
@@ -2497,7 +2510,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 if let Some(s) = data.loaded_files.get_mut(&k.clone()) {
                     s.icon = Some(v);
                     let konfiguration = data.konfiguration.clone();
-                    let titelblatt = s.titelblatt.clone();
+                    let titelblatt = s.analysiert.titelblatt.clone();
                     let _ = webview.evaluate_script(&format!("replaceIcon(`{}`, `{}`)", k, v.get_base64()));
                 }
             }
@@ -2940,7 +2953,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             }
             
             let temp_ordner = std::env::temp_dir()
-            .join(&format!("{gemarkung}/{blatt}", gemarkung = file.titelblatt.grundbuch_von, blatt = file.titelblatt.blatt));
+            .join(&format!("{gemarkung}/{blatt}", gemarkung = file.analysiert.titelblatt.grundbuch_von, blatt = file.analysiert.titelblatt.blatt));
             
             let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
 
@@ -2949,7 +2962,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             if !Path::new(&pdftoppm_output_path).exists() {
                 if let Some(pdf) = file.datei.as_ref() {
                     if let Ok(o) = std::fs::read(&pdf) {
-                        let _ = crate::digital::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], max_seitenzahl, &file.titelblatt);
+                        let _ = crate::digital::konvertiere_pdf_seiten_zu_png(&o, &[*page as u32], max_seitenzahl, &file.analysiert.titelblatt);
                     }
                 }
             }
@@ -3069,7 +3082,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
                 
                 open_file.geladen.clear();
-                open_file.analysiert = Grundbuch::default();
+                open_file.analysiert = Grundbuch {
+                    titelblatt: open_file.analysiert.titelblatt.clone(),
+                    bestandsverzeichnis: Bestandsverzeichnis::default(),
+                    abt1: Abteilung1::default(),
+                    abt2: Abteilung2::default(),
+                    abt3: Abteilung3::default(),
+                };
             }
             
             let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", ui::render_entire_screen(data)));
@@ -3079,7 +3098,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
                 
-            let file_name = format!("{}_{}", open_file.titelblatt.grundbuch_von, open_file.titelblatt.blatt);
+            let file_name = format!("{}_{}", open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt);
             let output_parent = open_file.get_gbx_datei_parent();
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
             let _ = reload_grundbuch(open_file.clone(), data.konfiguration.clone());
@@ -3438,7 +3457,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         None => return,
                     };
                     
-                    open_file.analysiert.titelblatt = open_file.titelblatt.clone();
+                    open_file.analysiert.titelblatt = open_file.analysiert.titelblatt.clone();
                     PdfExportTyp::OffenesGrundbuch(open_file.analysiert.clone())
                 },
                 "alle-offen-digitalisiert" => {
@@ -3449,7 +3468,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         Some(f.clone())
                     })
                     .map(|mut f| {
-                        f.analysiert.titelblatt = f.titelblatt.clone();
+                        f.analysiert.titelblatt = f.analysiert.titelblatt.clone();
                         f.analysiert
                     })
                     .collect::<Vec<_>>();
@@ -3461,7 +3480,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         f.clone()
                     })
                     .map(|mut f| {
-                        f.analysiert.titelblatt = f.titelblatt.clone();
+                        f.analysiert.titelblatt = f.analysiert.titelblatt.clone();
                         f.analysiert
                     }).collect::<Vec<_>>();
                     
@@ -3729,7 +3748,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
             
-            let titelblatt = open_file.titelblatt.clone();
+            let titelblatt = open_file.analysiert.titelblatt.clone();
             let seitenzahlen = open_file.pdftotext_layout.seiten
                 .keys()
                 .filter_map(|i| i.parse::<u32>().ok())
@@ -3910,8 +3929,8 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
                 .any(|s1| !s1.nur_lastend_an.is_empty());
             
             if has_nur_lastend_an {
-                let blatt = &f.titelblatt.grundbuch_von;
-                let nr = &f.titelblatt.blatt;
+                let blatt = &f.analysiert.titelblatt.grundbuch_von;
+                let nr = &f.analysiert.titelblatt.blatt;
                 let lfd_nr = &abt2.lfd_nr;
                 let text = &abt2.text_original;
                 abt2_entries.push_str(&format!("<div style='display:flex;flex-direction:column;margin:10px;padding:10px;border:1px solid #efefef;page-break-inside:avoid;'><strong>{blatt} Nr. {nr}, A2 / {lfd_nr}</strong><div style='display:flex;flex-direction:row;'><div style='margin-right:10px;'>{text}</div><div>"));
@@ -3924,7 +3943,7 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
                     for e in spalte_1.nur_lastend_an.iter() {
                         let flur = &e.flur;
                         let flurstueck = &e.flurstueck;
-                        let gemarkung = &e.gemarkung.as_ref().unwrap_or(&f.titelblatt.grundbuch_von);
+                        let gemarkung = &e.gemarkung.as_ref().unwrap_or(&f.analysiert.titelblatt.grundbuch_von);
                         abt2_entries.push_str(&format!("<p>Gemarkung {gemarkung}, Flur {flur}, Flurstück {flurstueck}</p>"));    
                     }
                     
@@ -3947,8 +3966,8 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
                 .any(|s1| !s1.nur_lastend_an.is_empty());
             
             if has_nur_lastend_an {
-                let blatt = &f.titelblatt.grundbuch_von;
-                let nr = &f.titelblatt.blatt;
+                let blatt = &f.analysiert.titelblatt.grundbuch_von;
+                let nr = &f.analysiert.titelblatt.blatt;
                 let lfd_nr = &abt3.lfd_nr;
                 let text = &abt3.text_original;
                 abt3_entries.push_str(&format!("<div style='display:flex;flex-direction:column;margin:10px;padding:10px;border:1px solid #efefef;page-break-inside:avoid;'><strong>{blatt} Nr. {nr}, A3 / {lfd_nr}</strong><div style='display:flex;flex-direction:row;'><div style='margin-right:10px;'>{text}</div><div>"));
@@ -3961,7 +3980,7 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
                     for e in spalte_1.nur_lastend_an.iter() {
                         let flur = &e.flur;
                         let flurstueck = &e.flurstueck;
-                        let gemarkung = &e.gemarkung.as_ref().unwrap_or(&f.titelblatt.grundbuch_von);
+                        let gemarkung = &e.gemarkung.as_ref().unwrap_or(&f.analysiert.titelblatt.grundbuch_von);
                         abt3_entries.push_str(&format!("<p>Gemarkung {gemarkung}, Flur {flur}, Flurstück {flurstueck}</p>"));
                         
                     }
@@ -3988,8 +4007,8 @@ fn get_alle_abt1_html(data: &RpcData) -> String {
     
     for (f_name, f) in data.loaded_files.iter() {
         
-        let blatt = &f.titelblatt.grundbuch_von;
-        let nr = &f.titelblatt.blatt;                        
+        let blatt = &f.analysiert.titelblatt.grundbuch_von;
+        let nr = &f.analysiert.titelblatt.blatt;                        
         entries.push_str(&format!("<div><p>{blatt} Nr. {nr}</p>", ));
                     
         for abt1 in f.analysiert.abt1.eintraege.iter().filter_map(|a1| match a1 { Abt1Eintrag::V2(v2) => Some(v2), _ => None, }) {
@@ -4097,7 +4116,7 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
         for mut pdf in pdfs {
 
             let output_parent = pdf.get_gbx_datei_parent();
-            let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
+            let file_name = format!("{}_{}", pdf.analysiert.titelblatt.grundbuch_von, pdf.analysiert.titelblatt.blatt);
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
             let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
             
@@ -4149,13 +4168,13 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                             
                 let _ = std::fs::write(&cache_output_path, json.as_bytes());
                 
-                let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &seitenzahlen_zu_laden, max_sz, &pdf.titelblatt);
+                let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &seitenzahlen_zu_laden, max_sz, &pdf.analysiert.titelblatt);
                         
                 for sz in seitenzahlen_zu_laden {
                     
                     pdf.seiten_versucht_geladen.insert(sz);
                     
-                    let pdftotext_layout = match digital::get_pdftotext_layout(&pdf.titelblatt, &[sz]) { 
+                    let pdftotext_layout = match digital::get_pdftotext_layout(&pdf.analysiert.titelblatt, &[sz]) { 
                         Ok(o) => o, 
                         Err(_) => continue, 
                     };
@@ -4171,7 +4190,7 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                     let mut ocr_text_final = None;
                     
                     if ocr_text_cached.is_none() {
-                        match digital::ocr_seite(&pdf.titelblatt, sz, max_sz) {
+                        match digital::ocr_seite(&pdf.analysiert.titelblatt, sz, max_sz) {
                             Ok(o) => { 
                                 pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
                                 ocr_text_final = Some(o); 
@@ -4185,7 +4204,7 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                     let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)) {
                         Some(s) => *s,
                         None => {
-                            match digital::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
+                            match digital::klassifiziere_seitentyp(&pdf.analysiert.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
                                 Ok(o) => o, 
                                 Err(_) => continue, 
                             }
@@ -4193,7 +4212,7 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                     };
                     
                     let spalten = match digital::formularspalten_ausschneiden(
-                        &pdf.titelblatt, 
+                        &pdf.analysiert.titelblatt, 
                         sz, 
                         max_sz, 
                         seitentyp, 
@@ -4204,10 +4223,10 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                         Err(_) => continue, 
                     };
                     
-                    if digital::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
+                    if digital::ocr_spalten(&pdf.analysiert.titelblatt, sz, max_sz, &spalten).is_err() { continue; }
                     
                     let textbloecke = match digital::textbloecke_aus_spalten(
-                        &pdf.titelblatt, 
+                        &pdf.analysiert.titelblatt, 
                         sz, 
                         max_sz,
                         &spalten, 
@@ -4238,7 +4257,7 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                 
                 crate::digital::bv_eintraege_roeten(
                     &mut pdf.analysiert.bestandsverzeichnis.eintraege, 
-                    &pdf.titelblatt, 
+                    &pdf.analysiert.titelblatt, 
                     max_sz, 
                     &pdf.pdftotext_layout,
                 );
@@ -4258,7 +4277,13 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
 
 fn analyse_grundbuch(pdf: &PdfFile, konfguration: &Konfiguration) -> Option<Grundbuch> {
 
-    let bestandsverzeichnis = digital::analysiere_bv(&pdf.titelblatt, &pdf.pdftotext_layout, &pdf.geladen, &pdf.anpassungen_seite, konfguration).ok()?;
+    let bestandsverzeichnis = digital::analysiere_bv(
+        &pdf.analysiert.titelblatt, 
+        &pdf.pdftotext_layout, 
+        &pdf.geladen, 
+        &pdf.anpassungen_seite, 
+        konfguration
+    ).ok()?;
     let mut abt1 = digital::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
     let abt2 = digital::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
     let abt3 = digital::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
@@ -4266,7 +4291,7 @@ fn analyse_grundbuch(pdf: &PdfFile, konfguration: &Konfiguration) -> Option<Grun
     abt1.migriere_v2();
     
     let gb = Grundbuch {
-        titelblatt: pdf.titelblatt.clone(),
+        titelblatt: pdf.analysiert.titelblatt.clone(),
         bestandsverzeichnis,
         abt1,
         abt2,
@@ -4309,10 +4334,16 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
     
     let ist_geladen = pdf.ist_geladen();
     pdf.geladen.clear();
-    pdf.analysiert = Grundbuch::default();
+    pdf.analysiert = Grundbuch {
+        titelblatt: pdf.analysiert.titelblatt.clone(),
+        bestandsverzeichnis: Bestandsverzeichnis::default(),
+        abt1: Abteilung1::default(),
+        abt2: Abteilung2::default(),
+        abt3: Abteilung3::default(),
+    };
     
     let output_parent = pdf.get_gbx_datei_parent();
-    let file_name = format!("{}_{}", pdf.titelblatt.grundbuch_von, pdf.titelblatt.blatt);
+    let file_name = format!("{}_{}", pdf.analysiert.titelblatt.grundbuch_von, pdf.analysiert.titelblatt.blatt);
     let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
     let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
     
@@ -4324,13 +4355,13 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
         
         pdf.seiten_versucht_geladen.insert(sz);
 
-        let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], max_sz, &pdf.titelblatt)?;
+        let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &[sz], max_sz, &pdf.analysiert.titelblatt)?;
                    
         let ocr_text_cached = pdf.seiten_ocr_text.get(&format!("{}", sz)).cloned();
         let mut ocr_text_final = None;
         
         if ocr_text_cached.is_none() {
-            match digital::ocr_seite(&pdf.titelblatt, sz, max_sz) {
+            match digital::ocr_seite(&pdf.analysiert.titelblatt, sz, max_sz) {
                 Ok(o) => { 
                     pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
                     ocr_text_final = Some(o); 
@@ -4346,7 +4377,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
         let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)).cloned() {
             Some(s) => s,
             None => {
-                match digital::klassifiziere_seitentyp(&pdf.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
+                match digital::klassifiziere_seitentyp(&pdf.analysiert.titelblatt, sz, max_sz, ocr_text_final.as_ref()) { 
                     Ok(o) => o, 
                     Err(_) => continue, 
                 }
@@ -4356,7 +4387,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
         pdf.klassifikation_neu.insert(format!("{}", sz), seitentyp);
                         
         let spalten = match digital::formularspalten_ausschneiden(
-            &pdf.titelblatt, 
+            &pdf.analysiert.titelblatt, 
             sz, 
             max_sz, 
             seitentyp, 
@@ -4367,10 +4398,10 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
             Err(e) => continue, 
         };
                 
-        let _ = digital::ocr_spalten(&pdf.titelblatt, sz, max_sz, &spalten)?;
+        let _ = digital::ocr_spalten(&pdf.analysiert.titelblatt, sz, max_sz, &spalten)?;
 
         let textbloecke = digital::textbloecke_aus_spalten(
-            &pdf.titelblatt, 
+            &pdf.analysiert.titelblatt, 
             sz, 
             max_sz,
             &spalten, 
@@ -4390,7 +4421,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
         
         crate::digital::bv_eintraege_roeten(
             &mut pdf.analysiert.bestandsverzeichnis.eintraege, 
-            &pdf.titelblatt, 
+            &pdf.analysiert.titelblatt, 
             max_sz, 
             &pdf.pdftotext_layout,
         );
@@ -4410,7 +4441,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
     
     crate::digital::bv_eintraege_roeten(
         &mut pdf.analysiert.bestandsverzeichnis.eintraege, 
-        &pdf.titelblatt, 
+        &pdf.analysiert.titelblatt, 
         max_sz, 
         &pdf.pdftotext_layout,
     );
@@ -4787,7 +4818,7 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     
     match json {
         PdfFileOrEmpty::Pdf(mut json) => {
-            let file_name = format!("{}_{}", json.titelblatt.grundbuch_von, json.titelblatt.blatt);
+            let file_name = format!("{}_{}", json.analysiert.titelblatt.grundbuch_von, json.analysiert.titelblatt.blatt);
             let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
             if json.gbx_datei_pfad.is_some() { json.gbx_datei_pfad = Some(format!("{}", target_folder_path.display())); } 
             if json.datei.is_some() { json.datei = Some(format!("{}", target_folder_path.join(&format!("{file_name}.pdf")).display())); } 
