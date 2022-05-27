@@ -7,6 +7,7 @@ use std::fs;
 use std::sync::Mutex;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::process::Command;
 use wry::webview::WebView;
 
 use urlencoding::encode;
@@ -28,6 +29,9 @@ use tinyfiledialogs::MessageBoxIcon;
 
 const APP_TITLE: &str = "Digitales Grundbuch";
 const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
+
+#[cfg(target_os = "windows")]
+static TESSERACT_SOURCE_ZIP: &[u8] = include_bytes!("../bin/Tesseract-OCR.zip");
 
 type FileName = String;
 
@@ -342,30 +346,45 @@ fn default_server_email() -> String { format!("max@mustermann.de") }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdfFile {
     // Pfad der zugehörigen .pdf-Datei
+    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(default)]
     datei: Option<String>,
     // Some(pfad) wenn Datei digital angelegt wurde
     #[serde(default)]
+    #[serde(skip_serializing_if="Option::is_none")]
     gbx_datei_pfad: Option<String>,
     #[serde(default)]
+    #[serde(skip_serializing_if="Option::is_none")]
     land: Option<String>,
     titelblatt: Titelblatt,
+    #[serde(skip_serializing_if="Vec::is_empty")]
+    #[serde(default)]
     seitenzahlen: Vec<u32>,
+    #[serde(skip_serializing_if="BTreeMap::is_empty")]
+    #[serde(default)]
     geladen: BTreeMap<String, SeiteParsed>,
     analysiert: Grundbuch,
+    #[serde(skip_serializing_if="PdfToTextLayout::is_empty")]
+    #[serde(default)]
     pdftotext_layout: PdfToTextLayout,
     #[serde(skip, default)]
     icon: Option<PdfFileIcon>,
     
     /// Seitennummern von Seiten, die versucht wurden, geladen zu werden
     #[serde(default)]
+    #[serde(skip_serializing_if="BTreeSet::is_empty")]
     seiten_versucht_geladen: BTreeSet<u32>,
     #[serde(default)]
+    #[serde(skip_serializing_if="BTreeMap::is_empty")]
     seiten_ocr_text: BTreeMap<String, String>,
     #[serde(default)]
+    #[serde(skip_serializing_if="BTreeMap::is_empty")]
     anpassungen_seite: BTreeMap<String, AnpassungSeite>,
     #[serde(default)]
+    #[serde(skip_serializing_if="BTreeMap::is_empty")]
     klassifikation_neu: BTreeMap<String, SeitenTyp>,
     #[serde(default)]
+    #[serde(skip_serializing_if="Vec::is_empty")]
     nebenbeteiligte_dateipfade: Vec<String>,
     
     #[serde(skip, default)]
@@ -450,10 +469,13 @@ impl PdfFile {
         let _ = std::fs::write(&target_output_path, json.as_bytes());
     }
     
+    #[cfg(target_os = "windows")]
     pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
-        #[cfg(target_os = "windows")] {
-            return Some(PdfFileIcon::AllesOkay);
-        }
+        return Some(PdfFileIcon::AllesOkay);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
         
         if !self.ist_geladen() {
             return None;
@@ -478,10 +500,13 @@ impl PdfFile {
         })
     }
     
+    #[cfg(target_os = "windows")]
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
-        #[cfg(target_os = "windows")] {
-            return true;
-        }
+        return true;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
         
         let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
         
@@ -490,12 +515,14 @@ impl PdfFile {
         && analysiert.abt3.iter().all(|e| e.fehler.is_empty())
     }
     
+    #[cfg(target_os = "windows")]
+    pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
+        return true;
+    }
+
+    #[cfg(not(target_os = "windows"))]
     pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
     
-        #[cfg(target_os = "windows")] {
-            return true;
-        }
-        
         let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
 
         let any_abt2 = analysiert.abt2.iter()
@@ -2971,7 +2998,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         
             let tesseract_output_path = temp_ordner.clone().join(format!("ocr-selection-{:02}-{:02}-{:02}-{:02}-{:02}.txt.hocr", page, x, y, width, height));
         
-            let _ = Command::new("tesseract")
+            let _ = get_tesseract_command()
             .arg(&format!("{}", cropped_output_path.display()))
             .arg(&format!("{}", temp_ordner.clone().join(format!("ocr-selection-{:02}-{:02}-{:02}-{:02}-{:02}.txt", page, x, y, width, height)).display()))     
             .arg("--dpi")
@@ -4776,6 +4803,83 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     Ok(())
 }
 
+fn selftest_startup() -> Result<(), String> {
+
+    use std::process::Command;
+
+    let mut programme_nicht_installiert = Vec::new();
+
+    if Command::new("pdftotext").arg("-v").status().is_err() {
+        programme_nicht_installiert.push(format!("pdftotext"));
+    }
+
+    if Command::new("pdftoppm").arg("-v").status().is_err() {
+        programme_nicht_installiert.push(format!("pdftoppm"));
+    }
+
+    println!("get_tesseract_command: {:?}", get_tesseract_command());
+
+    if get_tesseract_command().status().is_err() {
+        programme_nicht_installiert.push(format!("tesseract"));
+    }
+
+    if Command::new("podofouncompress").status().is_err() {
+        programme_nicht_installiert.push(format!("podofouncompress"));
+    }
+
+    if Command::new("qpdf").status().is_err() {
+        programme_nicht_installiert.push(format!("qpdf"));
+    }
+
+    if programme_nicht_installiert.is_empty() {
+        Ok(())
+    } else {
+        Err(programme_nicht_installiert.join(", "))
+    }
+}
+
+fn get_program_path() -> Result<String, String> {
+    Ok(std::env::current_exe()
+    .map_err(|e| format!("{e}"))?
+    .parent()
+    .ok_or(format!("std::env::current_exe has no parent"))?
+    .join("programs")
+    .to_str()
+    .unwrap_or_default()
+    .to_string())
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_tesseract_command() -> Command {
+    let path = get_program_path().unwrap();
+    let exe = Path::new(&path).join("tesseract").join("tesseract.exe");
+    Command::new(format!("{}", exe.display()))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_tesseract_command() -> Command {
+    Command::new("tesseract")
+}
+
+#[cfg(target_os = "windows")]
+fn unzip_tesseract() -> Result<(), String> {
+    use std::io::Cursor;
+    let mut reader = Cursor::new(TESSERACT_SOURCE_ZIP.to_vec());
+    let mut archive = zip::ZipArchive::new(reader).unwrap();
+    let program_path = get_program_path()?;
+
+    let program_path = Path::new(&program_path).join("tesseract");
+
+    if program_path.exists() {
+        return Ok(());
+    }
+
+    let _ = std::fs::create_dir_all(&program_path);
+
+    archive.extract(&program_path)
+        .map_err(|e| format!("{e}"))
+}
+
 fn main() -> wry::Result<()> {
 
     use std::env;
@@ -4788,6 +4892,24 @@ fn main() -> wry::Result<()> {
         webview::WebViewBuilder,
     };
     
+    #[cfg(target_os = "windows")] {
+        if let Err(e) = unzip_tesseract() {
+            tinyfiledialogs::message_box_ok(
+                "Fehler beim Installieren von tesseract-ocr",
+                &format!("Fehler beim Installieren von tesseract-ocr:\r\n{e}"),
+                MessageBoxIcon::Warning,
+            );
+        }
+    }
+
+    if let Err(e) = selftest_startup() {
+        tinyfiledialogs::message_box_ok(
+            "Programme nicht installiert",
+            &format!("Die folgenden Programme benötigten sind nicht installiert:\r\n{}\r\nDas Programm wird möglicherweise nicht richtig funktionieren.", e),
+            MessageBoxIcon::Warning,
+        );
+    }
+
     let num = num_cpus::get();
     let max_threads = (num as f32 / 2.0).ceil().max(2.0) as usize;
     let max_threads = match num {

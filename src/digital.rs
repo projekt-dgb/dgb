@@ -7,8 +7,7 @@ use lopdf::Error as LoPdfError;
 use image::ImageError;
 use serde_derive::{Serialize, Deserialize};
 use rayon::prelude::*;
-use crate::{Rect, AnpassungSeite, Konfiguration};
-
+use crate::{Rect, AnpassungSeite, Konfiguration, get_tesseract_command};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SeiteParsed {
@@ -92,6 +91,10 @@ impl fmt::Display for TitelblattFehler {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PdfToTextLayout {
     pub seiten: BTreeMap<String, PdfToTextSeite>,
+}
+
+impl PdfToTextLayout {
+    pub fn is_empty(&self) -> bool { self.seiten.is_empty() }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -419,7 +422,7 @@ pub fn ocr_seite(titelblatt: &Titelblatt, seitenzahl: u32, max_seitenzahl: u32) 
     if !tesseract_output_path.exists() {
         // tesseract ./test-01.png ./tesseract-01 -l deu -c preserve_interword_spaces=1
         // Ausgabe -> /tmp/tesseract-01.txt
-        let _ = Command::new("tesseract")
+        let _ = get_tesseract_command()
         .arg(&format!("{}", pdftoppm_output_path.display()))
         .arg(&format!("{}", temp_ordner.clone().join(format!("tesseract-{:02}", seitenzahl)).display()))     
         .arg("-l")
@@ -1656,7 +1659,7 @@ pub fn ocr_spalten(
         }
         
         if col.is_number_column {
-            let _ = Command::new("tesseract")
+            let _ = get_tesseract_command()
             .arg(&format!("{}", cropped_output_path.display()))
             .arg(&format!("{}", temp_dir.clone().join(tesseract_path.clone()).display()))     
             .arg("--dpi")
@@ -1671,7 +1674,7 @@ pub fn ocr_spalten(
             .arg("debug_file=/dev/null") // TODO: funktioniert nur auf Linux!
             .status();
         } else {
-            let _ = Command::new("tesseract")
+            let _ = get_tesseract_command()
             .arg(&format!("{}", cropped_output_path.display()))
             .arg(&format!("{}", temp_dir.clone().join(tesseract_path.clone()).display()))     
             .arg("--dpi")
@@ -2204,10 +2207,17 @@ fn column_contains_point(col: &Column, start_x: f32, start_y: f32) -> bool {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Grundbuch {
     pub titelblatt: Titelblatt,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Bestandsverzeichnis::is_empty")]
     pub bestandsverzeichnis: Bestandsverzeichnis,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Abteilung1::is_empty")]
     pub abt1: Abteilung1,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Abteilung2::is_empty")]
     pub abt2: Abteilung2,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Abteilung3::is_empty")]
     pub abt3: Abteilung3,
 }
 
@@ -2250,10 +2260,23 @@ impl PositionInPdf {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Bestandsverzeichnis {
-    // Index = lfd. Nr. der Grundstücke
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub eintraege: Vec<BvEintrag>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub zuschreibungen: Vec<BvZuschreibung>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub abschreibungen: Vec<BvAbschreibung>,
+}
+
+impl Bestandsverzeichnis {
+    pub fn is_empty(&self) -> bool {
+        self.eintraege.is_empty() &&
+        self.zuschreibungen.is_empty() &&
+        self.abschreibungen.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -3707,13 +3730,25 @@ pub fn bv_eintraege_roeten(
 pub struct Abteilung1 {
     // Index = lfd. Nr. der Grundstücke
     #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub eintraege: Vec<Abt1Eintrag>,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub grundlagen_eintragungen: Vec<Abt1GrundEintragung>,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub veraenderungen: Vec<Abt1Veraenderung>,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub loeschungen: Vec<Abt1Loeschung>,
+}
+impl Abteilung1 {
+    pub fn is_empty(&self) -> bool {
+        self.eintraege.is_empty() &&
+        self.grundlagen_eintragungen.is_empty() &&
+        self.veraenderungen.is_empty() &&
+        self.loeschungen.is_empty()
+    }
 }
 
 impl Abteilung1 {
@@ -4085,10 +4120,23 @@ pub fn analysiere_abt1(
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Abteilung2 {
-    // Index = lfd. Nr. der Grundstücke
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub eintraege: Vec<Abt2Eintrag>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub veraenderungen: Vec<Abt2Veraenderung>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub loeschungen: Vec<Abt2Loeschung>,
+}
+
+impl Abteilung2 {
+    pub fn is_empty(&self) -> bool {
+        self.eintraege.is_empty() &&
+        self.veraenderungen.is_empty() &&
+        self.loeschungen.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4639,10 +4687,23 @@ pub fn analysiere_abt2(
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Abteilung3 {
-    // Index = lfd. Nr. der Grundstücke
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub eintraege: Vec<Abt3Eintrag>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub veraenderungen: Vec<Abt3Veraenderung>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub loeschungen: Vec<Abt3Loeschung>,
+}
+
+impl Abteilung3 {
+    pub fn is_empty(&self) -> bool {
+        self.eintraege.is_empty() &&
+        self.veraenderungen.is_empty() &&
+        self.loeschungen.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
