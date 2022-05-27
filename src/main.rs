@@ -32,6 +32,10 @@ const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
 
 #[cfg(target_os = "windows")]
 static TESSERACT_SOURCE_ZIP: &[u8] = include_bytes!("../bin/Tesseract-OCR.zip");
+#[cfg(target_os = "windows")]
+static PDFTOOLS_SOURCE_ZIP: &[u8] = include_bytes!("../bin/xpdf-tools-win-4.04.zip");
+#[cfg(target_os = "windows")]
+static QPDF_SOURCE_ZIP: &[u8] = include_bytes!("../bin/qpdf-10.6.3-bin-mingw32.zip");
 
 type FileName = String;
 
@@ -4809,17 +4813,15 @@ fn selftest_startup() -> Result<(), String> {
 
     let mut programme_nicht_installiert = Vec::new();
 
-    if Command::new("pdftotext").arg("-v").status().is_err() {
+    if get_pdftotext_command().arg("-v").status().is_err() {
         programme_nicht_installiert.push(format!("pdftotext"));
     }
 
-    if Command::new("pdftoppm").arg("-v").status().is_err() {
+    if get_pdftoppm_command().arg("-v").status().is_err() {
         programme_nicht_installiert.push(format!("pdftoppm"));
     }
 
-    println!("get_tesseract_command: {:?}", get_tesseract_command());
-
-    if get_tesseract_command().status().is_err() {
+    if get_tesseract_command().arg("-v").status().is_err() {
         programme_nicht_installiert.push(format!("tesseract"));
     }
 
@@ -4827,7 +4829,7 @@ fn selftest_startup() -> Result<(), String> {
         programme_nicht_installiert.push(format!("podofouncompress"));
     }
 
-    if Command::new("qpdf").status().is_err() {
+    if get_qpdf_command().arg("--help").status().is_err() {
         programme_nicht_installiert.push(format!("qpdf"));
     }
 
@@ -4852,13 +4854,49 @@ fn get_program_path() -> Result<String, String> {
 #[cfg(target_os = "windows")]
 pub fn get_tesseract_command() -> Command {
     let path = get_program_path().unwrap();
-    let exe = Path::new(&path).join("tesseract").join("tesseract.exe");
+    let exe = Path::new(&path).join("tesseract").join("Tesseract-OCR").join("tesseract.exe");
     Command::new(format!("{}", exe.display()))
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn get_tesseract_command() -> Command {
     Command::new("tesseract")
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_pdftoppm_command() -> Command {
+    let path = get_program_path().unwrap();
+    let exe = Path::new(&path).join("pdftools").join("xpdf-tools-win-4.04").join("bin64").join("pdftoppm.exe");
+    Command::new(format!("{}", exe.display()))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_pdftoppm_command() -> Command {
+    Command::new("pdftoppm")
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_pdftotext_command() -> Command {
+    let path = get_program_path().unwrap();
+    let exe = Path::new(&path).join("pdftools").join("xpdf-tools-win-4.04").join("bin64").join("pdftotext.exe");
+    Command::new(format!("{}", exe.display()))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_pdftotext_command() -> Command {
+    Command::new("pdftotext")
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_qpdf_command() -> Command {
+    let path = get_program_path().unwrap();
+    let exe = Path::new(&path).join("qpdf").join("qpdf-10.6.3").join("bin").join("qpdf.exe");
+    Command::new(format!("{}", exe.display()))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_qpdf_command() -> Command {
+    Command::new("qpdf")
 }
 
 #[cfg(target_os = "windows")]
@@ -4869,6 +4907,44 @@ fn unzip_tesseract() -> Result<(), String> {
     let program_path = get_program_path()?;
 
     let program_path = Path::new(&program_path).join("tesseract");
+
+    if program_path.exists() {
+        return Ok(());
+    }
+
+    let _ = std::fs::create_dir_all(&program_path);
+
+    archive.extract(&program_path)
+        .map_err(|e| format!("{e}"))
+}
+
+#[cfg(target_os = "windows")]
+fn unzip_pdftools() -> Result<(), String> {
+    use std::io::Cursor;
+    let mut reader = Cursor::new(PDFTOOLS_SOURCE_ZIP.to_vec());
+    let mut archive = zip::ZipArchive::new(reader).unwrap();
+    let program_path = get_program_path()?;
+
+    let program_path = Path::new(&program_path).join("pdftools");
+
+    if program_path.exists() {
+        return Ok(());
+    }
+
+    let _ = std::fs::create_dir_all(&program_path);
+
+    archive.extract(&program_path)
+        .map_err(|e| format!("{e}"))
+}
+
+#[cfg(target_os = "windows")]
+fn unzip_qpdf() -> Result<(), String> {
+    use std::io::Cursor;
+    let mut reader = Cursor::new(QPDF_SOURCE_ZIP.to_vec());
+    let mut archive = zip::ZipArchive::new(reader).unwrap();
+    let program_path = get_program_path()?;
+
+    let program_path = Path::new(&program_path).join("qpdf");
 
     if program_path.exists() {
         return Ok(());
@@ -4897,6 +4973,26 @@ fn main() -> wry::Result<()> {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von tesseract-ocr",
                 &format!("Fehler beim Installieren von tesseract-ocr:\r\n{e}"),
+                MessageBoxIcon::Warning,
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")] {
+        if let Err(e) = unzip_pdftools() {
+            tinyfiledialogs::message_box_ok(
+                "Fehler beim Installieren von pdftools",
+                &format!("Fehler beim Installieren von pdftools:\r\n{e}"),
+                MessageBoxIcon::Warning,
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")] {
+        if let Err(e) = unzip_qpdf() {
+            tinyfiledialogs::message_box_ok(
+                "Fehler beim Installieren von qpdf",
+                &format!("Fehler beim Installieren von qpdf:\r\n{e}"),
                 MessageBoxIcon::Warning,
             );
         }

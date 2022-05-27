@@ -7,7 +7,10 @@ use lopdf::Error as LoPdfError;
 use image::ImageError;
 use serde_derive::{Serialize, Deserialize};
 use rayon::prelude::*;
-use crate::{Rect, AnpassungSeite, Konfiguration, get_tesseract_command};
+use crate::{
+    Rect, AnpassungSeite, Konfiguration,
+    get_tesseract_command, get_pdftoppm_command, get_pdftotext_command
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SeiteParsed {
@@ -117,7 +120,7 @@ pub fn get_pdftotext_layout(titelblatt: &Titelblatt, seitenzahlen: &[u32]) -> Re
 
     // pdftotext -bbox-layout /tmp/temp.pdf -o temp.html
     // to get the layout
-    let _ = Command::new("pdftotext")
+    let _ = get_pdftotext_command()
     .arg("-q")
     .arg("-bbox-layout")
     .arg(&format!("{}", temp_pdf_path.display()))     
@@ -200,7 +203,7 @@ pub fn lese_titelblatt(pdf_bytes: &[u8]) -> Result<Titelblatt, Fehler> {
         .map_err(|e| Fehler::Io(format!("{}", temp_pdf_path.display()), e))?;
     
     // pdftotext -q -layout -enc UTF-8 -eol unix -nopgbrk -f 1 -l 1 /tmp/temp.pdf /pdftotxt-1.txt
-    let _ = Command::new("pdftotext")
+    let _ = get_pdftotext_command()
     .arg("-q")
     .arg("-layout")
     .arg("-enc")
@@ -280,7 +283,7 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(pdf_bytes: &[u8], seitenzahlen: &
             if !pdftoppm_output_path.exists() {
                 // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
                 // writes result to /tmp/test-01.png
-                let _ = Command::new("pdftoppm")
+                let _ = get_pdftoppm_command()
                 .arg("-q")
                 .arg("-r")
                 .arg("600") // 600 DPI
@@ -311,7 +314,7 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(pdf_bytes: &[u8], seitenzahlen: &
                     
                 // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
                 // writes result to /tmp/page-clean-01.png
-                let _ = Command::new("pdftoppm")
+                let _ = get_pdftoppm_command()
                 .arg("-q")
                 .arg("-r")
                 .arg("600") // 600 DPI
@@ -367,7 +370,7 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], max
 
             // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
             // writes result to /tmp/test-01.png
-            let _ = Command::new("pdftoppm")
+            let _ = get_pdftoppm_command()
             .arg("-q")
             .arg("-r")
             .arg("600") // 600 DPI
@@ -391,7 +394,7 @@ pub fn konvertiere_pdf_seiten_zu_png(pdf_bytes: &[u8], seitenzahlen: &[u32], max
 
             // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
             // writes result to /tmp/page-clean-01.png
-            let _ = Command::new("pdftoppm")
+            let _ = get_pdftoppm_command()
             .arg("-q")
             .arg("-r")
             .arg("600") // 600 DPI

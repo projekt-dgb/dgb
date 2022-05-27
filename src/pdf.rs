@@ -1,4 +1,4 @@
-use crate::{Titelblatt, Grundbuch, Abt2Eintrag, Abt3Eintrag};
+use crate::{get_qpdf_command, Titelblatt, Grundbuch, Abt2Eintrag, Abt3Eintrag};
 use crate::digital::BvEintrag;
 use printpdf::{
     BuiltinFont, PdfDocument, Mm, IndirectFontRef,
@@ -122,8 +122,8 @@ fn export_grundbuch_single_file(options: PdfGrundbuchOptions, source: &PdfExport
             use std::process::Command;
 
             // qpdf --empty --pages *.pdf -- out.pdf
-            if Command::new("qpdf").arg("--version").status().is_ok() {                
-                let mut command = Command::new("qpdf");
+            if get_qpdf_command().arg("--version").status().is_ok() {
+                let mut command = get_qpdf_command();
                 
                 command.arg("--empty");
                 command.arg("--pages");
