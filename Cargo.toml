@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2021"
 description = "Tool zur Abdigitalisierung von Grundbuchblättern"
 authors = ["Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"]
-license = "MIT"
+license = "GPL-3.0"
 build = "build.rs"
 readme = "README.md"
 
