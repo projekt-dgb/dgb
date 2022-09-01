@@ -1515,8 +1515,6 @@ dependencies = [
  "libc",
  "libgit2-sys",
  "log",
- "openssl-probe",
- "openssl-sys",
  "url",
 ]
 
@@ -2118,9 +2116,7 @@ checksum = "d0fa6563431ede25f5cc7f6d803c6afbc1c5d3ad3d4925d12c882bf2b526f5d1"
 dependencies = [
  "cc",
  "libc",
- "libssh2-sys",
  "libz-sys",
- "openssl-sys",
  "pkg-config",
 ]
 
@@ -2129,20 +2125,6 @@ name = "libm"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33a33a362ce288760ec6a508b94caaec573ae7d3bbbd91b87aa0bad4456839db"
-
-[[package]]
-name = "libssh2-sys"
-version = "0.2.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b094a36eb4b8b8c8a7b4b8ae43b2944502be3e59cd87687595cf6b0a71b3f4ca"
-dependencies = [
- "cc",
- "libc",
- "libz-sys",
- "openssl-sys",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "libz-sys"

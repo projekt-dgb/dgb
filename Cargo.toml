@@ -33,7 +33,7 @@ qrcode = "0.12.0"
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"] }
 prettydiff = "0.6.1"
 sequoia-openpgp = { version = "1.8.0", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto", "compression"] }
-git2 = "0.14.4"
+git2 = { version = "0.14.4", default-features = false }
 rand = "0.8.5"
 hyphenation = { version = "0.8.4", features = ["embed_all", "nfc"] }
 textwrap = { version = "0.15.0", features = ["smawk", "hyphenation"] }
