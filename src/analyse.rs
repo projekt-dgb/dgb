@@ -159,7 +159,7 @@ impl FlurFlurstueck {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 pub fn analysiere_grundbuch(
     grundbuch: &Grundbuch,
     nb: &[Nebenbeteiligter],
@@ -171,7 +171,7 @@ pub fn analysiere_grundbuch(
     };
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub fn analysiere_grundbuch(
     grundbuch: &Grundbuch, 
     nb: &[Nebenbeteiligter], 

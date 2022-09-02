@@ -1211,9 +1211,9 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_UPLOAD: &[u8] = include_bytes!("./img/icons8-upload-to-cloud-96.png");
     static ICON_HVM: &[u8] = include_bytes!("./img/icons8-copy-link-96.png");
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     let is_windows = false;
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "linux"))]
     let is_windows = true;
     
     let disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" };
@@ -1706,9 +1706,9 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
     } else {
         let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
     
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         let is_windows = false;
-        #[cfg(target_os = "windows")]
+        #[cfg(not(target_os = "linux"))]
         let is_windows = true;
 
         normalize_for_js(format!("

@@ -1,4 +1,3 @@
-// Linux: apt install libwebkit2gtk-4.0-dev, tesseract-ocr, pdftotext
 #![deny(unreachable_code)]
 
 use std::collections::BTreeMap;
@@ -31,11 +30,11 @@ use tinyfiledialogs::MessageBoxIcon;
 const APP_TITLE: &str = "Digitales Grundbuch";
 const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 static TESSERACT_SOURCE_ZIP: &[u8] = include_bytes!("../bin/Tesseract-OCR.zip");
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 static PDFTOOLS_SOURCE_ZIP: &[u8] = include_bytes!("../bin/xpdf-tools-win-4.04.zip");
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 static QPDF_SOURCE_ZIP: &[u8] = include_bytes!("../bin/qpdf-10.6.3-bin-mingw32.zip");
 
 type FileName = String;
@@ -476,12 +475,12 @@ impl PdfFile {
         let _ = std::fs::write(&target_output_path, json.as_bytes());
     }
     
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "linux"))]
     pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
         return Some(PdfFileIcon::AllesOkay);
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
         
         if !self.ist_geladen() {
@@ -507,12 +506,12 @@ impl PdfFile {
         })
     }
     
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "linux"))]
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
         return true;
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
         
         let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
@@ -522,12 +521,12 @@ impl PdfFile {
         && analysiert.abt3.iter().all(|e| e.fehler.is_empty())
     }
     
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "linux"))]
     pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
         return true;
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
     
         let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
@@ -4882,55 +4881,55 @@ fn get_program_path() -> Result<String, String> {
     .to_string())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 pub fn get_tesseract_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("tesseract").join("Tesseract-OCR").join("tesseract.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub fn get_tesseract_command() -> Command {
     Command::new("tesseract")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 pub fn get_pdftoppm_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("pdftools").join("xpdf-tools-win-4.04").join("bin64").join("pdftoppm.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub fn get_pdftoppm_command() -> Command {
     Command::new("pdftoppm")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 pub fn get_pdftotext_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("pdftools").join("xpdf-tools-win-4.04").join("bin64").join("pdftotext.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub fn get_pdftotext_command() -> Command {
     Command::new("pdftotext")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 pub fn get_qpdf_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("qpdf").join("qpdf-10.6.3").join("bin").join("qpdf.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub fn get_qpdf_command() -> Command {
     Command::new("qpdf")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 fn unzip_tesseract() -> Result<(), String> {
     use std::io::Cursor;
     let mut reader = Cursor::new(TESSERACT_SOURCE_ZIP.to_vec());
@@ -4949,7 +4948,7 @@ fn unzip_tesseract() -> Result<(), String> {
         .map_err(|e| format!("{e}"))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 fn unzip_pdftools() -> Result<(), String> {
     use std::io::Cursor;
     let mut reader = Cursor::new(PDFTOOLS_SOURCE_ZIP.to_vec());
@@ -4968,7 +4967,7 @@ fn unzip_pdftools() -> Result<(), String> {
         .map_err(|e| format!("{e}"))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "linux"))]
 fn unzip_qpdf() -> Result<(), String> {
     use std::io::Cursor;
     let mut reader = Cursor::new(QPDF_SOURCE_ZIP.to_vec());
@@ -4999,7 +4998,7 @@ fn main() -> wry::Result<()> {
         webview::WebViewBuilder,
     };
     
-    #[cfg(target_os = "windows")] {
+    #[cfg(not(target_os = "linux"))] {
         if let Err(e) = unzip_tesseract() {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von tesseract-ocr",
@@ -5009,7 +5008,7 @@ fn main() -> wry::Result<()> {
         }
     }
 
-    #[cfg(target_os = "windows")] {
+    #[cfg(not(target_os = "linux"))] {
         if let Err(e) = unzip_pdftools() {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von pdftools",
@@ -5019,7 +5018,7 @@ fn main() -> wry::Result<()> {
         }
     }
 
-    #[cfg(target_os = "windows")] {
+    #[cfg(not(target_os = "linux"))] {
         if let Err(e) = unzip_qpdf() {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von qpdf",
@@ -5029,6 +5028,10 @@ fn main() -> wry::Result<()> {
         }
     }
 
+    #[cfg(target = "linux")] {
+        pyo3::prepare_freethreaded_python();
+    }
+    
     if let Err(e) = selftest_startup() {
         tinyfiledialogs::message_box_ok(
             "Programme nicht installiert",
