@@ -5224,18 +5224,6 @@ pub fn analysiere_abt3(
     })
 }
 
-fn clean_text_python(text: &str, konfiguration: &Konfiguration) -> Result<String, String> {
-    
-    use pyo3::Python;
-    use crate::kurztext::python_text_saubern;
-    
-    let text_sauber = Python::with_gil(|py| {
-        python_text_saubern(py, text, konfiguration)
-        .map_err(|e| format!("In Funktion text_säubern(): {}", e))
-    })?;
-    Ok(text_sauber)
-}
-
 fn get_erster_text_bei_ca(texte: &[Textblock], skip: usize, start: f32, ziel: f32) -> Option<&Textblock> {    
     for t in texte.iter().skip(skip.saturating_sub(1)) {
         let start = start - 20.0;

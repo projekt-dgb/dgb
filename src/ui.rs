@@ -1210,11 +1210,6 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_SEARCH: &[u8] = include_bytes!("./img/icons8-search-in-cloud-96.png");
     static ICON_UPLOAD: &[u8] = include_bytes!("./img/icons8-upload-to-cloud-96.png");
     static ICON_HVM: &[u8] = include_bytes!("./img/icons8-copy-link-96.png");
-
-    #[cfg(target_os = "linux")]
-    let is_windows = false;
-    #[cfg(not(target_os = "linux"))]
-    let is_windows = true;
     
     let disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" };
     let icon_open_base64 = base64::encode(ICON_GRUNDBUCH_OEFFNEN);
@@ -1237,9 +1232,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     let icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS);
     let icon_hvm = base64::encode(ICON_HVM);
 
-    let nebenbet = if is_windows {
-        String::new()
-    } else {
+    let nebenbet = {
         format!("
             <div class='__application-ribbon-section 3'>
                 <div style='display:flex;flex-direction:row;'>
@@ -1283,9 +1276,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         ")
     };
     
-    let export_lefis = if is_windows {
-        String::new()
-    } else {
+    let export_lefis = {
         format!("
             <div class='__application-ribbon-section-content'>
                 <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
@@ -1572,7 +1563,7 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
     
     normalize_for_js(rpc_data.loaded_files.keys().filter_map(|filename| {
         
-        let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename);
+        let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename.as_str());
         
         let datei = rpc_data.loaded_files.get(filename)?;
 
@@ -1705,11 +1696,6 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
         ))
     } else {
         let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
-    
-        #[cfg(target_os = "linux")]
-        let is_windows = false;
-        #[cfg(not(target_os = "linux"))]
-        let is_windows = true;
 
         normalize_for_js(format!("
                 <div style='display:flex;flex-direction:row;height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
@@ -1747,33 +1733,30 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
                 </div>
             ", reload_icon = reload_str) },
-            lefis_analyse = if is_windows {
-                String::new()
-            } else {
-                if rpc_data.konfiguration.lefis_analyse_einblenden {
-                    let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
-                    format!("
-                        <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
-                            <div style='display:flex;flex-direction:row;'>
-                                <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
-                                <div style='padding:6px;'>
-                                    <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
-                                </div>
-                            </div>
-                        </div>")
-                } else {
-                    let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
-                    format!("
+            lefis_analyse = 
+            if rpc_data.konfiguration.lefis_analyse_einblenden {
+                let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
+                format!("
                     <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
-                            <div style='display:flex;flex-grow:1;'></div>
                             <div style='padding:6px;'>
-                                <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                                <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
                             </div>
                         </div>
                     </div>")
-                }
+            } else {
+                let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
+                format!("
+                <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
+                    <div style='display:flex;flex-direction:row;'>
+                        <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
+                        <div style='display:flex;flex-grow:1;'></div>
+                        <div style='padding:6px;'>
+                            <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                        </div>
+                    </div>
+                </div>")
             },
             
             bestandsverzeichnis = render_bestandsverzeichnis(open_file, &rpc_data.konfiguration),
@@ -1793,7 +1776,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
             
-            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden && !is_windows {
+            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
                 format!("
                     <div id='__application-analyse-grundbuch' style='display:flex;flex-grow:1;min-width:50%;overflow:scroll;{max_height}'>
                         {analyse}

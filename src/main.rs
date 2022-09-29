@@ -23,8 +23,6 @@ use crate::digital::{
 };
 use crate::analyse::GrundbuchAnalysiert;
 use crate::digital::{Bestandsverzeichnis, Abteilung1, Abteilung2, Abteilung3};
-use crate::kurztext::{PyBetrag, SchuldenArtPyWrapper, RechteArtPyWrapper};
-use pyo3::{Python, PyClass, PyAny, pyclass, pymethods, IntoPy, ToPyObject};
 use tinyfiledialogs::MessageBoxIcon;
 
 const APP_TITLE: &str = "Digitales Grundbuch";
@@ -45,6 +43,7 @@ pub mod analyse;
 pub mod kurztext;
 pub mod pdf;
 pub mod cmd;
+pub mod python;
 
 use crate::cmd::Cmd;
 
@@ -474,13 +473,7 @@ impl PdfFile {
         let json = match serde_json::to_string_pretty(&self) { Ok(o) => o, Err(_) => return, };
         let _ = std::fs::write(&target_output_path, json.as_bytes());
     }
-    
-    #[cfg(not(target_os = "linux"))]
-    pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
-        return Some(PdfFileIcon::AllesOkay);
-    }
 
-    #[cfg(target_os = "linux")]
     pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
         
         if !self.ist_geladen() {
@@ -505,13 +498,7 @@ impl PdfFile {
             self.geladen.contains_key(&format!("{}", sz)) || self.seiten_versucht_geladen.contains(sz)
         })
     }
-    
-    #[cfg(not(target_os = "linux"))]
-    pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
-        return true;
-    }
 
-    #[cfg(target_os = "linux")]
     pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
         
         let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
@@ -520,13 +507,7 @@ impl PdfFile {
         && analysiert.abt2.iter().all(|e| e.fehler.is_empty())
         && analysiert.abt3.iter().all(|e| e.fehler.is_empty())
     }
-    
-    #[cfg(not(target_os = "linux"))]
-    pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
-        return true;
-    }
 
-    #[cfg(target_os = "linux")]
     pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
     
         let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
@@ -4456,218 +4437,6 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
     Ok(())
 }
 
-pub fn python_exec_kuerze_text_abt3<'py>(
-    py: Python<'py>,
-    recht_id: &str,
-    text_sauber: &str, 
-    betrag: Option<String>,
-    schuldenart: Option<String>,
-    rechteinhaber: Option<String>,
-    saetze_clean: &[String],
-    py_code_lines: &[String], 
-    konfiguration: &Konfiguration,
-) -> Result<String, String> {
-
-    use pyo3::prelude::*;
-    use pyo3::types::{PyDict, PyList, PyTuple};
-
-    use crate::kurztext::PyWaehrung;
-        
-    let script = py_code_lines
-        .iter()
-        .map(|l| format!("    {}", l))
-        .collect::<Vec<_>>()
-        .join("\r\n");
-        
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, betrag, schuldenart, rechtsinhaber, re, recht_id = args\r\n{}", script);
-    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
-    
-    let saetze = PyList::new(py, saetze_clean.into_iter());
-
-    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
-    module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
-    module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
-    module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
-    module.add_class::<PyBetrag>().map_err(|e| format!("{}", e))?;
-    module.add_class::<PyWaehrung>().map_err(|e| format!("{}", e))?;
-
-    let fun: Py<PyAny> = module.getattr("run_script").unwrap().into();
-    let regex_list = {
-        let dict = PyDict::new(py);
-        for (k, v) in konfiguration.regex.iter() {
-            if let Ok(v) = get_or_insert_regex(&regex_values, v) {
-                let _ = dict.set_item(k.clone(), v);
-            }
-        }
-        dict
-    };
-    
-    let tuple = PyTuple::new(py, &[
-        saetze.to_object(py), 
-        betrag.unwrap_or_default().to_object(py), 
-        schuldenart.unwrap_or_default().to_object(py), 
-        rechteinhaber.unwrap_or_default().to_object(py), 
-        regex_list.to_object(py),
-        recht_id.to_string().to_object(py),
-    ]);
-    let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
-    let extract = result.as_ref(py).extract::<String>().map_err(|e| format!("{}", e))?;
-    
-    Ok(extract)
-}
-
-
-pub fn python_exec_kuerze_text_abt2<'py>(
-    py: Python<'py>,
-    recht_id: &str,
-    text_sauber: &str, 
-    rechteinhaber: Option<String>,
-    rangvermerk: Option<String>,
-    saetze_clean: &[String],
-    py_code_lines: &[String], 
-    konfiguration: &Konfiguration,
-) -> Result<String, String> {
-
-    use pyo3::prelude::*;
-    use pyo3::types::{PyDict, PyList, PyTuple};
-
-    use crate::kurztext::PyWaehrung;
-        
-    let script = py_code_lines
-        .iter()
-        .map(|l| format!("    {}", l))
-        .collect::<Vec<_>>()
-        .join("\r\n");
-        
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, rechtsinhaber, rangvermerk, re, recht_id = args\r\n{}", script);
-    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
-    
-    let saetze = PyList::new(py, saetze_clean.into_iter());
-
-    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
-    module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
-    module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
-    module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
-    module.add_class::<PyBetrag>().map_err(|e| format!("{}", e))?;
-    module.add_class::<PyWaehrung>().map_err(|e| format!("{}", e))?;
-
-    let fun: Py<PyAny> = module.getattr("run_script").unwrap().into();
-    let regex_list = {
-        let dict = PyDict::new(py);
-        for (k, v) in konfiguration.regex.iter() {
-            if let Ok(v) = get_or_insert_regex(&regex_values, v) {
-                let _ = dict.set_item(k.clone(), v);
-            }
-        }
-        dict
-    };
-    
-    let tuple = PyTuple::new(py, &[
-        saetze.to_object(py), 
-        rechteinhaber.unwrap_or_default().to_object(py), 
-        rangvermerk.unwrap_or_default().to_object(py), 
-        regex_list.to_object(py),
-        recht_id.to_string().to_object(py),
-    ]);
-    let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
-    let extract = result.as_ref(py).extract::<String>().map_err(|e| format!("{}", e))?;
-    
-    Ok(extract)
-}
-
-pub fn python_exec_kurztext_string<'py>(
-    py: Python<'py>,
-    recht_id: &str,
-    text_sauber: &str,
-    saetze_clean: &[String],
-    py_code_lines: &[String], 
-    konfiguration: &Konfiguration,
-) -> Result<String, String> {
-    python_exec_kurztext_inner(
-        py,
-        recht_id,
-        text_sauber,
-        saetze_clean,
-        py_code_lines,
-        konfiguration,
-        |py: &PyAny| py.extract::<String>().map_err(|e| format!("{}", e))
-    )
-}
-
-pub fn python_exec_kurztext<'py, T: PyClass + Clone>(
-    py: Python<'py>,
-    recht_id: &str,
-    text_sauber: &str, 
-    saetze_clean: &[String],
-    py_code_lines: &[String], 
-    konfiguration: &Konfiguration,
-) -> Result<T, String> {
-    python_exec_kurztext_inner(
-        py,
-        recht_id,
-        text_sauber,
-        saetze_clean,
-        py_code_lines,
-        konfiguration,
-        |py: &PyAny| py.extract::<T>().map_err(|e| format!("{}", e))
-    )
-}
-
-fn python_exec_kurztext_inner<'py, T>(
-    py: Python<'py>,
-    recht_id: &str,
-    text_sauber: &str, 
-    saetze_clean: &[String],
-    py_code_lines: &[String], 
-    konfiguration: &Konfiguration,
-    extract: fn(&PyAny) -> Result<T, String>,
-) -> Result<T, String> {
-    
-    use pyo3::prelude::*;
-    use pyo3::types::{PyDict, PyList, PyTuple};
-
-    use crate::kurztext::PyWaehrung;
-        
-    let script = py_code_lines
-        .iter()
-        .map(|l| format!("    {}", l))
-        .collect::<Vec<_>>()
-        .join("\r\n");
-        
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    saetze, re, recht_id = args\r\n{}", script);
-    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
-    
-    let saetze = PyList::new(py, saetze_clean.into_iter());
-
-    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
-    module.add_class::<RechteArtPyWrapper>().map_err(|e| format!("{}", e))?;
-    module.add_class::<SchuldenArtPyWrapper>().map_err(|e| format!("{}", e))?;
-    module.add_class::<CompiledRegex>().map_err(|e| format!("{}", e))?;
-    module.add_class::<PyBetrag>().map_err(|e| format!("{}", e))?;
-    module.add_class::<PyWaehrung>().map_err(|e| format!("{}", e))?;
-
-    let fun: Py<PyAny> = module.getattr("run_script").unwrap().into();
-    let regex_list = {
-        let dict = PyDict::new(py);
-        for (k, v) in konfiguration.regex.iter() {
-            if let Ok(v) = get_or_insert_regex(&regex_values, v) {
-                let _ = dict.set_item(k.clone(), v);
-            }
-        }
-        dict
-    };
-    let tuple = PyTuple::new(py, &[saetze.to_object(py), regex_list.to_object(py), recht_id.to_string().to_object(py)]);
-    let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
-    let extract = (extract)(result.as_ref(py))?;
-    Ok(extract)
-}
-
 lazy_static::lazy_static! {
     static ref REGEX_CACHE: Mutex<BTreeMap<String, CompiledRegex>> = Mutex::new(BTreeMap::new());
 }
@@ -4706,7 +4475,6 @@ pub fn get_or_insert_regex(
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-#[pyclass(name = "Regex")]
 pub struct CompiledRegex {
     re: regex::Regex,
 }
@@ -4736,33 +4504,6 @@ impl CompiledRegex {
         cap.iter().skip(1).filter_map(|group| {
             Some(group?.as_str().to_string())
         }).collect()
-    }
-}
-
-impl ToPyObject for CompiledRegex {
-    fn to_object(&self, py: pyo3::Python) -> pyo3::PyObject {
-        self.clone().into_py(py)
-    }
-}
-
-#[allow(non_snake_case)]
-#[pymethods]
-impl CompiledRegex {
-    #[pyo3(text_signature = "(text, /)")]
-    pub fn matches(&self, text: &str) -> bool {
-        !self.get_captures(text).is_empty()
-    }
-    #[pyo3(text_signature = "(text, index, /)")]
-    pub fn find_in(&self, text: &str, index: usize) -> Option<String> {
-        self.get_captures(text).get(index).cloned()
-    }
-    #[pyo3(text_signature = "(text, /)")]
-    pub fn find_all(&self, text: &str) -> Vec<String> {
-        self.find_all_matches(text)
-    }
-    #[pyo3(text_signature = "(text, text_neu, /)")]
-    pub fn replace_all(&self, text: &str, text_neu: &str) -> String {
-        self.re.replace_all(text, text_neu).to_string()
     }
 }
 
@@ -4881,26 +4622,26 @@ fn get_program_path() -> Result<String, String> {
     .to_string())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 pub fn get_tesseract_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("tesseract").join("Tesseract-OCR").join("tesseract.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 pub fn get_tesseract_command() -> Command {
     Command::new("tesseract")
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 pub fn get_pdftoppm_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("pdftools").join("xpdf-tools-win-4.04").join("bin64").join("pdftoppm.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 pub fn get_pdftoppm_command() -> Command {
     Command::new("pdftoppm")
 }
@@ -4917,14 +4658,14 @@ pub fn get_pdftotext_command() -> Command {
     Command::new("pdftotext")
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 pub fn get_qpdf_command() -> Command {
     let path = get_program_path().unwrap();
     let exe = Path::new(&path).join("qpdf").join("qpdf-10.6.3").join("bin").join("qpdf.exe");
     Command::new(format!("{}", exe.display()))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 pub fn get_qpdf_command() -> Command {
     Command::new("qpdf")
 }
@@ -5026,10 +4767,6 @@ fn main() -> wry::Result<()> {
                 MessageBoxIcon::Warning,
             );
         }
-    }
-
-    #[cfg(target = "linux")] {
-        pyo3::prepare_freethreaded_python();
     }
     
     if let Err(e) = selftest_startup() {

@@ -15,7 +15,6 @@ serde = "1"
 serde_derive = "1" 
 itertools = "0.7.7"
 lopdf = { version = "0.26.0", features = ["nom_parser"] }
-flate2 = "*"
 serde_json = "1"
 base64 = "0.13"
 regex = "1"
@@ -38,10 +37,22 @@ rand = "0.8.5"
 hyphenation = { version = "0.8.4", features = ["embed_all", "nfc"] }
 textwrap = { version = "0.15.0", features = ["smawk", "hyphenation"] }
 zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzip2", "zstd", "time"] }
+flate2 = "1.0.24"
+tar = "0.4.38"
 
-[target."cfg(linux)".pyo3]
-version = "0.15.1"
-features = ["auto-initialize"]
+[dependencies.wasmer]
+git = "https://github.com/wasmerio/wasmer"
+rev = "7d44c135f8eb7c31815438f8dfc86aa92c787b7b"
+
+[dependencies.wasmer_wasi]
+git = "https://github.com/wasmerio/wasmer"
+rev = "7d44c135f8eb7c31815438f8dfc86aa92c787b7b"
+package = "wasmer-wasi"
+
+[dependencies.wasmer_vfs]
+git = "https://github.com/wasmerio/wasmer"
+rev = "7d44c135f8eb7c31815438f8dfc86aa92c787b7b"
+package = "wasmer-vfs"
 
 [profile.release]
 opt-level = 3
@@ -57,7 +68,7 @@ strip = true
 
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
-depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
+depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
 section = "utility"
 priority = "optional"
 assets = [
@@ -79,5 +90,5 @@ short_description = "Digitales Grundbuch"
 long_description = """
 Anwendung zum Bearbeiten und Digitalisieren vom digitalen Grundbuch
 """
-deb_depends = ["$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"]
+deb_depends = ["$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"]
 osx_frameworks = []

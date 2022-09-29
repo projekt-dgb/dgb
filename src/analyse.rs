@@ -1,43 +1,9 @@
 use crate::{Grundbuch, Titelblatt, Konfiguration};
-use crate::digital::{Nebenbeteiligter, NebenbeteiligterExtra, BvEintrag};
-use crate::kurztext::{self, SchuldenArt, RechteArt};
+use crate::digital::{Nebenbeteiligter, BvEintrag};
+use crate::python::{Spalte1Eintrag, SchuldenArt, RechteArt};
 use serde_derive::{Serialize, Deserialize};
 use std::collections::BTreeMap;
-use pyo3::{Python, pyclass, pymethods};
 use crate::get_or_insert_regex;
-use std::fmt;
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Waehrung { 
-    Euro,
-    DMark,
-    MarkDDR,
-    Goldmark,
-    Rentenmark,
-    Reichsmark,
-    GrammFeingold,
-}
-
-impl Waehrung {
-    pub fn to_string(&self) -> &'static str {
-        match self {
-            Waehrung::Euro => "€",
-            Waehrung::DMark => "DM",
-            Waehrung::MarkDDR => "M",
-            Waehrung::Goldmark => "Goldmark",
-            Waehrung::Reichsmark => "Reichsmark",
-            Waehrung::Rentenmark => "Rentenmark",
-            Waehrung::GrammFeingold => "Gr. Feingold",
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
-pub struct Betrag {
-    pub wert: usize,
-    pub nachkomma: usize,
-    pub waehrung: Waehrung,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrundbuchAnalysiert {
@@ -82,96 +48,6 @@ pub struct Abt3Analysiert {
     pub fehler: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[pyclass(name = "Spalte1Eintrag")]
-#[repr(C)]
-pub struct Spalte1Eintrag {
-    // Nummer im BV
-    pub lfd_nr: usize,
-    // "Teil von", "Teil v.", "X tlw."
-    pub voll_belastet: bool,    
-    // Leer = gesamte lfd. Nr. ist belastet
-    pub nur_lastend_an: Vec<FlurFlurstueck>,
-}
-
-#[allow(non_snake_case)]
-#[pymethods]
-impl Spalte1Eintrag {
-    #[new]
-    #[args(voll_belastet = "true", nur_lastend_an = "Vec::new()")]
-    fn new(lfd_nr: usize, voll_belastet: bool, nur_lastend_an: Vec<FlurFlurstueck>) -> Self {
-        Self {
-            lfd_nr,
-            voll_belastet,
-            nur_lastend_an,
-        }
-    }
-    
-    fn get_lfd_nr(&self) -> usize{
-        self.lfd_nr
-    }
-    
-    fn append_nur_lastend_an(&mut self, mut nur_lastend_an: Vec<FlurFlurstueck>) {
-        self.voll_belastet = false;
-        self.nur_lastend_an.append(&mut nur_lastend_an);
-    }
-    
-    fn __str__(&self) -> String {
-        format!("{:#?}", self)
-    }
-
-    fn __repr__(&self) -> String {
-        format!("{:?}", self)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[pyclass(name = "FlurFlurstueck")]
-#[repr(C)]
-pub struct FlurFlurstueck {
-    pub flur: usize,
-    pub flurstueck: String,
-    pub gemarkung: Option<String>,
-    pub teilflaeche_qm: Option<usize>,
-}
-
-impl fmt::Display for FlurFlurstueck {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(s) = self.gemarkung.as_ref() {
-            write!(f, "Gemarkung {}, ", s)?;
-        }
-        write!(f, "Flur {} Flst. {}", self.flur, self.flurstueck)
-    }
-}
-
-#[allow(non_snake_case)]
-#[pymethods]
-impl FlurFlurstueck {
-    #[new]
-    #[args(gemarkung = "None", teilflaeche_qm = "None")]
-    fn new(flur: usize, flurstueck: String, gemarkung: Option<String>, teilflaeche_qm: Option<usize>) -> Self {
-        Self {
-            gemarkung,
-            flur,
-            flurstueck,
-            teilflaeche_qm,
-        }
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn analysiere_grundbuch(
-    grundbuch: &Grundbuch,
-    nb: &[Nebenbeteiligter],
-    konfiguration: &Konfiguration
-) -> GrundbuchAnalysiert {
-    return GrundbuchAnalysiert {
-        abt2: Vec::new(),
-        abt3: Vec::new(),
-    };
-}
-
-#[cfg(target_os = "linux")]
 pub fn analysiere_grundbuch(
     grundbuch: &Grundbuch, 
     nb: &[Nebenbeteiligter], 
@@ -436,8 +312,8 @@ pub fn analysiere_grundbuch(
     }
 }
 
-pub fn get_belastete_flurstuecke<'py>(
-    py: Python<'py>,
+pub fn get_belastete_flurstuecke(
+    vm: PyVm,
 	bv_nr: &str, 
 	text_sauber: &str, 
 	titelblatt: &Titelblatt,
@@ -449,7 +325,7 @@ pub fn get_belastete_flurstuecke<'py>(
 	fehler: &mut Vec<String>,
 ) -> Result<Vec<BvEintrag>, String> {
 
-    let spalte1_eintraege = get_belastete_flurstuecke_python(
+    let spalte1_eintraege = crate::python::get_belastete_flurstuecke(
         py,
         bv_nr,
         text_sauber,
@@ -725,57 +601,6 @@ fn flurstuecke_fortfuehren(
     }
     
     bv_belastet
-}
-
-pub fn get_belastete_flurstuecke_python<'py>(
-    py: Python<'py>,
-	bv_nr: &str, 
-	text_sauber: &str, 
-	konfiguration: &Konfiguration,
-	fehler: &mut Vec<String>
-) -> Result<Vec<Spalte1Eintrag>, String> {
-    
-    use pyo3::prelude::*;
-    use pyo3::types::{PyDict, PyTuple};
-        
-    let script = konfiguration
-        .flurstuecke_auslesen_script
-        .iter()
-        .map(|l| format!("    {}", l))
-        .collect::<Vec<_>>()
-        .join("\r\n");
-        
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let py_code = format!("import inspect\r\n\r\ndef run_script(*args, **kwargs):\r\n    spalte_1, text, re = args\r\n{}", script);
-    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
-    
-    let module = PyModule::from_code(py, &py_code, "", "main").map_err(|e| format!("{}", e))?;
-    module.add_class::<Spalte1Eintrag>().map_err(|e| format!("{}", e))?;
-    module.add_class::<FlurFlurstueck>().map_err(|e| format!("{}", e))?;
-
-    let fun: Py<PyAny> = module.getattr("run_script").unwrap().into();
-    let regex_list = {
-        let dict = PyDict::new(py);
-        for (k, v) in konfiguration.regex.iter() {
-            if let Ok(v) = get_or_insert_regex(&regex_values, v) {
-                let _ = dict.set_item(k.clone(), v);
-            }
-        }
-        dict
-    };
-    
-    let tuple = PyTuple::new(py, &[
-        bv_nr.to_string().to_object(py),
-        text_sauber.to_string().to_object(py), 
-        regex_list.to_object(py)
-    ]);
-    let result = fun.call1(py, tuple).map_err(|e| format!("{}", e))?;
-    let extract = result.as_ref(py).extract::<Vec<Spalte1Eintrag>>().map_err(|e| format!("{}", e))?;
-    
-    Ok(extract)
-    
-    
 }
 
 fn parse_spalte_1_veraenderung(spalte_1: &str) -> Result<Vec<usize>, String> {
