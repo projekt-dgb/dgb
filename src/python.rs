@@ -34,7 +34,7 @@ enum PyResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
-enum PyOk {
+pub enum PyOk {
     Str(String),
     List(Vec<String>),
     Spalte1(Spalte1Eintraege),
@@ -44,8 +44,8 @@ enum PyOk {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PyError {
-    text: String,
+pub struct PyError {
+    pub text: String,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -201,11 +201,11 @@ impl PyVm {
 
     pub fn new() -> Result<Self, String> {
 
-        let python_unpacked = unpack_tar_gz(PYTHON.to_vec(), "python/atom/")?;
+        let mut python_unpacked = unpack_tar_gz(PYTHON.to_vec(), "python/atom/").unwrap();
         let python_wasm = python_unpacked.remove(
             &DirOrFile::File(Path::new("lib/python.wasm").to_path_buf())
-        ).unwrap();
-    
+        ).expect("cannot find lib/python.wasm?");
+        
         let mut store = Store::default();
         let mut module = Module::from_binary(&store, &python_wasm).unwrap();
         module.set_name("python");
@@ -220,7 +220,7 @@ impl PyVm {
     pub fn execute_script(&self, script: &[String], args: &[&str]) -> Result<PyOk, PyError> {
         use std::io::Read;
 
-        let python_unpacked = self.file_system.clone();
+        let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
             DirOrFile::File(Path::new("lib/file.py").to_path_buf()), 
             WRAPPER
@@ -413,13 +413,13 @@ fn prepare_webc_env(
         .map_err(|e| format!("E4: {e}"))?;
     }
 
-    let wasi_env = wasi_env
+    let mut wasi_env = wasi_env
     .env("PYTHONHOME", "/")
     .arg("/lib/file.py")
     .stdout(Box::new(stdout));
 
     for arg in args {
-        wasi_env = wasi_env.arg(arg);
+        wasi_env.arg(arg);
     }
 
     Ok(

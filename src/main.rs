@@ -21,7 +21,7 @@ use crate::digital::{
     Abt2Eintrag, Abt2Veraenderung, Abt2Loeschung,
     Abt3Eintrag, Abt3Veraenderung, Abt3Loeschung,
 };
-use crate::python::PyVm;
+use crate::python::{PyVm, Betrag, RechteArt, SchuldenArt};
 use crate::analyse::GrundbuchAnalysiert;
 use crate::digital::{Bestandsverzeichnis, Abteilung1, Abteilung2, Abteilung3};
 use tinyfiledialogs::MessageBoxIcon;
@@ -29,11 +29,11 @@ use tinyfiledialogs::MessageBoxIcon;
 const APP_TITLE: &str = "Digitales Grundbuch";
 const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 static TESSERACT_SOURCE_ZIP: &[u8] = include_bytes!("../bin/Tesseract-OCR.zip");
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 static PDFTOOLS_SOURCE_ZIP: &[u8] = include_bytes!("../bin/xpdf-tools-win-4.04.zip");
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 static QPDF_SOURCE_ZIP: &[u8] = include_bytes!("../bin/qpdf-10.6.3-bin-mingw32.zip");
 
 type FileName = String;
@@ -2555,8 +2555,12 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let start = std::time::Instant::now();
             let mut debug_log = String::new();
-            let result: Result<String, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
+            let result: Result<String, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
 
                 let mut fehler = Vec::new();
                 let mut warnungen = Vec::new();
@@ -2566,7 +2570,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 let open_file = data.open_page.clone().and_then(|(file, _)| data.loaded_files.get_mut(&file));
             
                 let bv_eintraege = crate::analyse::get_belastete_flurstuecke(
-                    py,
+                    data.vm.clone(),
                     bv_nr,
                     &text_sauber,
                     &Titelblatt {
@@ -2583,10 +2587,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     &mut warnungen,
                     &mut fehler,
                 )?;
-                
                 Ok(spalte1_eintraege.iter().map(|e| format!("{e:#?}")).collect::<Vec<_>>().join("\r\n"))
             });
-            
+
             let time = std::time::Instant::now() - start;
             let result: String = match result {
                 Ok(o) => { format!("{}\r\nLOG:\r\n{}\r\nAusgabe berechnet in {:?}", o, debug_log, time) },
@@ -2596,15 +2599,22 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         },
         Cmd::RangvermerkAuslesenAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<String, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext_string(
-                    py, "RangvermerkAuslesenAbt2ScriptTest", 
-                    &text_sauber, &saetze_clean, 
-                    &data.konfiguration.rangvermerk_auslesen_abt2_script, 
+            let result: Result<String, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                crate::python::get_rangvermerk_abt2(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    &saetze_clean,
                     &data.konfiguration
                 )
             });
+
             let time = std::time::Instant::now() - start;
             let result: String = match result {
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
@@ -2614,12 +2624,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         }, 
         Cmd::RechtsinhaberAuslesenAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<String, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext_string(
-                    py, "RechtsinhaberAuslesenAbt2ScriptTest", 
-                    &text_sauber, &saetze_clean, 
-                    &data.konfiguration.rechtsinhaber_auslesen_abt2_script, 
+            let result: Result<String, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                crate::python::get_rechtsinhaber_abt2(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    &saetze_clean,
                     &data.konfiguration
                 )
             });
@@ -2632,12 +2648,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         },
         Cmd::RechtsinhaberAuslesenAbt3ScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<String, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext_string(py, 
-                    "RechtsinhaberAuslesenAbt3ScriptTest", 
-                    &text_sauber, &saetze_clean,  
-                    &data.konfiguration.rechtsinhaber_auslesen_abt3_script, 
+            let result: Result<String, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                crate::python::get_rechtsinhaber_abt3(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    &saetze_clean,
                     &data.konfiguration
                 )
             });
@@ -2650,44 +2672,64 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         },
         Cmd::BetragAuslesenScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<PyBetrag, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext(py, 
-                    "BetragAuslesenScriptTest", 
-                    &text_sauber, &saetze_clean, &data.konfiguration.betrag_auslesen_script, 
+            let result: Result<Betrag, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                crate::python::get_betrag_abt3(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    &saetze_clean,
                     &data.konfiguration
                 )
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
-                Ok(o) => { format!("{:#?}\r\nAusgabe berechnet in {:?}", o.inner, time) },
+                Ok(o) => { format!("{:#?}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
             let _ = webview.evaluate_script(&format!("replaceBetragAuslesenTestOutput(`{}`);", result));
         },
         Cmd::KurzTextAbt2ScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<String, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-
-                let rechteart: Result<RechteArtPyWrapper, String> = crate::python_exec_kurztext(
-                    py,
-                    "KurzTextAbt2ScriptTest",
-                    &text_sauber, 
-                    &saetze_clean, 
-                    &data.konfiguration.klassifiziere_schuldenart, 
+            let result: Result<String, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
                     &data.konfiguration
-                );
-                let rechteart = rechteart?.inner;
-                
-                python_exec_kurztext_string(
-                    py, "KurzTextAbt2ScriptTest",
+                )?;
+
+                let rechtsinhaber = crate::python::get_rechtsinhaber_abt2(
+                    data.vm.clone(), 
+                    "", 
                     &text_sauber, 
                     &saetze_clean, 
-                    &data.konfiguration.text_kuerzen_abt2_script, 
+                    &data.konfiguration
+                ).ok();
+
+                let rangvermerk = crate::python::get_rangvermerk_abt2(
+                    data.vm.clone(), 
+                    "", 
+                    &text_sauber, 
+                    &saetze_clean, 
+                    &data.konfiguration
+                ).ok();
+
+                crate::python::get_kurztext_abt2(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    rechtsinhaber,
+                    rangvermerk,
+                    &saetze_clean,
                     &data.konfiguration
                 )
             });
+
             let time = std::time::Instant::now() - start;
             let result = match result {
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
@@ -2697,52 +2739,51 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         },
         Cmd::KurzTextAbt3ScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<String, String> = Python::with_gil(|py| {
-                
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                
-                let schuldenart: Result<SchuldenArtPyWrapper, String> = crate::python_exec_kurztext(
-                    py,
-                    "KurzTextAbt3ScriptTest",
+
+            let result: Result<String, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                let schuldenart = crate::python::get_schulden_art_abt3(
+                    data.vm.clone(),
+                    "",
                     &text_sauber, 
                     &saetze_clean, 
-                    &data.konfiguration.klassifiziere_schuldenart, 
                     &data.konfiguration
-                );
-                let schuldenart = schuldenart?.inner;
-                
-                let betrag: Result<PyBetrag, String> = crate::python_exec_kurztext(
-                    py,
-                    "KurzTextAbt3ScriptTest",
+                )?;
+
+                let betrag = crate::python::get_betrag_abt3(
+                    data.vm.clone(),
+                    "",
                     &format!("100.000,00 EUR"), 
                     &[format!("100.000,00 EUR")], 
-                    &data.konfiguration.betrag_auslesen_script, 
                     &data.konfiguration
-                );
-                let betrag = betrag?.inner;
-                
-                let rechtsinhaber: Result<String, String> = crate::python_exec_kurztext_string(
-                    py,
-                    "KurzTextAbt3ScriptTest",
+                )?;
+
+                let rechtsinhaber = crate::python::get_rechtsinhaber_abt3(
+                    data.vm.clone(),
+                    "",
                     &text_sauber, 
                     &saetze_clean, 
-                    &data.konfiguration.betrag_auslesen_script, 
                     &data.konfiguration
-                );
-                let rechtsinhaber = rechtsinhaber?;
+                )?;
 
-                python_exec_kuerze_text_abt3(
-                    py,
-                    "KurzTextAbt3ScriptTest",
-                    &text_sauber,
-                    Some(format!("{} {}", crate::kurztext::formatiere_betrag(&betrag), betrag.waehrung.to_string())),
-                    Some(format!("{}", schuldenart.to_string())),
+                let betrag = format!("{} {}", crate::kurztext::formatiere_betrag(&betrag), betrag.waehrung.to_string());
+                crate::python::get_kurztext_abt3(
+                    data.vm.clone(), 
+                    "", 
+                    &text_sauber, 
+                    Some(betrag), 
+                    Some(schuldenart.to_string().to_string()),
                     Some(rechtsinhaber),
-                    &saetze_clean, 
-                    &data.konfiguration.text_kuerzen_abt3_script, 
-                    &data.konfiguration
+                    &saetze_clean,
+                    &data.konfiguration,
                 )
             });
+
             let time = std::time::Instant::now() - start;
             let result = match result {
                 Ok(o) => { format!("{}\r\nAusgabe berechnet in {:?}", o, time) },
@@ -2753,13 +2794,24 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         
         Cmd::RechteArtScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<RechteArtPyWrapper, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext(py, "RechteArtScriptTest", &text_sauber, &saetze_clean, &data.konfiguration.klassifiziere_rechteart, &data.konfiguration)
+            let result: Result<RechteArt, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                crate::python::get_rechte_art_abt2(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    &saetze_clean,
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
-                Ok(o) => { format!("{:?}\r\nAusgabe berechnet in {:?}", o.inner, time) },
+                Ok(o) => { format!("{:?}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
             
@@ -2767,13 +2819,24 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         },
         Cmd::SchuldenArtScriptTesten { text } => {
             let start = std::time::Instant::now();
-            let result: Result<SchuldenArtPyWrapper, String> = Python::with_gil(|py| {
-                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&*text, &data.konfiguration)?;
-                python_exec_kurztext(py, "SchuldenArtScriptTest", &text_sauber, &saetze_clean, &data.konfiguration.klassifiziere_schuldenart, &data.konfiguration)
+            let result: Result<SchuldenArt, String> = Err(String::new()).or_else(|_| {
+                let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                )?;
+
+                crate::python::get_schulden_art_abt3(
+                    data.vm.clone(),
+                    "",
+                    &text_sauber,
+                    &saetze_clean,
+                    &data.konfiguration
+                )
             });
             let time = std::time::Instant::now() - start;
             let result = match result {
-                Ok(o) => { format!("{:?}\r\nAusgabe berechnet in {:?}", o.inner, time) },
+                Ok(o) => { format!("{:?}\r\nAusgabe berechnet in {:?}", o, time) },
                 Err(e) => { format!("{}", e) },
             };
             let _ = webview.evaluate_script(&format!("replaceSchuldenArtTestOutput(`{}`);", result));
@@ -3025,10 +3088,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let text = if data.konfiguration.zeilenumbrueche_in_ocr_text {
                 text
             } else {
-                let result: Result<String, String> = Python::with_gil(|py| {
-                    let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(data.vm.clone(), &text, &data.konfiguration)?;
-                    Ok(text_sauber)
-                });
+                let result: Result<String, String> = crate::kurztext::text_saubern(
+                    data.vm.clone(), 
+                    &*text, 
+                    &data.konfiguration
+                ).map(|s| s.0);
                 match result {
                     Ok(o) => o,
                     Err(e) => e,
@@ -3089,7 +3153,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let file_name = format!("{}_{}", open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt);
             let output_parent = open_file.get_gbx_datei_parent();
             let cache_output_path = output_parent.clone().join(&format!("{}.cache.gbx", file_name));
-            let _ = reload_grundbuch(open_file.clone(), data.konfiguration.clone());
+            let _ = reload_grundbuch(data.vm.clone(), open_file.clone(), data.konfiguration.clone());
             
             let _ = webview.evaluate_script(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
         },
@@ -3341,7 +3405,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
             
-            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
+            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(data.vm.clone(), &open_file, &data.loaded_nb, &data.konfiguration, false, false)));
         },
         Cmd::ExportNebenbeteiligte => {
         
@@ -3619,7 +3683,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let analysiert = data.loaded_files.values().map(|file| {
                 LefisDateiExport {
-                    rechte: crate::analyse::analysiere_grundbuch(&file.analysiert, &data.loaded_nb, &data.konfiguration),
+                    rechte: crate::analyse::analysiere_grundbuch(data.vm.clone(), &file.analysiert, &data.loaded_nb, &data.konfiguration),
                     titelblatt: file.analysiert.titelblatt.clone(),
                 }
             }).collect::<Vec<_>>();
@@ -4121,6 +4185,8 @@ fn digital_dateien(vm: PyVm, pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
     
             let konfiguration_clone = konfiguration.clone();
 
+            let vm_clone = vm.clone();
+
             rayon::spawn(move || {
             
                 let konfiguration = konfiguration_clone.clone();
@@ -4232,7 +4298,7 @@ fn digital_dateien(vm: PyVm, pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                     });
 
                     pdf.analysiert = match analyse_grundbuch(
-                        vm.clone(), 
+                        vm_clone.clone(), 
                         &pdf, 
                         &konfiguration
                     ) { 
@@ -4295,13 +4361,13 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     Some(gb)
 }
 
-fn reload_grundbuch(pdf: PdfFile, konfiguration: Konfiguration) {
+fn reload_grundbuch(vm: PyVm, pdf: PdfFile, konfiguration: Konfiguration) {
 
     use tinyfiledialogs::MessageBoxIcon;
             
     std::thread::spawn(move || {
         let konfiguration = konfiguration;
-        if let Err(e) = reload_grundbuch_inner(pdf, &konfiguration) {
+        if let Err(e) = reload_grundbuch_inner(vm.clone(), pdf, &konfiguration) {
             tinyfiledialogs::message_box_ok(
                 "Fehler",
                 &format!("Fehler beim Laden des Grundbuchs: {:?}", e),
@@ -4311,7 +4377,7 @@ fn reload_grundbuch(pdf: PdfFile, konfiguration: Konfiguration) {
     });
 }
 
-fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Result<(), Fehler> {
+fn reload_grundbuch_inner(vm: PyVm, mut pdf: PdfFile, konfiguration: &Konfiguration) -> Result<(), Fehler> {
     
     let pdf_datei = match pdf.datei.clone() {
         Some(s) => s,
@@ -4408,7 +4474,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
             texte: textbloecke.clone(),
         });
 
-        pdf.analysiert = match analyse_grundbuch(&pdf, konfiguration) { 
+        pdf.analysiert = match analyse_grundbuch(vm.clone(), &pdf, konfiguration) { 
             Some(o) => o, 
             None => continue, 
         };
@@ -4428,7 +4494,7 @@ fn reload_grundbuch_inner(mut pdf: PdfFile, konfiguration: &Konfiguration) -> Re
         let _ = std::fs::write(&cache_output_path, json.as_bytes());
     }
         
-    pdf.analysiert = match analyse_grundbuch(&pdf, konfiguration) { 
+    pdf.analysiert = match analyse_grundbuch(vm.clone(), &pdf, konfiguration) { 
         Some(o) => o, 
         None => return Ok(()), 
     };
@@ -4518,6 +4584,22 @@ impl CompiledRegex {
         cap.iter().skip(1).filter_map(|group| {
             Some(group?.as_str().to_string())
         }).collect()
+    }
+
+    pub fn matches(&self, text: &str) -> bool {
+        !self.get_captures(text).is_empty()
+    }
+
+    pub fn find_in(&self, text: &str, index: usize) -> Option<String> {
+        self.get_captures(text).get(index).cloned()
+    }
+
+    pub fn find_all(&self, text: &str) -> Vec<String> {
+        self.find_all_matches(text)
+    }
+
+    pub fn replace_all(&self, text: &str, text_neu: &str) -> String {
+        self.re.replace_all(text, text_neu).to_string()
     }
 }
 
@@ -4684,7 +4766,7 @@ pub fn get_qpdf_command() -> Command {
     Command::new("qpdf")
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 fn unzip_tesseract() -> Result<(), String> {
     use std::io::Cursor;
     let mut reader = Cursor::new(TESSERACT_SOURCE_ZIP.to_vec());
@@ -4703,7 +4785,7 @@ fn unzip_tesseract() -> Result<(), String> {
         .map_err(|e| format!("{e}"))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 fn unzip_pdftools() -> Result<(), String> {
     use std::io::Cursor;
     let mut reader = Cursor::new(PDFTOOLS_SOURCE_ZIP.to_vec());
@@ -4722,7 +4804,7 @@ fn unzip_pdftools() -> Result<(), String> {
         .map_err(|e| format!("{e}"))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 fn unzip_qpdf() -> Result<(), String> {
     use std::io::Cursor;
     let mut reader = Cursor::new(QPDF_SOURCE_ZIP.to_vec());
@@ -4753,7 +4835,7 @@ fn main() -> wry::Result<()> {
         webview::WebViewBuilder,
     };
     
-    #[cfg(not(target_os = "linux"))] {
+    #[cfg(target_os = "windows")] {
         if let Err(e) = unzip_tesseract() {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von tesseract-ocr",
@@ -4763,7 +4845,7 @@ fn main() -> wry::Result<()> {
         }
     }
 
-    #[cfg(not(target_os = "linux"))] {
+    #[cfg(target_os = "windows")] {
         if let Err(e) = unzip_pdftools() {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von pdftools",
@@ -4773,7 +4855,7 @@ fn main() -> wry::Result<()> {
         }
     }
 
-    #[cfg(not(target_os = "linux"))] {
+    #[cfg(target_os = "windows")] {
         if let Err(e) = unzip_qpdf() {
             tinyfiledialogs::message_box_ok(
                 "Fehler beim Installieren von qpdf",
