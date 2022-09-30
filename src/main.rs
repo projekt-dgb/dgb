@@ -21,6 +21,7 @@ use crate::digital::{
     Abt2Eintrag, Abt2Veraenderung, Abt2Loeschung,
     Abt3Eintrag, Abt3Veraenderung, Abt3Loeschung,
 };
+use crate::python::PyVm;
 use crate::analyse::GrundbuchAnalysiert;
 use crate::digital::{Bestandsverzeichnis, Abteilung1, Abteilung2, Abteilung3};
 use tinyfiledialogs::MessageBoxIcon;
@@ -62,6 +63,7 @@ pub struct RpcData {
     pub loaded_nb_paths: Vec<String>,
     
     pub konfiguration: Konfiguration,
+    pub vm: PyVm,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,6 +341,7 @@ impl Default for RpcData {
                 klassifiziere_rechteart: Vec::new(),
                 klassifiziere_schuldenart: Vec::new(),
             }),
+            vm: PyVm::new().unwrap(),
         }
     }
 }
@@ -474,17 +477,17 @@ impl PdfFile {
         let _ = std::fs::write(&target_output_path, json.as_bytes());
     }
 
-    pub fn get_icon(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
+    pub fn get_icon(&self, vm: PyVm, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> Option<PdfFileIcon> {
         
         if !self.ist_geladen() {
             return None;
         }
         
-        if !self.hat_keine_fehler(nb, konfiguration) {
+        if !self.hat_keine_fehler(vm.clone(), nb, konfiguration) {
             return Some(PdfFileIcon::HatFehler);
         }
         
-        if !self.alle_ordnungsnummern_zugewiesen(nb, konfiguration) {
+        if !self.alle_ordnungsnummern_zugewiesen(vm, nb, konfiguration) {
             return Some(PdfFileIcon::KeineOrdnungsnummernZugewiesen);
         }
         
@@ -499,18 +502,18 @@ impl PdfFile {
         })
     }
 
-    pub fn hat_keine_fehler(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
+    pub fn hat_keine_fehler(&self, vm: PyVm, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
         
-        let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(vm, &self.analysiert, nb, konfiguration);
         
         self.ist_geladen()
         && analysiert.abt2.iter().all(|e| e.fehler.is_empty())
         && analysiert.abt3.iter().all(|e| e.fehler.is_empty())
     }
 
-    pub fn alle_ordnungsnummern_zugewiesen(&self, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
+    pub fn alle_ordnungsnummern_zugewiesen(&self, vm: PyVm, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration) -> bool {
     
-        let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, nb, konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(vm, &self.analysiert, nb, konfiguration);
 
         let any_abt2 = analysiert.abt2.iter()
             .any(|e| e.warnungen.iter().any(|w| w == "Konnte keine Ordnungsnummer finden"));
@@ -521,10 +524,15 @@ impl PdfFile {
         self.ist_geladen() && !any_abt2 && !any_abt3
     }
 
-    pub fn get_nebenbeteiligte(&self, konfiguration: &Konfiguration) -> Vec<NebenbeteiligterExport> {
+    pub fn get_nebenbeteiligte(&self, vm: PyVm, konfiguration: &Konfiguration) -> Vec<NebenbeteiligterExport> {
         let mut v = Vec::new();
         
-        let analysiert = crate::analyse::analysiere_grundbuch(&self.analysiert, &[], konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(
+            vm, 
+            &self.analysiert, 
+            &[], 
+            konfiguration
+        );
         
         for abt2 in &analysiert.abt2 {
             if !abt2.rechtsinhaber.is_empty() {
@@ -1058,7 +1066,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 let _ = webview.evaluate_script(&format!("startCheckingForPageLoaded(`{}`, `{}`)", cache_output_path.display(), file_name));
             }
                         
-            digital_dateien(pdf_zu_laden, data.konfiguration.clone());
+            digital_dateien(data.vm.clone(), pdf_zu_laden, data.konfiguration.clone());
         },
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
@@ -1970,7 +1978,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script("saveState();");
             open_file.icon = None;
             if data.konfiguration.lefis_analyse_einblenden {
-                let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false)));
+                let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(data.vm.clone(), &open_file, &data.loaded_nb, &data.konfiguration, false, false)));
             }
         },
         Cmd::BvEintragTypAendern { path, value } => {
@@ -2034,7 +2042,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(data.vm.clone(), &open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             let _ = webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
         },
         Cmd::EintragNeu { path } => {
@@ -2125,7 +2133,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(data.vm.clone(), &open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             let _ = webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
             let _ = webview.evaluate_script(&format!("document.getElementById(`{}`).focus();", next_focus));
@@ -2380,7 +2388,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(data.vm.clone(), &open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             let _ = webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(data)));
 
             let _ = webview.evaluate_script(&format!("(function() {{ 
@@ -2477,7 +2485,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
                 
                 if v.ist_geladen() && v.icon.is_none() {
-                    let icon = match v.get_icon(&data.loaded_nb, &data.konfiguration) {
+                    let icon = match v.get_icon(data.vm.clone(), &data.loaded_nb, &data.konfiguration) {
                         Some(s) => s,
                         None => { return; },
                     };
@@ -3018,7 +3026,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 text
             } else {
                 let result: Result<String, String> = Python::with_gil(|py| {
-                    let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(&text, &data.konfiguration)?;
+                    let (text_sauber, saetze_clean) = crate::kurztext::text_saubern(data.vm.clone(), &text, &data.konfiguration)?;
                     Ok(text_sauber)
                 });
                 match result {
@@ -3785,7 +3793,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script(&format!("replaceAbt3(`{}`);", ui::render_abt_3(open_file, data.konfiguration.lefis_analyse_einblenden)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Veraenderungen(`{}`);", ui::render_abt_3_veraenderungen(open_file)));
             let _ = webview.evaluate_script(&format!("replaceAbt3Loeschungen(`{}`);", ui::render_abt_3_loeschungen(open_file)));
-            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(&open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
+            let _ = webview.evaluate_script(&format!("replaceAnalyseGrundbuch(`{}`);", ui::render_analyse_grundbuch(data.vm.clone(), &open_file, &data.loaded_nb, &data.konfiguration, false, false))); 
             let _ = webview.evaluate_script(&format!("replaceFileList(`{}`);", ui::render_file_list(&data)));
             let _ = webview.evaluate_script(&format!("replacePageList(`{}`);", ui::render_page_list(&data)));
             let _ = webview.evaluate_script(&format!("replacePageImage(`{}`);", ui::render_pdf_image(&data)));
@@ -3882,7 +3890,7 @@ fn get_alle_rechte_html(data: &RpcData) -> String {
     let mut entries = Vec::new();
     
     for (f_name, f) in data.loaded_files.iter() {
-        entries.push(crate::ui::render_analyse_grundbuch(f, &data.loaded_nb, &data.konfiguration, true, false));
+        entries.push(crate::ui::render_analyse_grundbuch(data.vm.clone(), f, &data.loaded_nb, &data.konfiguration, true, false));
     }
     
     entries.join("\r\n")
@@ -3895,6 +3903,7 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
     for (f_name, f) in data.loaded_files.iter() {
         
         let gb_analysiert = crate::analyse::analysiere_grundbuch(
+            data.vm.clone(), 
             &f.analysiert, 
             &data.loaded_nb, 
             &data.konfiguration
@@ -4011,7 +4020,7 @@ fn get_alle_fehler_html(data: &RpcData) -> String {
     let mut entries = Vec::new();
     
     for (f_name, f) in data.loaded_files.iter() {
-        entries.push(crate::ui::render_analyse_grundbuch(f, &data.loaded_nb, &data.konfiguration, true, true));
+        entries.push(crate::ui::render_analyse_grundbuch(data.vm.clone(), f, &data.loaded_nb, &data.konfiguration, true, true));
     }
     
     entries.join("\r\n")
@@ -4022,7 +4031,7 @@ fn get_rangvermerke_tsv(data: &RpcData) -> String {
     let mut entries = Vec::new();
     
     for (f_name, f) in data.loaded_files.iter() {
-        let analysiert = crate::analyse::analysiere_grundbuch(&f.analysiert, &[], &data.konfiguration);
+        let analysiert = crate::analyse::analysiere_grundbuch(data.vm.clone(), &f.analysiert, &[], &data.konfiguration);
         
         for a2 in analysiert.abt2 {
             if let Some(s) = a2.rangvermerk {
@@ -4037,7 +4046,7 @@ fn get_rangvermerke_tsv(data: &RpcData) -> String {
 fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
 
     let mut nb = data.loaded_files.values()
-    .flat_map(|file| file.get_nebenbeteiligte(&data.konfiguration))
+    .flat_map(|file| file.get_nebenbeteiligte(data.vm.clone(), &data.konfiguration))
     .collect::<Vec<_>>();
     
     for n in nb.iter_mut() {
@@ -4088,7 +4097,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
     tsv
 }
 
-fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
+fn digital_dateien(vm: PyVm, pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
     
     std::thread::spawn(move || {
         
@@ -4222,7 +4231,11 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
                         texte: textbloecke,
                     });
 
-                    pdf.analysiert = match analyse_grundbuch(&pdf, &konfiguration) { 
+                    pdf.analysiert = match analyse_grundbuch(
+                        vm.clone(), 
+                        &pdf, 
+                        &konfiguration
+                    ) { 
                         Some(o) => o, 
                         None => continue, 
                     };
@@ -4255,18 +4268,19 @@ fn digital_dateien(pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
     });
 }
 
-fn analyse_grundbuch(pdf: &PdfFile, konfguration: &Konfiguration) -> Option<Grundbuch> {
+fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> Option<Grundbuch> {
 
     let bestandsverzeichnis = digital::analysiere_bv(
+        vm.clone(), 
         &pdf.analysiert.titelblatt, 
         &pdf.pdftotext_layout, 
         &pdf.geladen, 
         &pdf.anpassungen_seite, 
         konfguration
     ).ok()?;
-    let mut abt1 = digital::analysiere_abt1(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
-    let abt2 = digital::analysiere_abt2(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
-    let abt3 = digital::analysiere_abt3(&pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
+    let mut abt1 = digital::analysiere_abt1(vm.clone(), &pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
+    let abt2 = digital::analysiere_abt2(vm.clone(), &pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
+    let abt3 = digital::analysiere_abt3(vm.clone(), &pdf.geladen, &pdf.anpassungen_seite, &bestandsverzeichnis, konfguration).ok()?;
     
     abt1.migriere_v2();
     

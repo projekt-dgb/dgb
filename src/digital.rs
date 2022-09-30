@@ -8,6 +8,7 @@ use image::ImageError;
 use serde_derive::{Serialize, Deserialize};
 use rayon::prelude::*;
 use crate::{
+    python::PyVm,
     Rect, AnpassungSeite, Konfiguration,
     get_tesseract_command, get_pdftoppm_command, get_pdftotext_command
 };
@@ -2856,6 +2857,7 @@ impl BvAbschreibung {
 }
 
 pub fn analysiere_bv(
+    vm: PyVm,
     titelblatt: &Titelblatt,
     pdftotext_layout: &PdfToTextLayout,
     seiten: &BTreeMap<String, SeiteParsed>, 
@@ -2960,7 +2962,11 @@ pub fn analysiere_bv(
                     let bezeichnung = if bezeichnung.is_empty() { 
                         None 
                     } else {
-                        clean_text_python(bezeichnung.trim(), konfiguration).ok().map(|o| o.into())
+                        crate::python::text_saubern(
+                            vm.clone(), 
+                            bezeichnung.trim(), 
+                            konfiguration
+                        ).ok().map(|o| o.into())
                     };
                     
                     let ha = s.texte
@@ -4009,6 +4015,7 @@ impl Abt1Eintrag {
 }
 
 pub fn analysiere_abt1(
+    vm: PyVm,
     seiten: &BTreeMap<String, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
@@ -4048,7 +4055,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
-                    eigentuemer: clean_text_python(eigentuemer.trim(), konfiguration).ok()?.into(),
+                    eigentuemer: crate::python::text_saubern(vm.clone(), eigentuemer.trim(), konfiguration).ok()?.into(),
                     version: 2,
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
@@ -4090,7 +4097,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1Eintrag::V2(Abt1EintragV2 {
                     lfd_nr,
-                    eigentuemer: clean_text_python(eigentuemer.trim(), konfiguration).ok()?.into(),
+                    eigentuemer: crate::python::text_saubern(vm.clone(), eigentuemer.trim(), konfiguration).ok()?.into(),
                     version: 2,
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
@@ -4130,7 +4137,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1GrundEintragung {
                     bv_nr: bv_nr.into(),
-                    text: clean_text_python(grundlage_der_eintragung.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), grundlage_der_eintragung.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4161,7 +4168,7 @@ pub fn analysiere_abt1(
                 
                 Some(Abt1GrundEintragung {
                     bv_nr: bv_nr.into(),
-                    text: clean_text_python(grundlage_der_eintragung.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), grundlage_der_eintragung.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4613,6 +4620,7 @@ impl Abt2Loeschung {
 }
 
 pub fn analysiere_abt2(
+    vm: PyVm,
     seiten: &BTreeMap<String, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
@@ -4659,7 +4667,7 @@ pub fn analysiere_abt2(
                 Some(Abt2Eintrag {
                     lfd_nr,
                     bv_nr: bv_nr.into(),
-                    text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4701,7 +4709,7 @@ pub fn analysiere_abt2(
                 Some(Abt2Eintrag {
                     lfd_nr,
                     bv_nr: bv_nr.to_string().into(),
-                    text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), text.text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4741,7 +4749,7 @@ pub fn analysiere_abt2(
                 
                 Some(Abt2Veraenderung {
                     lfd_nr: lfd_nr.into(),
-                    text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4770,7 +4778,7 @@ pub fn analysiere_abt2(
                 
                 Some(Abt2Veraenderung {
                     lfd_nr: lfd_nr.into(),
-                    text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), text.text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -4910,6 +4918,7 @@ impl Abt3Loeschung {
 }
 
 pub fn analysiere_abt3(
+    vm: PyVm,
     seiten: &BTreeMap<String, SeiteParsed>, 
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
@@ -4968,7 +4977,7 @@ pub fn analysiere_abt3(
                     lfd_nr: lfd_nr.into(),
                     bv_nr: bv_nr.to_string().into(),
                     betrag: betrag.trim().to_string().into(),
-                    text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -5026,7 +5035,7 @@ pub fn analysiere_abt3(
                     lfd_nr: lfd_nr.into(),
                     bv_nr: bv_nr.to_string().into(),
                     betrag: betrag.trim().to_string().into(),
-                    text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
+                    text: crate::python::text_saubern(vm.clone(), text.text.trim(), konfiguration).ok()?.into(),
                     automatisch_geroetet: None,
                     manuell_geroetet: None,
                     position_in_pdf: None,
@@ -5075,7 +5084,7 @@ pub fn analysiere_abt3(
                     Some(Abt3Veraenderung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
+                        text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: None,
@@ -5108,7 +5117,7 @@ pub fn analysiere_abt3(
                     Some(Abt3Veraenderung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: clean_text_python(&text.text.trim(), konfiguration).ok()?.into(),
+                        text: crate::python::text_saubern(vm.clone(), &text.text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: None,
@@ -5165,7 +5174,7 @@ pub fn analysiere_abt3(
                     Some(Abt3Loeschung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: clean_text_python(text.trim(), konfiguration).ok()?.into(),
+                        text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: None,
@@ -5204,7 +5213,7 @@ pub fn analysiere_abt3(
                     Some(Abt3Loeschung {
                         lfd_nr: lfd_nr.into(),
                         betrag: betrag.into(),
-                        text: clean_text_python(text.text.trim(), konfiguration).ok()?.into(),
+                        text: crate::python::text_saubern(vm.clone(), text.text.trim(), konfiguration).ok()?.into(),
                         automatisch_geroetet: None,
                         manuell_geroetet: None,
                         position_in_pdf: None,

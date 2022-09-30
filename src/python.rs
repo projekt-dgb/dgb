@@ -18,7 +18,7 @@ pub enum DirOrFile {
 
 pub type FileMap = BTreeMap<DirOrFile, Vec<u8>>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PyVm {
     // Kompiliertes python.wasm
     python_compiled_module: Vec<u8>,

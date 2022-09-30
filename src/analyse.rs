@@ -1,6 +1,6 @@
-use crate::{Grundbuch, Titelblatt, Konfiguration};
+use crate::{NebenbeteiligterExtra, Grundbuch, Titelblatt, Konfiguration};
 use crate::digital::{Nebenbeteiligter, BvEintrag};
-use crate::python::{Spalte1Eintrag, SchuldenArt, RechteArt};
+use crate::python::{PyVm, Spalte1Eintrag, Betrag, SchuldenArt, RechteArt};
 use serde_derive::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 use crate::get_or_insert_regex;
@@ -49,6 +49,7 @@ pub struct Abt3Analysiert {
 }
 
 pub fn analysiere_grundbuch(
+    vm: PyVm,
     grundbuch: &Grundbuch, 
     nb: &[Nebenbeteiligter], 
     konfiguration: &Konfiguration
@@ -99,23 +100,27 @@ pub fn analysiere_grundbuch(
         let lfd_nr = eintrag.lfd_nr;
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
         
-        let kt = kurztext::text_kuerzen_abt2(&recht_id, &eintrag.text.text(), &mut fehler, konfiguration);
+        let kt = crate::kurztext::text_kuerzen_abt2(
+            vm.clone(),
+            &recht_id, 
+            &eintrag.text.text(), 
+            &mut fehler, 
+            konfiguration
+        );
         let mut lastend_an = Vec::new();
         let mut debug_log = String::new();
-        let belastete_flurstuecke = match Python::with_gil(|py| {
-            get_belastete_flurstuecke(
-                py,
-                &eintrag.bv_nr.text(), 
-                &kt.text_sauber, 
-                &grundbuch.titelblatt,
-                &grundbuch.bestandsverzeichnis.eintraege,
-                konfiguration,
-                &mut debug_log,
-                &mut lastend_an,
-                &mut warnungen,
-                &mut fehler
-            ) 
-        }) {
+        let belastete_flurstuecke = match get_belastete_flurstuecke(
+            vm.clone(),
+            &eintrag.bv_nr.text(), 
+            &kt.text_sauber, 
+            &grundbuch.titelblatt,
+            &grundbuch.bestandsverzeichnis.eintraege,
+            konfiguration,
+            &mut debug_log,
+            &mut lastend_an,
+            &mut warnungen,
+            &mut fehler
+        ) {
             Ok(o) => o,
             Err(e) => {
                 fehler.push(e);
@@ -144,7 +149,6 @@ pub fn analysiere_grundbuch(
                         String::new()
                     }
                 },
-                
                 _ => {
                     fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
                     String::new()
@@ -237,23 +241,28 @@ pub fn analysiere_grundbuch(
         let lfd_nr = eintrag.lfd_nr;
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
         
-        let kt = kurztext::text_kuerzen_abt3(&recht_id, &eintrag.betrag.text(), &eintrag.text.text(), &mut fehler, konfiguration);
+        let kt = crate::kurztext::text_kuerzen_abt3(
+            vm.clone(),
+            &recht_id, 
+            &eintrag.betrag.text(), 
+            &eintrag.text.text(), 
+            &mut fehler, 
+            konfiguration
+        );
         let mut lastend_an = Vec::new();
         let mut debug_log = String::new();
-        let belastete_flurstuecke = match Python::with_gil(|py| {
-            get_belastete_flurstuecke(
-                py,
-                &eintrag.bv_nr.text(), 
-                &kt.text_sauber, 
-                &grundbuch.titelblatt,
-                &grundbuch.bestandsverzeichnis.eintraege,
-                konfiguration,
-                &mut debug_log,
-                &mut lastend_an,
-                &mut warnungen,
-                &mut fehler
-            ) 
-        }) {
+        let belastete_flurstuecke = match get_belastete_flurstuecke(
+            vm.clone(),
+            &eintrag.bv_nr.text(), 
+            &kt.text_sauber, 
+            &grundbuch.titelblatt,
+            &grundbuch.bestandsverzeichnis.eintraege,
+            konfiguration,
+            &mut debug_log,
+            &mut lastend_an,
+            &mut warnungen,
+            &mut fehler
+        ) {
             Ok(o) => o,
             Err(e) => {
                 fehler.push(e);
@@ -326,15 +335,15 @@ pub fn get_belastete_flurstuecke(
 ) -> Result<Vec<BvEintrag>, String> {
 
     let spalte1_eintraege = crate::python::get_belastete_flurstuecke(
-        py,
+        vm,
         bv_nr,
         text_sauber,
         konfiguration,
-        fehler,
     )?;
     
-    eintraege.append(&mut spalte1_eintraege.clone());
-    
+    eintraege.append(&mut spalte1_eintraege.eintraege.clone());
+    fehler.append(&mut spalte1_eintraege.warnungen.clone());
+
     let grundbuch_von = titelblatt.grundbuch_von.clone();
     let blatt = titelblatt.blatt.clone();
 
@@ -350,7 +359,7 @@ pub fn get_belastete_flurstuecke(
     log.push(format!("<strong>Ausgewertet:</strong>"));
     debug_log.push_str(&format!("Ausgewertet:\r\n"));
     
-    let s1_ohne_teilbelastung = spalte1_eintraege.iter()
+    let s1_ohne_teilbelastung = spalte1_eintraege.eintraege.iter()
         .filter_map(|s| if s.nur_lastend_an.is_empty() { 
             Some(format!("{}", s.lfd_nr)) 
         } else { None })
@@ -361,7 +370,7 @@ pub fn get_belastete_flurstuecke(
         debug_log.push_str(&format!("  {}\r\n", s1_ohne_teilbelastung.join(", ")));
     }
     
-    let s1_mit_teilbelastung = spalte1_eintraege.iter()
+    let s1_mit_teilbelastung = spalte1_eintraege.eintraege.iter()
     .filter_map(|s| if s.nur_lastend_an.is_empty() { 
         None 
     } else {
@@ -384,7 +393,7 @@ pub fn get_belastete_flurstuecke(
     let mut global_filter = Vec::new();
 
     let mut nur_lastend = BTreeMap::new();
-    for s1 in spalte1_eintraege.iter() {
+    for s1 in spalte1_eintraege.eintraege.iter() {
         for nl in s1.nur_lastend_an.iter() {
             nur_lastend.entry(s1.lfd_nr)
             .or_insert_with(|| Vec::new())
@@ -393,7 +402,7 @@ pub fn get_belastete_flurstuecke(
     }
     
     // Spalte 1 Einträge => Bestandsverzeichnis Einträge
-    for s1 in spalte1_eintraege.iter() {
+    for s1 in spalte1_eintraege.eintraege.iter() {
         
         // 0 = keine Einschränkung nach BV-Nr., später filtern
         if s1.lfd_nr == 0 {

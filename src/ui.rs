@@ -1,6 +1,7 @@
 use crate::{
     RpcData, PdfFile, GrundbuchSucheResponse,
     Konfiguration, PopoverState, GbxAenderungen,
+    python::PyVm,
     digital::{
         Nebenbeteiligter,
         BvZuschreibung,
@@ -1783,7 +1784,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     </div>
                 ", 
                     max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-                    analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false)
+                    analyse = render_analyse_grundbuch(rpc_data.vm.clone(), open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false)
                 )
             } else {
                 format!("")
@@ -1792,7 +1793,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
     }
 }
 
-pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration, fuer_druck: bool, nur_fehlerhafte_rechte: bool) -> String {
+pub fn render_analyse_grundbuch(vm: PyVm, open_file: &PdfFile, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration, fuer_druck: bool, nur_fehlerhafte_rechte: bool) -> String {
     
     const PFEIL_PNG: &[u8] = include_bytes!("../src/img/icons8-arrow-48.png");
     const WARNUNG_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");
@@ -1802,7 +1803,12 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
     let warnung_str = format!("data:image/png;base64,{}", base64::encode(&WARNUNG_PNG));
     let fehler_str = format!("data:image/png;base64,{}", base64::encode(&FEHLER_PNG));
 
-    let gb_analysiert = crate::analyse::analysiere_grundbuch(&open_file.analysiert, nb, konfiguration);
+    let gb_analysiert = crate::analyse::analysiere_grundbuch(
+        vm.clone(), 
+        &open_file.analysiert, 
+        nb, 
+        konfiguration
+    );
     
     normalize_for_js(format!("
         <div style='margin:10px;min-width:600px;'>

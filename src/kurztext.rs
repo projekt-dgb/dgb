@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use crate::{Konfiguration, python::{PyVm, Betrag, Waehrung, RechteArt, SchuldenArt}};
+use crate::{Konfiguration, python::{PyVm, Betrag, RechteArt, SchuldenArt}};
 
 #[derive(Debug, Clone)]
 pub struct KurzTextAbt2 {
