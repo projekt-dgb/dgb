@@ -317,30 +317,9 @@ impl Default for RpcData {
             commit_msg: String::new(),
             loaded_nb: Vec::new(),
             loaded_nb_paths: Vec::new(),
-            konfiguration: Konfiguration::neu_laden().unwrap_or(Konfiguration {
-                zeilenumbrueche_in_ocr_text: false,
-                lefis_analyse_einblenden: false,
-                spalten_ausblenden: false,
-                vorschau_ohne_geroetet: false,
-                
-                server_url: default_server_url(),
-                server_email: default_server_email(),
-                server_privater_schluessel_base64: None,
-                passwort_speichern: true,
-                
-                regex: BTreeMap::new(),
-                flurstuecke_auslesen_script: Vec::new(),
-                abkuerzungen_script: Vec::new(),
-                text_saubern_script: Vec::new(),
-                text_kuerzen_abt2_script: Vec::new(),
-                text_kuerzen_abt3_script: Vec::new(),
-                rechtsinhaber_auslesen_abt2_script: Vec::new(),
-                rechtsinhaber_auslesen_abt3_script: Vec::new(),
-                rangvermerk_auslesen_abt2_script: Vec::new(),
-                betrag_auslesen_script: Vec::new(),
-                klassifiziere_rechteart: Vec::new(),
-                klassifiziere_schuldenart: Vec::new(),
-            }),
+            konfiguration: Konfiguration::neu_laden().unwrap_or(
+                Konfiguration::parse_from(Konfiguration::DEFAULT).unwrap()
+            ),
             vm: PyVm::new().unwrap(),
         }
     }
@@ -600,7 +579,9 @@ pub struct Konfiguration {
     pub rechtsinhaber_auslesen_abt2_script: Vec<String>,
     #[serde(default)]
     pub rangvermerk_auslesen_abt2_script: Vec<String>,
+    #[serde(default)]
     pub klassifiziere_rechteart: Vec<String>,
+    #[serde(default)]
     pub klassifiziere_schuldenart: Vec<String>,
 }
 
@@ -665,9 +646,16 @@ pub mod pgp {
 
 impl Konfiguration {
 
-    const DEFAULT: &'static str = include_str!("../Konfiguration.json");
+    const DEFAULT: &'static str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/Konfiguration.json"));
     const FILE_NAME: &'static str = "Konfiguration.json";
-    
+
+    pub fn parse_from(s: &str) -> Result<Konfiguration, String> {
+        match serde_json::from_str::<Konfiguration>(s) {
+            Ok(o) => Ok(o),
+            Err(e) => Err(format!("Fehler in Konfiguration {}: {}", Self::konfiguration_pfad(), e)),
+        }
+    }
+
     pub fn create_empty_diff_save_point(&self, file_name: &FileName) {
         let _ = std::fs::create_dir_all(&format!("{}/backup/", Konfiguration::backup_dir()));
         let target_path = format!("{}/backup/{}.gbx", Konfiguration::backup_dir(), file_name);
@@ -805,10 +793,7 @@ impl Konfiguration {
         }
 
         let konfig = match std::fs::read_to_string(&Self::konfiguration_pfad()) {
-            Ok(o) => match serde_json::from_str(&o) {
-                Ok(o) => o,
-                Err(e) => return Err(format!("Fehler in Konfiguration {}: {}", Self::konfiguration_pfad(), e)),
-            },
+            Ok(o) => Self::parse_from(&o)?,
             Err(e) => return Err(format!("Fehler beim Lesen von Konfiguration in {}: {}", Self::konfiguration_pfad(), e)),
         };
 
@@ -912,7 +897,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                        
             let file_dialog_result = tinyfiledialogs::open_file_dialog_multi(
                 "Grundbuchblatt-PDF Datei(en) auswählen", 
-                "~/", 
+                "", 
                 Some((&["*.pdf", "*.gbx"], "Grundbuchblatt")),
             ); 
             
@@ -1124,7 +1109,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let file_dialog_result = tinyfiledialogs::select_folder_dialog(
                 ".gbx-Datei speichern unter...", 
-                "~/",
+                "",
             );
             
             let gbx_folder = match file_dialog_result {
@@ -1306,7 +1291,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let file_dialog_result = tinyfiledialogs::select_folder_dialog(
                 ".gbx-Datei speichern unter...", 
-                "~/",
+                "",
             );
             
             let target_folder_path = match file_dialog_result {
@@ -3351,7 +3336,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let file_dialog_result = tinyfiledialogs::open_file_dialog(
                 "Nebenbeteiligte Ordnungsnummern auswählen", 
-                "~/", 
+                "",
                 Some((&["*.tsv"], "Nebenbeteiligte")),
             );
             
@@ -3415,7 +3400,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Nebenbeteiligte .TSV speichern unter", 
-                "~/", 
+                "", 
             );
             
             let f = match file_dialog_result {
@@ -3455,7 +3440,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 true => {
                     let file_dialog_result = tinyfiledialogs::save_file_dialog(
                         "PDF Datei speichern unter", 
-                        "~/",
+                        "",
                     );
                     
                     let f = match file_dialog_result {
@@ -3476,7 +3461,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 false => {
                     let file_dialog_result = tinyfiledialogs::select_folder_dialog(
                         "PDF Dateien speichern unter", 
-                        "~/", 
+                        "", 
                     );
                     
                     let f = match file_dialog_result {
@@ -3570,7 +3555,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
-                "~/", 
+                "", 
             );
             
             let f = match file_dialog_result {
@@ -3599,7 +3584,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
-                "~/", 
+                "", 
             );
             
             let f = match file_dialog_result {
@@ -3627,7 +3612,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Rechte .HTML speichern unter", 
-                "~/", 
+                "", 
             );
             
             let f = match file_dialog_result {
@@ -3655,7 +3640,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 "Teilbelastungen .HTML speichern unter", 
-                "~/", 
+                "", 
             );
             
             let f = match file_dialog_result {
@@ -3723,7 +3708,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             
             let file_dialog_result = tinyfiledialogs::save_file_dialog(
                 ".lefis-Datei speichern unter", 
-                "~/", 
+                "", 
             );
             
             let f = match file_dialog_result {
@@ -4674,6 +4659,7 @@ fn try_download_file_database(konfiguration: Konfiguration, titelblatt: Titelbla
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
 fn selftest_startup() -> Result<(), String> {
 
     use std::process::Command;
@@ -4865,6 +4851,7 @@ fn main() -> wry::Result<()> {
         }
     }
     
+    #[cfg(target_os = "windows")]
     if let Err(e) = selftest_startup() {
         tinyfiledialogs::message_box_ok(
             "Programme nicht installiert",
