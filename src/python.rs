@@ -28,18 +28,26 @@ pub struct PyVm {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "result", content = "data")]
 enum PyResult {
+    #[serde(rename = "ok")]
     Ok(PyOk),
+    #[serde(rename = "err")]
     Err(PyError)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum PyOk {
+    #[serde(rename = "str")]
     Str(String),
+    #[serde(rename = "list")]
     List(Vec<String>),
+    #[serde(rename = "spalte1")]
     Spalte1(Spalte1Eintraege),
+    #[serde(rename = "rechteart")]
     RechteArt(RechteArt),
+    #[serde(rename = "schuldenart")]
     SchuldenArt(SchuldenArt),
+    #[serde(rename = "betrag")]
     Betrag(Betrag),
 }
 
@@ -201,16 +209,22 @@ impl PyVm {
 
     pub fn new() -> Result<Self, String> {
 
+        println!("starting up PyVm...");
+
         let mut python_unpacked = unpack_tar_gz(PYTHON.to_vec(), "python/atom/").unwrap();
         let python_wasm = python_unpacked.remove(
             &DirOrFile::File(Path::new("lib/python.wasm").to_path_buf())
         ).expect("cannot find lib/python.wasm?");
         
+        println!("PyVM: unpacked python.wasm");
+
         let mut store = Store::default();
         let mut module = Module::from_binary(&store, &python_wasm).unwrap();
         module.set_name("python");
         let bytes = module.serialize().unwrap();
         
+        println!("PyVM: compiled python.wasm to {} bytes", bytes.len());
+
         Ok(Self {
             python_compiled_module: bytes.to_vec(),
             file_system: python_unpacked,
@@ -219,6 +233,8 @@ impl PyVm {
 
     pub fn execute_script(&self, script: &[String], args: &[&str]) -> Result<PyOk, PyError> {
         use std::io::Read;
+
+        println!("PyVM: execute script:\r\n{script:#?}");
 
         let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
@@ -233,26 +249,43 @@ impl PyVm {
                 &store, 
                 self.python_compiled_module.clone()
             ) 
-        }.unwrap();
+        }.map_err(|e| PyError {
+            text: format!("failed to deserialize module: {e}")
+        })?;
         module.set_name("python");
         
+        println!("PyVM: module deserialized");
+
         let mut stdout_pipe = 
             WasiBidirectionalSharedPipePair::new()
             .with_blocking(false);
     
+        println!("PyVM: module deserialized");
+
         let wasi_env = prepare_webc_env(
             &mut store, 
             stdout_pipe.clone(),
             &python_unpacked, 
             "python",
             args,
-        ).unwrap();
+        ).map_err(|e| PyError {
+            text: format!("{e}")
+        })?;
     
-        exec_module(&mut store, &module, wasi_env).unwrap();
+        println!("PyVM: webc env prepared");
+
+        exec_module(&mut store, &module, wasi_env).map_err(|e| PyError {
+            text: format!("{e}")
+        })?;
 
         let mut buf = Vec::new();
-        stdout_pipe.read_to_end(&mut buf).unwrap();
-        let result = serde_json::from_slice(&buf).unwrap();
+        stdout_pipe.read_to_end(&mut buf).map_err(|e| PyError {
+            text: format!("failed to read pipe: {e}")
+        })?;
+        let result = serde_json::from_slice(&buf)
+        .map_err(|e| PyError {
+            text: format!("serde_json from slice: {e}")
+        })?;
         
         match result {
             PyResult::Ok(o) => Ok(o),

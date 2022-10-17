@@ -42,16 +42,16 @@ tar = "0.4.38"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"
-rev = "7d44c135f8eb7c31815438f8dfc86aa92c787b7b"
+rev = "05d74ea3fbabc0adcb0098d4896a623cc5a34ed5"
 
 [dependencies.wasmer_wasi]
 git = "https://github.com/wasmerio/wasmer"
-rev = "7d44c135f8eb7c31815438f8dfc86aa92c787b7b"
+rev = "05d74ea3fbabc0adcb0098d4896a623cc5a34ed5"
 package = "wasmer-wasi"
 
 [dependencies.wasmer_vfs]
 git = "https://github.com/wasmerio/wasmer"
-rev = "7d44c135f8eb7c31815438f8dfc86aa92c787b7b"
+rev = "05d74ea3fbabc0adcb0098d4896a623cc5a34ed5"
 package = "wasmer-vfs"
 
 [profile.release]

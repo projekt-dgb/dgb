@@ -1,5 +1,12 @@
 import json
 import sys
+from json import JSONEncoder
+
+def _default(self, obj):
+    return getattr(obj.__class__, "to_json", _default.default)(obj)
+
+_default.default = JSONEncoder().default
+JSONEncoder.default = _default
 
 class SchuldenArt(str):
     Grundschuld = 'Grundschuld'
@@ -123,55 +130,55 @@ class Waehrung(str):
     Reichsmark = 'Reichsmark'
     GrammFeingold = 'GrammFeingold'
 
-class Betrag:
-    def __new__(wert, nachkomma, waehrung):
-        self.wert = wert
-        self.nachkomma = nachkomma
-        self.waehrung = waehrung
+class Betrag(dict):
+    def __init__(self, wert, nachkomma, waehrung):
+        self["wert"] = wert
+        self["nachkomma"] = nachkomma
+        self["waehrung"] = waehrung
 
-class Regex:
+class Regex(dict):
     
-    def __new__(regex):
-        self.re = regex
+    def __init__(self, regex):
+        self["re"] = regex
 
-    def matches(text): 
+    def matches(self, text): 
         return False # Boolean
 
-    def find_in(text, index): 
+    def find_in(self, text, index): 
         return None # Optional[String]
 
-    def find_all(text): 
+    def find_all(self, text): 
         return [""] # List[String]
 
-    def replace_all(text, text_neu): 
+    def replace_all(self, text, text_neu): 
         return "" # String
 
-class FlurFlurstueck:
+class FlurFlurstueck(dict):
 
-    def __init__(flur, flurstueck, gemarkung = None, teilflaeche_qm = None):
-        self.flur = flur
-        self.flurstueck = flurstueck
-        self.gemarkung = gemarkung
-        self.teilflaeche_qm = teilflaeche_qm
+    def __init__(self, flur, flurstueck, gemarkung = None, teilflaeche_qm = None):
+        self["flur"] = flur
+        self["flurstueck"] = flurstueck
+        self["gemarkung"] = gemarkung
+        self["teilflaeche_qm"] = teilflaeche_qm
 
-class Spalte1Eintrag:
+class Spalte1Eintrag(dict):
 
-    def __new__(lfd_nr, voll_belastet = True, nur_lastend_an = []):
-        self.lfd_nr = lfd_nr
-        self.voll_belastet = voll_belastet
-        self.nur_lastend_an = nur_lastend_an # List[FlurFlurstueck]
+    def __init__(self, lfd_nr, voll_belastet = True, nur_lastend_an = []):
+        self["lfd_nr"] = lfd_nr
+        self["voll_belastet"] = voll_belastet
+        self["nur_lastend_an"] = nur_lastend_an # List[FlurFlurstueck]
+
+    def get_lfd_nr(self):
+        return self["lfd_nr"]
     
-    def get_lfd_nr():
-        return self.lfd_nr
-    
-    def append_nur_lastend_an(nur_lastend_an: []):
-        self.voll_belastet = False
-        self.nur_lastend_an.append(nur_lastend_an)
+    def append_nur_lastend_an(self, nur_lastend_an = []):
+        self["voll_belastet"] = False
+        self["nur_lastend_an"].extend(nur_lastend_an)
 
 def text_saubern(recht):
-    pass
+    return recht
 
-class PyResult:
+class PyResult(dict):
 
     def err(self, string):
         self.type = "err"
@@ -179,23 +186,48 @@ class PyResult:
     
     def ok_string(self, string):
         self.type = "ok"
+        self.ok_type = "str"
         self.string = string
 
+    def ok_list(self, list):
+        self.type = "ok"
+        self.ok_type = "list"
+        self.list = list
+
+    def ok_spalte1(self, spalte1):
+        self.type = "ok"
+        self.ok_type = "spalte1"
+        self.spalte1 = spalte1
+        
     def get_string(self):
-        return json.dumps(self)
+        if self.type == "ok":
+            if self.ok_type == "str":
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"str\", \"data\": \"" + self.string + "\" } }"
+            elif self.ok_type == "list":
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"list\", \"data\": " + json.dumps(self.list) + " } }"
+            elif self.ok_type == "spalte1":
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"spalte1\", \"data\": " + json.dumps(self.spalte1) + " } }"
+        else:
+            return "{\"result\": \"err\", \"data\": { \"text\": \"" + self.string + "\" } }"
 
 def main():
     result = PyResult()
     result.err("invalid function")
     try:
+        # eintrag = Spalte1Eintrag(5)
+        # eintrag.append_nur_lastend_an([FlurFlurstueck("6", "275/4")])
+        result.ok_spalte1(eintrag)
         function_type = sys.argv[2]
         args_json = json.loads(sys.argv[3])
         if function_type == "text_saubern":
             string = text_saubern(args_json["recht"])
             result.ok_string(string)
-        else:
-            pass
+        # else:
+        #     pass
     except BaseException as err:
-        result.err(f"Unexpected {err=}, {type(err)=}")
+        result.err(f"Unexpected {type(err)}: {err}")
     finally:
         print(result.get_string())
+
+if __name__ == "__main__":
+    main()
