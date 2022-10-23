@@ -210,8 +210,6 @@ impl PyVm {
 
     pub fn new() -> Result<Self, String> {
 
-        println!("starting up PyVm...");
-
         let mut python_unpacked = unpack_tar_gz(PYTHON.to_vec(), "python/atom/").unwrap();
         let python_wasm = python_unpacked.remove(
             &DirOrFile::File(Path::new("lib/python.wasm").to_path_buf())
@@ -243,8 +241,7 @@ impl PyVm {
         }
 
         let generated = generate_script(konfiguration, &args);
-        println!("{generated}");
-
+        
         let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
             DirOrFile::File(Path::new("lib/file.py").to_path_buf()), 
@@ -455,6 +452,7 @@ fn prepare_webc_env(
 
     let mut wasi_env = wasi_env
     .env("PYTHONHOME", "/")
+    .env("PYTHONIOENCODING", "UTF-8")
     .arg("/lib/file.py")
     .stdout(Box::new(stdout));
 
@@ -820,58 +818,6 @@ pub fn get_kurztext_abt3(
     }
 }
 
-/*
-fn execute_script_string(
-    script_id: &str,
-    vm: PyVm,
-    recht_id: &str,
-    text_sauber: &str,
-    saetze_clean: &[String],
-    konfiguration: &Konfiguration,
-    script: &[String], 
-) -> Result<String, String> {
-    match execute_script_pyok(
-        script_id,
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
-        konfiguration,
-        script,
-    )? {
-        PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
-    }
-}
-
-fn execute_script_pyok(
-    script_id: &str,
-    vm: PyVm,
-    recht_id: &str,
-    text_sauber: &str,
-    saetze_clean: &[String],
-    konfiguration: &Konfiguration,
-    script: &[String], 
-) -> Result<PyOk, String> {
-
-    let script = script.join("\r\n");
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let script = script.lines().map(|s| s.to_string()).collect::<Vec<_>>();
-
-    let result = vm.execute_script(&script, &[
-        script_id,
-        &serde_json::json!({
-            "recht": recht_id,
-            "text": text_sauber,
-            "saetze": saetze_clean,
-            "re": konfiguration.regex,
-        }).to_string(),
-    ]).map_err(|e| format!("{:?}", e))?;
-
-    Ok(result)
-}
-*/
 #[test]
 fn test_pym_script_1() {
     let vm = PyVm::new().unwrap();
@@ -945,9 +891,15 @@ pub enum ExecuteScriptType {
 fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) -> String {
     static WRAPPER: &str = include_str!("./wrapper.py");
 
+    let ra_sa = match script {
+        ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => "ra = True",
+        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => "sa = True",
+        _ => ""
+    };
+
     let script_args = match script {
         ExecuteScriptType::TextSaubern { recht, .. } => {
-            let mut s = format!("recht = \"\n\".join([\n");
+            let mut s = format!("recht = \"\\n\".join([\n");
             for l in recht.lines() {
                 s.push_str(&format!("    {:?},\n", l));
             }
@@ -1062,8 +1014,13 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             }
             s.push_str("]\n\n");
 
+            let betrag = betrag.replace("\"", "\\\"");
             s.push_str(&format!("betrag = \"{betrag}\"\n\n"));
+
+            let schuldenart = schuldenart.replace("\"", "\\\"");
             s.push_str(&format!("schuldenart = \"{schuldenart}\"\n\n"));
+
+            let rechtsinhaber = rechtsinhaber.replace("\"", "\\\"");
             s.push_str(&format!("rechtsinhaber = \"{rechtsinhaber}\"\n\n"));
 
             s
@@ -1092,8 +1049,10 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
     .collect::<Vec<_>>()
     .join("\n");
 
+    println!("SCRIPT_ARGS:\n{script_args}");
+
     WRAPPER
-    // .replace("## SCRIPT_ARGS", &script_args)
+    .replace("## RA_SA", &ra_sa)
     .replace("## REGEX_LIST", &{
         let mut s = format!("re = {{}}\n");
         for (k, v) in konfiguration.regex.iter() {

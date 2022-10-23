@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import json
 from re import compile
 from json import JSONEncoder
@@ -192,23 +194,27 @@ class PyResult(dict):
     def err(self, string):
         self.type = "err"
         self.err = string
-    
-    def ok(self, any):
+        self.rechteart = False
+        self.schuldenart = False
+
+    def ok(self, any, ra, sa):
         self.type = "ok"
         self.ok = any
+        self.rechteart = ra
+        self.schuldenart = sa
 
     def get_string(self):
         if self.type == "ok":
-            if isinstance(self.ok, str):
+            if self.rechteart:
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"rechteart\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif self.schuldenart:
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"schuldenart\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif isinstance(self.ok, str):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"str\", \"data\": \"" + self.ok + "\" } }"
             elif isinstance(self.ok, list):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"list\", \"data\": " + json.dumps(self.ok) + " } }"
             elif isinstance(self.ok, Spalte1Eintrag):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"spalte1\", \"data\": " + json.dumps(self.ok) + " } }"
-            elif isinstance(self.ok, RechteArt):
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"rechteart\", \"data\": " + json.dumps(self.ok) + " } }"
-            elif isinstance(self.ok, SchuldenArt):
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"schuldenart\", \"data\": " + json.dumps(self.ok) + " } }"
             elif isinstance(self.ok, Betrag):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"betrag\", \"data\": " + json.dumps(self.ok) + " } }"
             else:
@@ -225,13 +231,17 @@ def main_func():
 def main():
     result = PyResult()
     result.err("invalid function")
+    ra = False 
+    sa = False
+    ## RA_SA
     try:
         return_val = main_func()
-        result.ok(return_val)
+        result.ok(return_val, ra, sa)
     except BaseException as err:
         result.err("Unexpected error" + err.message)
     finally:
-        print(result.get_string())
+        result_str = result.get_string()
+        print(u'' + result_str)
 
 if __name__ == "__main__":
     main()
