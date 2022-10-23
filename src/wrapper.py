@@ -1,9 +1,30 @@
 import json
-import sys
 from re import compile
 from json import JSONEncoder
 
-## SCRIPT_ARGS
+class Regex(dict):
+    
+    def __init__(self, regex):
+        self["re"] = compile(regex)
+
+    def matches(self, text): 
+        return self["re"].match(text)
+
+    def find_in(self, text, index): 
+        matches = self["re"].findall(text)
+        if index < len(matches):
+            return matches[index]
+        else:
+            return None
+
+    def find_all(self, text): 
+        return self["re"].findall(text)
+
+    def replace_all(self, text, text_neu):
+        if self["re"].match(text):
+            return self["re"].sub(text, text_neu)
+        else:
+            return text
 
 ## REGEX_LIST
 
@@ -140,23 +161,6 @@ class Betrag(dict):
         self["wert"] = wert
         self["nachkomma"] = nachkomma
         self["waehrung"] = waehrung
-
-class Regex(dict):
-    
-    def __init__(self, regex):
-        self["re"] = regex
-
-    def matches(self, text): 
-        return False # Boolean
-
-    def find_in(self, text, index): 
-        return None # Optional[String]
-
-    def find_all(self, text): 
-        return [""] # List[String]
-
-    def replace_all(self, text, text_neu): 
-        return "" # String
 
 class FlurFlurstueck(dict):
 

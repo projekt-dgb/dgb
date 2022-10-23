@@ -1105,7 +1105,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             let v = v
                 .replace("\n", "")
                 .replace("\r\n", "");
-            s.push_str(&format!("re[\"{k}\"] = compile(r'{v}')\n"));
+            s.push_str(&format!("re[\"{k}\"] = Regex(r'{v}')\n"));
         }
         s
     })
