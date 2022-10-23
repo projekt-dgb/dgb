@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 use crate::Konfiguration;
 use serde::{Serialize, Deserialize};
 use wasmer::{Store, Module, Instance};
@@ -8,7 +9,6 @@ use wasmer_wasi::{WasiFunctionEnv, WasiBidirectionalSharedPipePair, WasiState};
 use wasmer_vfs::{FileSystem, mem_fs::FileSystem as MemFileSystem};
 
 static PYTHON: &[u8] = include_bytes!("../bin/python.tar.gz");
-static WRAPPER: &str = include_str!("./python/wrapper.py");
 
 #[derive(Debug, Clone, PartialEq, Ord, Eq, PartialOrd)]
 pub enum DirOrFile {
@@ -23,6 +23,7 @@ pub struct PyVm {
     // Kompiliertes python.wasm
     python_compiled_module: Vec<u8>,
     file_system: FileMap,
+    script_result: Arc<Mutex<BTreeMap<String, PyResult>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,32 +217,38 @@ impl PyVm {
             &DirOrFile::File(Path::new("lib/python.wasm").to_path_buf())
         ).expect("cannot find lib/python.wasm?");
         
-        println!("PyVM: unpacked python.wasm");
-
         let mut store = Store::default();
         let mut module = Module::from_binary(&store, &python_wasm).unwrap();
         module.set_name("python");
         let bytes = module.serialize().unwrap();
         
-        println!("PyVM: compiled python.wasm to {} bytes", bytes.len());
-
         Ok(Self {
             python_compiled_module: bytes.to_vec(),
             file_system: python_unpacked,
+            script_result: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
 
-    pub fn execute_script(&self, script: &[String], args: &[&str]) -> Result<PyOk, PyError> {
+    pub fn execute_script(&self, konfiguration: &Konfiguration, args: ExecuteScriptType) -> Result<PyOk, PyError> {
         use std::io::Read;
 
-        println!("PyVM: execute script:\r\n{script:#?}");
+        let key = get_script_cache_key(&konfiguration.regex, &args);
+
+        println!("execute script {key}: {:#?}", args);
+
+        match self.script_result.try_lock().ok().and_then(|lock| lock.get(&key).cloned()) {
+            Some(PyResult::Ok(o)) => return Ok(o.clone()),
+            Some(PyResult::Err(e)) => return Err(e.clone()),
+            _ => { },
+        }
+
+        let generated = generate_script(konfiguration, &args);
+        println!("{generated}");
 
         let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
             DirOrFile::File(Path::new("lib/file.py").to_path_buf()), 
-            WRAPPER
-            .replace("MAIN_SCRIPT", &script.to_vec().join("\r\n"))
-            .as_bytes().to_vec()
+            generated.as_bytes().to_vec(),
         );
 
         let mut store = Store::default();
@@ -252,41 +259,42 @@ impl PyVm {
         }.map_err(|e| PyError {
             text: format!("failed to deserialize module: {e}")
         })?;
+        
         module.set_name("python");
         
-        println!("PyVM: module deserialized");
-
         let mut stdout_pipe = 
             WasiBidirectionalSharedPipePair::new()
             .with_blocking(false);
     
-        println!("PyVM: module deserialized");
-
         let wasi_env = prepare_webc_env(
             &mut store, 
             stdout_pipe.clone(),
             &python_unpacked, 
             "python",
-            args,
         ).map_err(|e| PyError {
             text: format!("{e}")
         })?;
     
-        println!("PyVM: webc env prepared");
-
-        exec_module(&mut store, &module, wasi_env).map_err(|e| PyError {
-            text: format!("{e}")
-        })?;
+        exec_module(&mut store, &module, wasi_env)
+        .map_err(|e| PyError { text: format!("{e}") })?;
 
         let mut buf = Vec::new();
         stdout_pipe.read_to_end(&mut buf).map_err(|e| PyError {
             text: format!("failed to read pipe: {e}")
         })?;
-        let result = serde_json::from_slice(&buf)
+
+        let result: PyResult = serde_json::from_slice(&buf)
         .map_err(|e| PyError {
             text: format!("serde_json from slice: {e}")
         })?;
         
+        self.script_result.try_lock().ok()
+        .and_then(|mut lock| {
+            lock.insert(key, result.clone())
+        });
+
+        println!("{result:?}");
+
         match result {
             PyResult::Ok(o) => Ok(o),
             PyResult::Err(e) => Err(e),
@@ -393,7 +401,6 @@ fn prepare_webc_env(
     stdout: WasiBidirectionalSharedPipePair,
     files: &FileMap,
     command: &str,
-    args: &[&str],
 ) -> Result<WasiFunctionEnv, String> {
     let fs = MemFileSystem::default();
     for key in files.keys() {
@@ -450,10 +457,6 @@ fn prepare_webc_env(
     .env("PYTHONHOME", "/")
     .arg("/lib/file.py")
     .stdout(Box::new(stdout));
-
-    for arg in args {
-        wasi_env.arg(arg);
-    }
 
     Ok(
         wasi_env
@@ -597,15 +600,18 @@ pub fn text_saubern(
     rechtstext: &str, 
     konfiguration: &Konfiguration
 ) -> Result<String, String> {
-    execute_script_string(
-        "text_saubern", 
-        vm, 
-        "", 
-        rechtstext, 
-        &[], 
-        konfiguration,
-        &konfiguration.text_saubern_script,
-    )
+
+    let result = vm.execute_script(
+        konfiguration, 
+        ExecuteScriptType::TextSaubern { 
+            recht: rechtstext.to_string() 
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+
+    match result {
+        PyOk::Str(s) => Ok(s),
+        e => Err(format!("{:?}", e)),
+    }
 }
 
 pub fn get_belastete_flurstuecke(
@@ -614,15 +620,16 @@ pub fn get_belastete_flurstuecke(
 	text_sauber: &str, 
 	konfiguration: &Konfiguration,
 ) -> Result<Spalte1Eintraege, String> {
-    match execute_script_pyok(
-        "get_belastbare_flurstuecke",
-        vm,
-        bv_nr,
-        text_sauber,
-        &[],
-        konfiguration,
-        &konfiguration.abkuerzungen_script,
-    )? {
+    
+    let result = vm.execute_script(
+        konfiguration, 
+        ExecuteScriptType::FlurstueckeAuslesen { 
+            spalte1: bv_nr.to_string(), 
+            text: text_sauber.to_string() 
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+
+    match result {
         PyOk::Spalte1(s) => Ok(s),
         e => Err(format!("{:?}", e)),
     }
@@ -632,15 +639,13 @@ pub fn get_abkuerzungen(
     vm: PyVm,
     konfiguration: &Konfiguration,
 ) -> Result<Vec<String>, String> {
-    match execute_script_pyok(
-        "get_abkuerzungen",
-        vm,
-        "",
-        "",
-        &[],
-        konfiguration,
-        &konfiguration.abkuerzungen_script,
-    )? {
+    
+    let result = vm.execute_script(
+        konfiguration, 
+        ExecuteScriptType::GetAbkuerzungen,
+    ).map_err(|e| format!("{:?}", e))?;
+    
+    match result {
         PyOk::List(s) => Ok(s),
         e => Err(format!("{:?}", e)),
     }
@@ -653,15 +658,14 @@ pub fn get_rechte_art_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<RechteArt, String> {
-    match execute_script_pyok(
-        "get_rechte_art_abt2",
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
-        konfiguration,
-        &konfiguration.betrag_auslesen_script,
-    )? {
+    let result = vm.execute_script(
+        konfiguration, 
+        ExecuteScriptType::KlassifiziereRechteArtAbt2 { 
+            saetze: saetze_clean.to_vec()  
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+    
+    match result {
         PyOk::RechteArt(s) => Ok(s),
         e => Err(format!("{:?}", e)),
     }
@@ -674,15 +678,17 @@ pub fn get_rangvermerk_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-    execute_script_string(
-        "get_rangvermerk_abt2",
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
-        konfiguration,
-        &konfiguration.rangvermerk_auslesen_abt2_script,
-    )
+    let result = vm.execute_script(
+        konfiguration, 
+        ExecuteScriptType::RangvermerkAuslesen { 
+            saetze: saetze_clean.to_vec() 
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+    
+    match result {
+        PyOk::Str(s) => Ok(s),
+        e => Err(format!("{:?}", e)),
+    }
 }
 
 pub fn get_rechtsinhaber_abt2(
@@ -692,15 +698,14 @@ pub fn get_rechtsinhaber_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-    execute_script_string(
-        "get_rechtsinhaber_abt2",
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
-        konfiguration,
-        &konfiguration.rechtsinhaber_auslesen_abt2_script,
-    )
+    let result = vm.execute_script(konfiguration, ExecuteScriptType::RechtsinhaberAuslesenAbt2 { 
+        saetze: saetze_clean.to_vec() 
+    }).map_err(|e| format!("{:?}", e))?;
+    
+    match result {
+        PyOk::Str(s) => Ok(s),
+        e => Err(format!("{:?}", e)),
+    }
 }
 
 pub fn get_betrag_abt3(
@@ -710,15 +715,14 @@ pub fn get_betrag_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<Betrag, String> {
-    match execute_script_pyok(
-        "get_betrag_abt3",
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
+    let result = vm.execute_script(
         konfiguration,
-        &konfiguration.betrag_auslesen_script,
-    )? {
+        ExecuteScriptType::BetragAuslesen { 
+            saetze: saetze_clean.to_vec() 
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+    
+    match result {
         PyOk::Betrag(s) => Ok(s),
         e => Err(format!("{:?}", e)),
     }
@@ -731,15 +735,15 @@ pub fn get_schulden_art_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<SchuldenArt, String> {
-    match execute_script_pyok(
-        "get_schulden_art_abt3",
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
+    
+    let result = vm.execute_script(
         konfiguration,
-        &konfiguration.klassifiziere_schuldenart,
-    )? {
+        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { 
+            saetze: saetze_clean.to_vec() 
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+
+    match result {
         PyOk::SchuldenArt(s) => Ok(s),
         e => Err(format!("{:?}", e)),
     }
@@ -752,15 +756,18 @@ pub fn get_rechtsinhaber_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-    execute_script_string(
-        "get_rechtsinhaber_abt3",
-        vm,
-        recht_id,
-        text_sauber,
-        saetze_clean,
+    let result = vm.execute_script(
         konfiguration,
-        &konfiguration.rechtsinhaber_auslesen_abt3_script,
-    )
+        ExecuteScriptType::RechtsinhaberAuslesenAbt3 { 
+            saetze: saetze_clean.to_vec(), 
+            recht_id: recht_id.to_string() 
+        }
+    ).map_err(|e| format!("{:?}", e))?;
+
+    match result {
+        PyOk::Str(s) => Ok(s),
+        e => Err(format!("{:?}", e)),
+    }
 }
 
 pub fn get_kurztext_abt2(
@@ -773,27 +780,13 @@ pub fn get_kurztext_abt2(
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
 
-    let script = konfiguration.text_kuerzen_abt2_script
-    .iter()
-    .map(|l| format!("    {}", l))
-    .collect::<Vec<_>>()
-    .join("\r\n");
-
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let script = script.lines().map(|s| s.to_string()).collect::<Vec<_>>();
-
-    let result = vm.execute_script(&script, &[
-        "get_kurztext_abt2",
-        &serde_json::json!({
-            "recht": recht_id,
-            "text": text_sauber,
-            "rechtsinhaber": rechtsinhaber,
-            "rangvermerk": rangvermerk,
-            "saetze": saetze_clean,
-            "re": konfiguration.regex,
-        }).to_string(),
-    ]).map_err(|e| format!("{:?}", e))?;
+    let result = vm.execute_script(
+        &konfiguration, 
+        ExecuteScriptType::TextKuerzenAbt2 { 
+            saetze: saetze_clean.to_vec(), 
+            rechtsinhaber: rechtsinhaber.unwrap_or_default(), 
+            rangvermerk: rangvermerk.unwrap_or_default(),
+        }).map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Str(s) => Ok(s),
@@ -812,28 +805,14 @@ pub fn get_kurztext_abt3(
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
 
-    let script = konfiguration.text_kuerzen_abt3_script
-    .iter()
-    .map(|l| format!("    {}", l))
-    .collect::<Vec<_>>()
-    .join("\r\n");
-
-    let script = script.replace("\t", "    ");
-    let script = script.replace("\u{00a0}", " ");
-    let script = script.lines().map(|s| s.to_string()).collect::<Vec<_>>();
-
-    let result = vm.execute_script(&script, &[
-        "get_kurztext_abt3",
-        &serde_json::json!({
-            "recht": recht_id,
-            "text": text_sauber,
-            "betrag": betrag,
-            "schuldenart": schuldenart,
-            "rechtsinhaber": rechtsinhaber,
-            "saetze": saetze_clean,
-            "re": konfiguration.regex,
-        }).to_string(),
-    ]).map_err(|e| format!("{:?}", e))?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::TextKuerzenAbt3 { 
+            saetze: saetze_clean.to_vec(), 
+            betrag: betrag.unwrap_or_default(), 
+            schuldenart: schuldenart.unwrap_or_default(), 
+            rechtsinhaber: rechtsinhaber.unwrap_or_default(),
+    }).map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Str(s) => Ok(s),
@@ -841,6 +820,7 @@ pub fn get_kurztext_abt3(
     }
 }
 
+/*
 fn execute_script_string(
     script_id: &str,
     vm: PyVm,
@@ -890,4 +870,276 @@ fn execute_script_pyok(
     ]).map_err(|e| format!("{:?}", e))?;
 
     Ok(result)
+}
+*/
+#[test]
+fn test_pym_script_1() {
+    let vm = PyVm::new().unwrap();
+    let konfiguration = Konfiguration {
+        text_saubern_script: vec![
+            "return \"hello\"".to_string()
+        ],
+        .. Konfiguration::parse_from(Konfiguration::DEFAULT).unwrap()
+    };
+    let args = ExecuteScriptType::TextSaubern { 
+        recht: String::new(), 
+    };
+    let ok = vm.execute_script(&konfiguration, args).unwrap();
+}
+
+pub type RegexMap = BTreeMap<String, String>;
+
+#[derive(Debug, Clone, Hash, Serialize, Deserialize)]
+pub enum ExecuteScriptType {
+    // text_saubern(recht: String, re: [String -> Regex]) -> String
+    TextSaubern {
+        recht: String, 
+    },
+    // abkuerzungen(re: [String -> Regex]) -> [String]
+    GetAbkuerzungen,
+    // flurstuecke_auslesen(spalte_1: String, text: String, re: [String -> Regex]) -> Spalte1Eintrag
+    FlurstueckeAuslesen {
+        spalte1: String,
+        text: String,
+    },
+    // klassifiziere_rechteart_abt2(saetze: [String], re: [String -> Regex]) -> RechteArt
+    KlassifiziereRechteArtAbt2 {
+        saetze: Vec<String>,
+    },
+    // rechtsinhaber_auslesen_abt2(saetze: [String], re: [String -> Regex], recht_id: String) -> String
+    RechtsinhaberAuslesenAbt2 {
+        saetze: Vec<String>,
+    },
+    // rangvermerk_auslesen_abt2(saetze: [String], re: [String -> Regex]) -> String
+    RangvermerkAuslesen {
+        saetze: Vec<String>,
+    },
+    // text_kuerzen_abt2(saetze: [String], rechtsinhaber: String, rangvermerk: String, re: [String -> Regex]) -> String
+    TextKuerzenAbt2 {
+        saetze: Vec<String>,
+        rechtsinhaber: String,
+        rangvermerk: String,
+    },
+    // betrag_auslesen(saetze: [String], re: [String -> Regex]) -> Betrag
+    BetragAuslesen {
+        saetze: Vec<String>,
+    },
+    // klassifizere_schuldenart_abt3(saetze: [String], re: [String -> Regex]) - SchuldenArt
+    KlassifiziereSchuldenArtAbt3 {
+        saetze: Vec<String>,
+    },
+    // rechtsinhaber_auslesen_abt3(saetze: [String], re: [String -> Regex], recht_id: String) -> String
+    RechtsinhaberAuslesenAbt3 {
+        saetze: Vec<String>,
+        recht_id: String,
+    },
+    // text_kuerzen_abt3(saetze: [String], betrag: String, schuldenart: String, rechtsinhaber: String, re: [String -> Regex]) -> String
+    TextKuerzenAbt3 {
+        saetze: Vec<String>,
+        betrag: String,
+        schuldenart: String,
+        rechtsinhaber: String, 
+    }
+}
+
+fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) -> String {
+    static WRAPPER: &str = include_str!("./wrapper.py");
+
+    let script_args = match script {
+        ExecuteScriptType::TextSaubern { recht, .. } => {
+            let mut s = format!("recht = \"\n\".join([\n");
+            for l in recht.lines() {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+            s
+        },
+        ExecuteScriptType::GetAbkuerzungen { .. } => String::new(),
+        ExecuteScriptType::FlurstueckeAuslesen { spalte1, text, .. } => {
+            let mut s = String::new();
+            s.push_str(&format!("spalte_1 = \"\\n\".join([\n"));
+            for l in spalte1.lines() {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+            s.push_str(&format!("text = \"\\n\".join([\n"));
+            for l in text.lines() {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+            s
+        },
+        ExecuteScriptType::KlassifiziereRechteArtAbt2 { saetze, .. } => {
+            let mut s = String::new();
+            s.push_str(&format!("saetze = [\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("]\n\n");
+            s
+        },
+        ExecuteScriptType::RechtsinhaberAuslesenAbt2 { saetze, .. } => {
+            let mut s = String::new();
+            s.push_str(&format!("saetze = [\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("]\n\n");
+            s
+        },
+        ExecuteScriptType::RangvermerkAuslesen { saetze, .. } => {
+            let mut s = String::new();
+            s.push_str(&format!("saetze = [\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("]\n\n");
+            s
+        },
+        ExecuteScriptType::TextKuerzenAbt2 { 
+            saetze, 
+            rechtsinhaber, 
+            rangvermerk, 
+            .. 
+        } => {
+            let mut s = String::new();
+
+            s.push_str(&format!("saetze = [\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("]\n\n");
+
+            s.push_str(&format!("rechtsinhaber = \"\\n\".join([\n"));
+            for l in rechtsinhaber.lines() {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+
+            s.push_str(&format!("rangvermerk = \"\\n\".join([\n"));
+            for l in rangvermerk.lines() {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+
+            s
+        },
+        ExecuteScriptType::BetragAuslesen { saetze, .. } => {
+            let mut s = String::new();
+
+            s.push_str(&format!("saetze = \"\\n\".join([\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+
+            s
+        },
+        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { saetze, .. } => {
+            let mut s = String::new();
+
+            s.push_str(&format!("saetze = \"\\n\".join([\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("])\n\n");
+
+            s
+        },
+        ExecuteScriptType::TextKuerzenAbt3 { 
+            saetze, 
+            betrag, 
+            schuldenart, 
+            rechtsinhaber, 
+            .. 
+        } => {
+
+            let mut s = String::new();
+
+            s.push_str(&format!("saetze = [\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("]\n\n");
+
+            s.push_str(&format!("betrag = \"{betrag}\"\n\n"));
+            s.push_str(&format!("schuldenart = \"{schuldenart}\"\n\n"));
+            s.push_str(&format!("rechtsinhaber = \"{rechtsinhaber}\"\n\n"));
+
+            s
+        },
+        ExecuteScriptType::RechtsinhaberAuslesenAbt3 { saetze, recht_id, .. } => {
+            
+            let mut s = String::new();
+
+            s.push_str(&format!("saetze = [\n"));
+            for l in saetze {
+                s.push_str(&format!("    {:?},\n", l));
+            }
+            s.push_str("]\n\n");
+
+            s.push_str(&format!("recht_id = \"{recht_id}\"\n\n"));
+
+            s
+        }
+    }
+    .lines()
+    .map(|l| {
+        format!("    {}", l)
+        .replace("\t", "    ")
+        .replace("\u{00a0}", " ")
+    })
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    WRAPPER
+    // .replace("## SCRIPT_ARGS", &script_args)
+    .replace("## REGEX_LIST", &{
+        let mut s = format!("re = {{}}\n");
+        for (k, v) in konfiguration.regex.iter() {
+            let k = k
+                .replace("\"", "")
+                .replace("\n", "")
+                .replace("\r\n", "")
+                .replace("'", "\'");
+            let v = v
+                .replace("\n", "")
+                .replace("\r\n", "");
+            s.push_str(&format!("re[\"{k}\"] = compile(r'{v}')\n"));
+        }
+        s
+    })
+    .replace("## MAIN_SCRIPT", &format!("{script_args}\n{}", match script {
+        ExecuteScriptType::TextSaubern { .. } => &konfiguration.text_saubern_script,
+        ExecuteScriptType::GetAbkuerzungen { .. } => &konfiguration.abkuerzungen_script,
+        ExecuteScriptType::FlurstueckeAuslesen { .. } => &konfiguration.flurstuecke_auslesen_script,
+        ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => &konfiguration.klassifiziere_rechteart,
+        ExecuteScriptType::RechtsinhaberAuslesenAbt2 { .. } => &konfiguration.rechtsinhaber_auslesen_abt2_script,
+        ExecuteScriptType::RangvermerkAuslesen { .. } => &konfiguration.rangvermerk_auslesen_abt2_script,
+        ExecuteScriptType::TextKuerzenAbt2 { .. } => &konfiguration.text_kuerzen_abt2_script,
+        ExecuteScriptType::BetragAuslesen { .. } => &konfiguration.betrag_auslesen_script,
+        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => &konfiguration.klassifiziere_schuldenart,
+        ExecuteScriptType::TextKuerzenAbt3 { .. } => &konfiguration.text_kuerzen_abt3_script,
+        ExecuteScriptType::RechtsinhaberAuslesenAbt3 { .. } => &konfiguration.rechtsinhaber_auslesen_abt3_script,
+    }
+    .iter()
+    .map(|l| {
+        format!("    {}", l)
+        .replace("\t", "    ")
+        .replace("\u{00a0}", " ")
+    })
+    .collect::<Vec<_>>()
+    .join("\n")))
+}
+
+// Um das Ergebnis eines einzelnen Scripts nicht unnötig wiederholen zu müssen,
+// speichert die VM das Ergebnis des Scripts mit dem Schlüssel der Inputs,
+// da f(x) -> y immer den gleichen Wert ergibt für denselben Input x
+fn get_script_cache_key(regex: &RegexMap, script: &ExecuteScriptType) -> String {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(serde_json::to_string(script).unwrap_or_default().as_bytes());
+    hasher.update(serde_json::to_string(regex).unwrap_or_default().as_bytes());
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }

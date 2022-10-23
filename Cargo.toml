@@ -39,6 +39,7 @@ textwrap = { version = "0.15.0", features = ["smawk", "hyphenation"] }
 zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzip2", "zstd", "time"] }
 flate2 = "1.0.24"
 tar = "0.4.38"
+sha2 = "0.10.6"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"

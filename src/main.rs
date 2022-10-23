@@ -4893,7 +4893,7 @@ fn main() -> wry::Result<()> {
     
     let resizable = true;
     let debug = true;
-    let app_html = include_str!("dist/app.html").to_string()
+    let app_html = include_str!("app.html").to_string()
     .replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
 
     let event_loop = EventLoop::with_user_event();

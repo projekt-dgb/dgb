@@ -176,6 +176,6 @@ fn main() {
     </html>
     ");
     
-    let mut file = File::create("src/dist/app.html").unwrap();
+    let mut file = File::create("src/app.html").unwrap();
     file.write_all(main_html.as_bytes()).unwrap();
 }

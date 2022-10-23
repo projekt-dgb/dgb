@@ -1,6 +1,11 @@
 import json
 import sys
+from re import compile
 from json import JSONEncoder
+
+## SCRIPT_ARGS
+
+## REGEX_LIST
 
 def _default(self, obj):
     return getattr(obj.__class__, "to_json", _default.default)(obj)
@@ -182,50 +187,45 @@ class PyResult(dict):
 
     def err(self, string):
         self.type = "err"
-        self.string = string
+        self.err = string
     
-    def ok_string(self, string):
+    def ok(self, any):
         self.type = "ok"
-        self.ok_type = "str"
-        self.string = string
+        self.ok = any
 
-    def ok_list(self, list):
-        self.type = "ok"
-        self.ok_type = "list"
-        self.list = list
-
-    def ok_spalte1(self, spalte1):
-        self.type = "ok"
-        self.ok_type = "spalte1"
-        self.spalte1 = spalte1
-        
     def get_string(self):
         if self.type == "ok":
-            if self.ok_type == "str":
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"str\", \"data\": \"" + self.string + "\" } }"
-            elif self.ok_type == "list":
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"list\", \"data\": " + json.dumps(self.list) + " } }"
-            elif self.ok_type == "spalte1":
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"spalte1\", \"data\": " + json.dumps(self.spalte1) + " } }"
-        else:
-            return "{\"result\": \"err\", \"data\": { \"text\": \"" + self.string + "\" } }"
+            if isinstance(self.ok, str):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"str\", \"data\": \"" + self.ok + "\" } }"
+            elif isinstance(self.ok, list):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"list\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif isinstance(self.ok, Spalte1Eintrag):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"spalte1\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif isinstance(self.ok, RechteArt):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"rechteart\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif isinstance(self.ok, SchuldenArt):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"schuldenart\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif isinstance(self.ok, Betrag):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"betrag\", \"data\": " + json.dumps(self.ok) + " } }"
+            else:
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"???\", \"data\": \"\" } }"
+        elif self.type == "err":
+            return "{\"result\": \"err\", \"data\": { \"text\": \"" + self.err + "\" } }"
+        else: 
+            return "{\"result\": \"err\", \"data\": { \"text\": \"Unknown error\" } }"
+
+def main_func():
+## MAIN_SCRIPT
+    pass
 
 def main():
     result = PyResult()
     result.err("invalid function")
     try:
-        # eintrag = Spalte1Eintrag(5)
-        # eintrag.append_nur_lastend_an([FlurFlurstueck("6", "275/4")])
-        result.ok_spalte1(eintrag)
-        function_type = sys.argv[2]
-        args_json = json.loads(sys.argv[3])
-        if function_type == "text_saubern":
-            string = text_saubern(args_json["recht"])
-            result.ok_string(string)
-        # else:
-        #     pass
+        return_val = main_func()
+        result.ok(return_val)
     except BaseException as err:
-        result.err(f"Unexpected {type(err)}: {err}")
+        result.err("Unexpected error" + err.message)
     finally:
         print(result.get_string())
 
