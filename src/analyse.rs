@@ -1,9 +1,9 @@
-use crate::{NebenbeteiligterExtra, Grundbuch, Titelblatt, Konfiguration};
-use crate::digital::{Nebenbeteiligter, BvEintrag};
-use crate::python::{PyVm, Spalte1Eintrag, Betrag, SchuldenArt, RechteArt};
-use serde_derive::{Serialize, Deserialize};
-use std::collections::BTreeMap;
+use crate::digital::{BvEintrag, Nebenbeteiligter};
 use crate::get_or_insert_regex;
+use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt, Spalte1Eintrag};
+use crate::{Grundbuch, Konfiguration, NebenbeteiligterExtra, Titelblatt};
+use serde_derive::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrundbuchAnalysiert {
@@ -29,7 +29,6 @@ pub struct Abt2Analysiert {
     pub fehler: Vec<String>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Abt3Analysiert {
     pub lfd_nr: usize,
@@ -50,39 +49,42 @@ pub struct Abt3Analysiert {
 
 pub fn analysiere_grundbuch(
     vm: PyVm,
-    grundbuch: &Grundbuch, 
-    nb: &[Nebenbeteiligter], 
-    konfiguration: &Konfiguration
+    grundbuch: &Grundbuch,
+    nb: &[Nebenbeteiligter],
+    konfiguration: &Konfiguration,
 ) -> GrundbuchAnalysiert {
-    
     let mut abt2_analysiert = Vec::<Abt2Analysiert>::new();
     let mut abt3_analysiert = Vec::new();
 
     for eintrag in grundbuch.abt2.eintraege.iter() {
-        
-        if eintrag.ist_geroetet() { continue; }
-        
+        if eintrag.ist_geroetet() {
+            continue;
+        }
+
         let mut warnungen = Vec::new();
         let mut fehler = Vec::new();
-                    
+
         let mut eintrag_veraenderungen = Vec::new();
         let mut eintrag = eintrag.clone();
-        
+
         for v in grundbuch.abt2.veraenderungen.iter() {
-            
             let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
                 Ok(s) => s,
                 Err(e) => {
-                    fehler.push(format!("Konnte Abt. 2 Veränderung nicht lesen: {}: {}", v.lfd_nr.text(), e));
+                    fehler.push(format!(
+                        "Konnte Abt. 2 Veränderung nicht lesen: {}: {}",
+                        v.lfd_nr.text(),
+                        e
+                    ));
                     Vec::new()
-                },
+                }
             };
-            
+
             if spalte_1_nummern.contains(&eintrag.lfd_nr) {
                 eintrag_veraenderungen.push(v.text.clone());
             }
         }
-                
+
         // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
         if !eintrag_veraenderungen.is_empty() {
             for v in eintrag_veraenderungen.iter() {
@@ -94,32 +96,32 @@ pub fn analysiere_grundbuch(
                 }
             }
         }
-        
+
         let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
         let blatt = grundbuch.titelblatt.blatt.clone();
         let lfd_nr = eintrag.lfd_nr;
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
-        
+
         let kt = crate::kurztext::text_kuerzen_abt2(
             vm.clone(),
-            &recht_id, 
-            &eintrag.text.text(), 
-            &mut fehler, 
-            konfiguration
+            &recht_id,
+            &eintrag.text.text(),
+            &mut fehler,
+            konfiguration,
         );
         let mut lastend_an = Vec::new();
         let mut debug_log = String::new();
         let belastete_flurstuecke = match get_belastete_flurstuecke(
             vm.clone(),
-            &eintrag.bv_nr.text(), 
-            &kt.text_sauber, 
+            &eintrag.bv_nr.text(),
+            &kt.text_sauber,
             &grundbuch.titelblatt,
             &grundbuch.bestandsverzeichnis.eintraege,
             konfiguration,
             &mut debug_log,
             &mut lastend_an,
             &mut warnungen,
-            &mut fehler
+            &mut fehler,
         ) {
             Ok(o) => o,
             Err(e) => {
@@ -127,7 +129,7 @@ pub fn analysiere_grundbuch(
                 Vec::new()
             }
         };
-        
+
         let mut rechteart = match kt.rechteart.clone() {
             Some(s) => s,
             None => {
@@ -135,34 +137,38 @@ pub fn analysiere_grundbuch(
                 RechteArt::SonstigeDabagrechteart
             }
         };
-        
+
         let rechtsinhaber = match kt.rechtsinhaber.clone() {
             Some(s) => s,
             None => match rechteart.clone() {
                 r if !r.benoetigt_rechteinhaber() => String::new(),
                 RechteArt::SpeziellVormerkung { rechteverweis } => {
-                    if let Some(recht) = abt2_analysiert.iter().find(|r| r.lfd_nr == rechteverweis).cloned() {
+                    if let Some(recht) = abt2_analysiert
+                        .iter()
+                        .find(|r| r.lfd_nr == rechteverweis)
+                        .cloned()
+                    {
                         rechteart = recht.rechteart.clone();
                         recht.rechtsinhaber.clone()
                     } else {
                         fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
                         String::new()
                     }
-                },
+                }
                 _ => {
                     fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
                     String::new()
                 }
-            }
+            },
         };
 
         let rangvermerk = kt.rangvermerk.clone();
-        
+
         let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
             Some(s) => s.clone(),
             None => {
                 if rechteart.benoetigt_rechteinhaber() {
-                    warnungen.push(format!("Konnte keine Ordnungsnummer finden"));                
+                    warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
                 }
                 Nebenbeteiligter {
                     typ: None,
@@ -172,13 +178,15 @@ pub fn analysiere_grundbuch(
                 }
             }
         };
-        
+
         if rangvermerk.is_some() {
             if !(kt.gekuerzt.contains("Rang") || kt.gekuerzt.contains("Gleichrang")) {
-                fehler.push(format!("Rangvermerk vorhanden, aber nicht in Kurztext vermerkt"));
+                fehler.push(format!(
+                    "Rangvermerk vorhanden, aber nicht in Kurztext vermerkt"
+                ));
             }
         }
-        
+
         abt2_analysiert.push(Abt2Analysiert {
             lfd_nr: eintrag.lfd_nr,
             text_kurz: kt.gekuerzt,
@@ -194,41 +202,52 @@ pub fn analysiere_grundbuch(
             fehler,
         })
     }
-    
+
     for eintrag in grundbuch.abt3.eintraege.iter() {
-    
-        if eintrag.ist_geroetet() { continue; }
+        if eintrag.ist_geroetet() {
+            continue;
+        }
 
         let mut warnungen = Vec::new();
         let mut fehler = Vec::new();
-                    
+
         let mut eintrag_veraenderungen = Vec::new();
         let mut eintrag = eintrag.clone();
-        
+
         for v in grundbuch.abt3.veraenderungen.iter() {
-            
             let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
                 Ok(s) => s,
                 Err(e) => {
-                    fehler.push(format!("Konnte Abt. 3 Veränderung nicht lesen: {}: {}", v.lfd_nr.text(), e));
+                    fehler.push(format!(
+                        "Konnte Abt. 3 Veränderung nicht lesen: {}: {}",
+                        v.lfd_nr.text(),
+                        e
+                    ));
                     Vec::new()
-                },
+                }
             };
-            
+
             if spalte_1_nummern.contains(&eintrag.lfd_nr) {
                 eintrag_veraenderungen.push(v.text.clone());
             }
         }
-                    
+
         // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
         if !eintrag_veraenderungen.is_empty() {
-            warnungen.push(format!("Veränderungsmittelungen Abt.3 beachten!: {}", eintrag_veraenderungen.iter().map(|q| q.text()).collect::<Vec<_>>().join("\r\n")));
+            warnungen.push(format!(
+                "Veränderungsmittelungen Abt.3 beachten!: {}",
+                eintrag_veraenderungen
+                    .iter()
+                    .map(|q| q.text())
+                    .collect::<Vec<_>>()
+                    .join("\r\n")
+            ));
             for v in eintrag_veraenderungen.iter() {
-                if eintrag.text.contains("Rang") || 
-                    eintrag.text.contains("Gleichrang") || 
-                    eintrag.text.contains("Mithaft") || 
-                    eintrag.text.contains("Gesamthaft") {
-                    
+                if eintrag.text.contains("Rang")
+                    || eintrag.text.contains("Gleichrang")
+                    || eintrag.text.contains("Mithaft")
+                    || eintrag.text.contains("Gesamthaft")
+                {
                     eintrag.text.push_str(" ");
                     eintrag.text.push_str(&v.text());
                     eintrag.text.push_str("\r\n");
@@ -240,28 +259,28 @@ pub fn analysiere_grundbuch(
         let blatt = grundbuch.titelblatt.blatt.clone();
         let lfd_nr = eintrag.lfd_nr;
         let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
-        
+
         let kt = crate::kurztext::text_kuerzen_abt3(
             vm.clone(),
-            &recht_id, 
-            &eintrag.betrag.text(), 
-            &eintrag.text.text(), 
-            &mut fehler, 
-            konfiguration
+            &recht_id,
+            &eintrag.betrag.text(),
+            &eintrag.text.text(),
+            &mut fehler,
+            konfiguration,
         );
         let mut lastend_an = Vec::new();
         let mut debug_log = String::new();
         let belastete_flurstuecke = match get_belastete_flurstuecke(
             vm.clone(),
-            &eintrag.bv_nr.text(), 
-            &kt.text_sauber, 
+            &eintrag.bv_nr.text(),
+            &kt.text_sauber,
             &grundbuch.titelblatt,
             &grundbuch.bestandsverzeichnis.eintraege,
             konfiguration,
             &mut debug_log,
             &mut lastend_an,
             &mut warnungen,
-            &mut fehler
+            &mut fehler,
         ) {
             Ok(o) => o,
             Err(e) => {
@@ -269,7 +288,7 @@ pub fn analysiere_grundbuch(
                 Vec::new()
             }
         };
-        
+
         let rechtsinhaber = match kt.rechtsinhaber.clone() {
             Some(s) => s,
             None => {
@@ -277,7 +296,7 @@ pub fn analysiere_grundbuch(
                 String::new()
             }
         };
-        
+
         let schuldenart = match kt.schuldenart.clone() {
             Some(s) => s,
             None => {
@@ -285,7 +304,7 @@ pub fn analysiere_grundbuch(
                 SchuldenArt::Grundschuld
             }
         };
-        
+
         let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
             Some(s) => s.clone(),
             None => {
@@ -298,7 +317,7 @@ pub fn analysiere_grundbuch(
                 }
             }
         };
-        
+
         abt3_analysiert.push(Abt3Analysiert {
             lfd_nr: eintrag.lfd_nr,
             text_kurz: kt.gekuerzt,
@@ -312,9 +331,9 @@ pub fn analysiere_grundbuch(
             nebenbeteiligter,
             warnungen,
             fehler,
-        });            
+        });
     }
-    
+
     GrundbuchAnalysiert {
         abt2: abt2_analysiert,
         abt3: abt3_analysiert,
@@ -323,24 +342,19 @@ pub fn analysiere_grundbuch(
 
 pub fn get_belastete_flurstuecke(
     vm: PyVm,
-	bv_nr: &str, 
-	text_sauber: &str, 
-	titelblatt: &Titelblatt,
-	bestandsverzeichnis: &[BvEintrag],
-	konfiguration: &Konfiguration,
-	debug_log: &mut String,
-	eintraege: &mut Vec<Spalte1Eintrag>,
-	warnungen: &mut Vec<String>,
-	fehler: &mut Vec<String>,
+    bv_nr: &str,
+    text_sauber: &str,
+    titelblatt: &Titelblatt,
+    bestandsverzeichnis: &[BvEintrag],
+    konfiguration: &Konfiguration,
+    debug_log: &mut String,
+    eintraege: &mut Vec<Spalte1Eintrag>,
+    warnungen: &mut Vec<String>,
+    fehler: &mut Vec<String>,
 ) -> Result<Vec<BvEintrag>, String> {
+    let spalte1_eintraege =
+        crate::python::get_belastete_flurstuecke(vm, bv_nr, text_sauber, konfiguration)?;
 
-    let spalte1_eintraege = crate::python::get_belastete_flurstuecke(
-        vm,
-        bv_nr,
-        text_sauber,
-        konfiguration,
-    )?;
-    
     eintraege.append(&mut spalte1_eintraege.eintraege.clone());
     fehler.append(&mut spalte1_eintraege.warnungen.clone());
 
@@ -348,7 +362,7 @@ pub fn get_belastete_flurstuecke(
     let blatt = titelblatt.blatt.clone();
 
     let mut log = Vec::new();
-    
+
     log.push(format!("<strong>Recht:</strong>"));
     debug_log.push_str(&format!("Recht:\r\n"));
     log.push(format!("<p>{text_sauber}</p>"));
@@ -358,64 +372,84 @@ pub fn get_belastete_flurstuecke(
 
     log.push(format!("<strong>Ausgewertet:</strong>"));
     debug_log.push_str(&format!("Ausgewertet:\r\n"));
-    
-    let s1_ohne_teilbelastung = spalte1_eintraege.eintraege.iter()
-        .filter_map(|s| if s.nur_lastend_an.is_empty() { 
-            Some(format!("{}", s.lfd_nr)) 
-        } else { None })
+
+    let s1_ohne_teilbelastung = spalte1_eintraege
+        .eintraege
+        .iter()
+        .filter_map(|s| {
+            if s.nur_lastend_an.is_empty() {
+                Some(format!("{}", s.lfd_nr))
+            } else {
+                None
+            }
+        })
         .collect::<Vec<_>>();
-        
+
     if !s1_ohne_teilbelastung.is_empty() {
-        log.push(format!("<p>&nbsp;&nbsp;{}</p>", s1_ohne_teilbelastung.join(", ")));
+        log.push(format!(
+            "<p>&nbsp;&nbsp;{}</p>",
+            s1_ohne_teilbelastung.join(", ")
+        ));
         debug_log.push_str(&format!("  {}\r\n", s1_ohne_teilbelastung.join(", ")));
     }
-    
-    let s1_mit_teilbelastung = spalte1_eintraege.eintraege.iter()
-    .filter_map(|s| if s.nur_lastend_an.is_empty() { 
-        None 
-    } else {
-        Some(
-            s.nur_lastend_an
-            .iter()
-            .map(|nl| format!("{}: nur lastend an {}", s.lfd_nr, nl))
-            .collect::<Vec<_>>()
-        )
-    }).collect::<Vec<_>>();
-        
+
+    let s1_mit_teilbelastung = spalte1_eintraege
+        .eintraege
+        .iter()
+        .filter_map(|s| {
+            if s.nur_lastend_an.is_empty() {
+                None
+            } else {
+                Some(
+                    s.nur_lastend_an
+                        .iter()
+                        .map(|nl| format!("{}: nur lastend an {}", s.lfd_nr, nl))
+                        .collect::<Vec<_>>(),
+                )
+            }
+        })
+        .collect::<Vec<_>>();
+
     for s1 in s1_mit_teilbelastung {
         for s in s1 {
             log.push(format!("<p>&nbsp;&nbsp;{}</p>,<br/>", s));
             debug_log.push_str(&format!("  {}\r\n", s));
         }
     }
-    
+
     let mut belastet_bv = Vec::<BvEintrag>::new();
     let mut global_filter = Vec::new();
 
     let mut nur_lastend = BTreeMap::new();
     for s1 in spalte1_eintraege.eintraege.iter() {
         for nl in s1.nur_lastend_an.iter() {
-            nur_lastend.entry(s1.lfd_nr)
-            .or_insert_with(|| Vec::new())
-            .push((nl.gemarkung.clone().unwrap_or(grundbuch_von.clone()), nl.flur, nl.flurstueck.clone(), nl.gemarkung.is_some()));
+            nur_lastend
+                .entry(s1.lfd_nr)
+                .or_insert_with(|| Vec::new())
+                .push((
+                    nl.gemarkung.clone().unwrap_or(grundbuch_von.clone()),
+                    nl.flur,
+                    nl.flurstueck.clone(),
+                    nl.gemarkung.is_some(),
+                ));
         }
     }
-    
+
     // Spalte 1 Einträge => Bestandsverzeichnis Einträge
     for s1 in spalte1_eintraege.eintraege.iter() {
-        
         // 0 = keine Einschränkung nach BV-Nr., später filtern
         if s1.lfd_nr == 0 {
             global_filter.push(s1.clone());
-            continue; 
+            continue;
         }
-        
-        let mut alle_bv_eintraege = bestandsverzeichnis.iter()
+
+        let mut alle_bv_eintraege = bestandsverzeichnis
+            .iter()
             .filter(|bv| bv.get_lfd_nr() == s1.lfd_nr)
             .cloned()
             .collect::<Vec<BvEintrag>>();
-                
-        alle_bv_eintraege.retain(|bv| *bv != BvEintrag::neu(0));        
+
+        alle_bv_eintraege.retain(|bv| *bv != BvEintrag::neu(0));
         belastet_bv.extend(alle_bv_eintraege.into_iter());
     }
 
@@ -424,37 +458,46 @@ pub fn get_belastete_flurstuecke(
             let bv_flur = bv.get_flur();
             let bv_flurstueck = bv.get_flurstueck();
             let bv_gemarkung = bv.get_gemarkung().unwrap_or(grundbuch_von.clone());
-            if !(nur_filter.iter().any(|i| if i.3 { 
-                    i.0 == bv_gemarkung.clone() && i.1 == bv_flur && i.2 == bv_flurstueck.clone() 
-                } else { 
-                    i.1 == bv_flur && i.2 == bv_flurstueck.clone() 
-                }) || nur_filter.iter().any(|i| 
-                if i.3 { i.0 == bv_gemarkung.clone() && i.1 == 0 && i.2 == bv_flurstueck.clone() } else { 
+            if !(nur_filter.iter().any(|i| {
+                if i.3 {
+                    i.0 == bv_gemarkung.clone() && i.1 == bv_flur && i.2 == bv_flurstueck.clone()
+                } else {
+                    i.1 == bv_flur && i.2 == bv_flurstueck.clone()
+                }
+            }) || nur_filter.iter().any(|i| {
+                if i.3 {
+                    i.0 == bv_gemarkung.clone() && i.1 == 0 && i.2 == bv_flurstueck.clone()
+                } else {
                     i.1 == 0 && i.2 == bv_flurstueck.clone()
-                })) {
+                }
+            })) {
                 *bv = BvEintrag::neu(0); // remove
             }
         }
     }
-    
-    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));  
-    
+
+    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));
+
     log.push(format!("<strong>BV-Einträge (ungefiltert):</strong>"));
     debug_log.push_str(&format!("BV-Einträge (ungefiltert):\r\n"));
-    
+
     for bv in belastet_bv.iter() {
-        log.push(format!("<p>[{}]: {} Fl. {} Flst. {}</p>", bv.get_lfd_nr(), 
-        bv.get_gemarkung().unwrap_or(grundbuch_von.clone()), bv.get_flur(), bv.get_flurstueck()));
-        debug_log.push_str(
-            &format!("[{}]: {} Fl. {} Flst. {}\r\n", 
-                bv.get_lfd_nr(), 
-                bv.get_gemarkung().unwrap_or(grundbuch_von.clone()), 
-                bv.get_flur(), 
-                bv.get_flurstueck()
-            )
-        );
+        log.push(format!(
+            "<p>[{}]: {} Fl. {} Flst. {}</p>",
+            bv.get_lfd_nr(),
+            bv.get_gemarkung().unwrap_or(grundbuch_von.clone()),
+            bv.get_flur(),
+            bv.get_flurstueck()
+        ));
+        debug_log.push_str(&format!(
+            "[{}]: {} Fl. {} Flst. {}\r\n",
+            bv.get_lfd_nr(),
+            bv.get_gemarkung().unwrap_or(grundbuch_von.clone()),
+            bv.get_flur(),
+            bv.get_flurstueck()
+        ));
     }
-        
+
     log.push(format!("<strong>&nbsp;&nbsp;Filter:</strong>"));
     debug_log.push_str(&format!("Filter:\r\n"));
 
@@ -463,70 +506,93 @@ pub fn get_belastete_flurstuecke(
     for s1 in global_filter.iter() {
         debug_log.push_str(&format!("{:#?}\r\n", s1));
         for nl in s1.nur_lastend_an.iter() {
-            global_nur_lastend.push((nl.gemarkung.clone().unwrap_or(grundbuch_von.clone()), nl.flur, nl.flurstueck.clone(), nl.gemarkung.is_some()));
+            global_nur_lastend.push((
+                nl.gemarkung.clone().unwrap_or(grundbuch_von.clone()),
+                nl.flur,
+                nl.flurstueck.clone(),
+                nl.gemarkung.is_some(),
+            ));
         }
     }
-    
+
     if !global_nur_lastend.is_empty() {
         for bv in belastet_bv.iter_mut() {
             let bv_flur = bv.get_flur();
             let bv_flurstueck = bv.get_flurstueck();
             let bv_gemarkung = bv.get_gemarkung().unwrap_or(grundbuch_von.clone());
-            if !(global_nur_lastend.iter().any(|i| if i.3 { 
-                    i.0 == bv_gemarkung.clone() && i.1 == bv_flur && i.2 == bv_flurstueck.clone() 
-                } else { 
-                    i.1 == bv_flur && i.2 == bv_flurstueck.clone() 
-                }) || global_nur_lastend.iter().any(|i| 
-                if i.3 { i.0 == bv_gemarkung.clone() && i.1 == 0 && i.2 == bv_flurstueck.clone() } else { 
+            if !(global_nur_lastend.iter().any(|i| {
+                if i.3 {
+                    i.0 == bv_gemarkung.clone() && i.1 == bv_flur && i.2 == bv_flurstueck.clone()
+                } else {
+                    i.1 == bv_flur && i.2 == bv_flurstueck.clone()
+                }
+            }) || global_nur_lastend.iter().any(|i| {
+                if i.3 {
+                    i.0 == bv_gemarkung.clone() && i.1 == 0 && i.2 == bv_flurstueck.clone()
+                } else {
                     i.1 == 0 && i.2 == bv_flurstueck.clone()
-                })) {
+                }
+            })) {
                 *bv = BvEintrag::neu(0); // remove
             }
         }
     }
 
-    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));        
-    
+    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));
+
     let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
-    let regex_matches = konfiguration.regex.iter().filter_map(|(k, v)| {
-        if get_or_insert_regex(&regex_values, v).ok()?.matches(text_sauber) { Some(k.clone()) } else { None } 
-    })
-    .collect::<Vec<_>>();
-    
+    let regex_matches = konfiguration
+        .regex
+        .iter()
+        .filter_map(|(k, v)| {
+            if get_or_insert_regex(&regex_values, v)
+                .ok()?
+                .matches(text_sauber)
+            {
+                Some(k.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
     if belastet_bv.is_empty() {
         fehler.push(format!("Konnte keine Flurstücke zuordnen!"));
         log.push(format!("<strong>Regex:</strong>"));
         log.push(format!("<p>{}</p>", regex_matches.join(", ")));
-        fehler.push(format!("<div style='flex-direction:row;max-width:600px;'>{}</div>", log.join("\r\n")));
+        fehler.push(format!(
+            "<div style='flex-direction:row;max-width:600px;'>{}</div>",
+            log.join("\r\n")
+        ));
     }
-    
+
     debug_log.push_str(&format!("Regex:\r\n"));
     debug_log.push_str(&format!("{}\r\n", regex_matches.join(",\r\n ")));
-        
+
     let belastet_bv = flurstuecke_fortfuehren(
-        &belastet_bv, 
-        titelblatt, 
-        bestandsverzeichnis, 
-        warnungen, 
-        fehler
+        &belastet_bv,
+        titelblatt,
+        bestandsverzeichnis,
+        warnungen,
+        fehler,
     );
-    
+
     let belastet_bv = belastet_bv
         .into_iter()
         .filter(|bv| !bv.ist_geroetet())
         .collect::<Vec<BvEintrag>>();
-    
+
     // deduplicate
     let mut belastet_bv_map = BTreeMap::<String, BvEintrag>::new();
     for bv in belastet_bv {
         belastet_bv_map.insert(format!("{}", bv), bv);
     }
-    
+
     let belastet_bv = belastet_bv_map
         .into_iter()
         .map(|(k, v)| v)
         .collect::<Vec<_>>();
-    
+
     Ok(belastet_bv)
 }
 
@@ -538,52 +604,54 @@ fn flurstuecke_fortfuehren(
     warnungen: &mut Vec<String>,
     fehler: &mut Vec<String>,
 ) -> Vec<BvEintrag> {
-
     let mut bv_belastet = bv_eintraege.to_vec();
     let mut alle_fortgefuehrt = false;
     while !alle_fortgefuehrt {
-        
         alle_fortgefuehrt = true;
 
         let mut bv_zerlegt_belastet = Vec::new();
-        
+
         for (bv_idx, bv) in bv_belastet.clone().iter().enumerate() {
-            
             let mut fortgeführt_als = bestandsverzeichnis
                 .iter()
                 .filter(|b| {
-                    !b.ist_geroetet() &&
-                    b.get_gemarkung().unwrap_or(titelblatt.grundbuch_von.clone()) == bv.get_gemarkung().unwrap_or(titelblatt.grundbuch_von.clone()) &&
-                    b.get_flur() == bv.get_flur() && 
-                    b.get_flurstueck() == bv.get_flurstueck() &&
-                    b.get_lfd_nr() > bv.get_lfd_nr()
+                    !b.ist_geroetet()
+                        && b.get_gemarkung()
+                            .unwrap_or(titelblatt.grundbuch_von.clone())
+                            == bv
+                                .get_gemarkung()
+                                .unwrap_or(titelblatt.grundbuch_von.clone())
+                        && b.get_flur() == bv.get_flur()
+                        && b.get_flurstueck() == bv.get_flurstueck()
+                        && b.get_lfd_nr() > bv.get_lfd_nr()
                 })
                 .cloned()
                 .collect::<Vec<_>>();
-            
+
             fortgeführt_als.sort_by(|a, b| a.get_lfd_nr().cmp(&b.get_lfd_nr()));
             fortgeführt_als.dedup();
-            
+
             if fortgeführt_als.is_empty() {
                 continue;
             }
-            
+
             // BV-Änderungen benutzen:
-            
+
             // "Flurstück X ist zerlegt in die Flurstücke Y und Z"
             // => bv_zerlegt_belastet.insert();
-            
+
             // "Nummer X als Y eingetragen"
-            
+
             // "Aus lfd. Nr. X ein Flurstück verselbstständigt und als lfd. Nr. Y eingetragen"
             // gucken, ob irgendein Fl. / Flst. doppelt eingetragen ist unter einer höheren lfd. Nr.
             // wenn ja, höhere Nr. nehmen
-            
+
             // Versuche, automatisch nach Flur / Flurstücksnummern zu matchen
             // let mut nicht_fortgeführt = Vec::new();
-                
+
             if fortgeführt_als.len() == 1 {
-                warnungen.push(format!("Flur {} Flst. {} wird automatisch fortgeführt von BV-Nr. {} auf BV-Nr. {}", 
+                warnungen.push(format!(
+                    "Flur {} Flst. {} wird automatisch fortgeführt von BV-Nr. {} auf BV-Nr. {}",
                     fortgeführt_als[0].get_flur(),
                     fortgeführt_als[0].get_flurstueck(),
                     bv.get_lfd_nr(),
@@ -605,10 +673,10 @@ fn flurstuecke_fortfuehren(
                 ));
             }
         }
-        
+
         bv_belastet.append(&mut bv_zerlegt_belastet);
     }
-    
+
     bv_belastet
 }
 

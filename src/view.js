@@ -1,6 +1,9 @@
 
 "use strict";
 
+// INJECT_PDFJS_WORKER_SCRIPT
+// INJECT_PDFJS_SCRIPT
+
 let rpc = {
     
   invoke : function(arg) { window.ipc.postMessage(JSON.stringify(arg)); },
@@ -122,6 +125,26 @@ let rpc = {
   set_active_ribbon_tab: function(arg) { rpc.invoke({ cmd : 'set_active_ribbon_tab', new_tab: arg }); },
   set_open_file: function(arg) { rpc.invoke({ cmd : 'set_open_file', new_file: arg }); },
   set_open_page: function(arg) { rpc.invoke({ cmd : 'set_open_page', active_page: arg }); },
+  signal_pdf_page_rendered: function(
+    pdf_amtsgericht, 
+    pdf_grundbuch_von,
+    pdf_blatt,
+    seite,
+    geroetet,
+    image_data_base64,
+    image_filename,
+    ) { 
+        rpc.invoke({ 
+        cmd : 'signal_pdf_page_rendered', 
+        pdf_amtsgericht: pdf_amtsgericht,
+        pdf_grundbuch_von: pdf_grundbuch_von,
+        pdf_blatt: pdf_blatt,
+        seite: seite, 
+        geroetet: geroetet,
+        image_data_base64: image_data_base64, 
+        image_filename: image_filename,
+        }); 
+    },
 };
 
 let tab_functions = {
@@ -169,6 +192,55 @@ setInterval(function(){
         rpc.check_pdf_image_sichtbar();
     }
 }, 100);
+
+// Renders a PDF page to an image using PdfJS, calls signal_pdf_page_rendered on finish
+async function renderPdfPage(
+    pdf_base64,
+    pdf_amtsgericht, 
+    pdf_grundbuch_von,
+    pdf_blatt,
+    seite,
+    geroetet,
+    image_filename,
+) {
+
+  console.log("renderPdfPage " + pdf_amtsgericht + " " + pdf_grundbuch_von + " " + pdf_blatt);
+  var pdf_bytes = atob(pdf_base64);
+  console.log("pdf bytes decoded " + pdf_bytes.length);
+  var loadingTask = pdfjsLib.getDocument({data: pdf_bytes});
+
+  await loadingTask.promise.then(function(pdf) {
+
+    var firstpage = pdf.getPage(seite);
+
+    firstpage.then(function(firstpage) {
+        var viewport = firstpage.getViewport(10);
+        var canvasorig = document.createElement('canvas');
+        var resolution = 2;
+        canvasorig.width = viewport.viewBox[2] * 2;
+        canvasorig.height = viewport.viewBox[3] * 2;
+        var offctx = canvasorig.getContext('2d');
+        var rendertask = firstpage.render({
+            canvasContext: offctx,
+            viewport: viewport,
+            transform: [resolution, 0, 0, resolution, 0, 0]
+        });
+        rendertask.promise.then(function() {
+            console.log("page rendered!");
+            var dataURL = canvasorig.toDataURL("image/png");
+            rpc.signal_pdf_page_rendered(
+                pdf_amtsgericht, 
+                pdf_grundbuch_von,
+                pdf_blatt,
+                seite,
+                geroetet,
+                dataURL,
+                image_filename,
+            )
+        });
+    });
+  });
+}
 
 function editCommitTitle(event) {
     rpc.edit_commit_title(event.target.value);

@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "cmd")]
@@ -11,11 +11,11 @@ pub enum Cmd {
     #[serde(rename = "create_new_grundbuch")]
     CreateNewGrundbuch,
     #[serde(rename = "grundbuch_anlegen")]
-    GrundbuchAnlegen { 
+    GrundbuchAnlegen {
         land: String,
-        grundbuch_von: String, 
-        amtsgericht: String, 
-        blatt: usize, 
+        grundbuch_von: String,
+        amtsgericht: String,
+        blatt: usize,
     },
     #[serde(rename = "undo")]
     Undo,
@@ -32,18 +32,18 @@ pub enum Cmd {
     #[serde(rename = "export_alle_rechte")]
     ExportAlleRechte,
     #[serde(rename = "export_alle_fehler")]
-    ExportAlleFehler,   
+    ExportAlleFehler,
     #[serde(rename = "export_alle_abt1")]
     ExportAlleAbt1,
     #[serde(rename = "export_alle_teilbelastungen")]
-    ExportAlleTeilbelastungen,    
+    ExportAlleTeilbelastungen,
     #[serde(rename = "open_grundbuch_suchen_dialog")]
     OpenGrundbuchSuchenDialog,
     #[serde(rename = "open_grundbuch_upload_dialog")]
-    OpenGrundbuchUploadDialog,  
+    OpenGrundbuchUploadDialog,
     #[serde(rename = "grundbuch_exportieren")]
     GrundbuchExportieren {
-        was_exportieren: String, 
+        was_exportieren: String,
         exportiere_bv: bool,
         exportiere_abt_1: bool,
         exportiere_abt_2: bool,
@@ -65,7 +65,10 @@ pub enum Cmd {
     #[serde(rename = "close_file")]
     CloseFile { file_name: String },
     #[serde(rename = "klassifiziere_seite_neu")]
-    KlassifiziereSeiteNeu { seite: usize, klassifikation_neu: String },
+    KlassifiziereSeiteNeu {
+        seite: usize,
+        klassifikation_neu: String,
+    },
     #[serde(rename = "check_pdf_image_sichtbar")]
     CheckPdfImageSichtbar,
     #[serde(rename = "toggle_lefis_analyse")]
@@ -94,7 +97,7 @@ pub enum Cmd {
     EditKonfigurationTextField { id: String, value: String },
     #[serde(rename = "edit_konfiguration_schluesseldatei")]
     EditKonfigurationSchluesseldatei { base64: String },
-    
+
     #[serde(rename = "flurstueck_auslesen_script_testen")]
     FlurstueckAuslesenScriptTesten { text: String, bv_nr: String },
     #[serde(rename = "edit_text_kuerzen_abt2_script")]
@@ -113,7 +116,7 @@ pub enum Cmd {
     EditRangvermerkAuslesenAbt2Script { neu: String },
     #[serde(rename = "rangvermerk_auslesen_abt2_script_testen")]
     RangvermerkAuslesenAbt2ScriptTesten { text: String },
-        
+
     #[serde(rename = "edit_text_kuerzen_abt3_script")]
     EditTextKuerzenAbt3Script { script: String },
     #[serde(rename = "kurztext_abt3_script_testen")]
@@ -132,7 +135,7 @@ pub enum Cmd {
     RechtsinhaberAuslesenAbt3ScriptTesten { text: String },
     #[serde(rename = "switch_aenderung_view")]
     SwitchAenderungView { i: usize },
-    
+
     #[serde(rename = "teste_regex")]
     TesteRegex { regex_id: String, text: String },
     #[serde(rename = "edit_regex_key")]
@@ -146,10 +149,16 @@ pub enum Cmd {
 
     // Check whether a "{file_name}".json with analyzed texts exists
     #[serde(rename = "check_for_pdf_loaded")]
-    CheckForPdfLoaded { file_path: String, file_name: String },
+    CheckForPdfLoaded {
+        file_path: String,
+        file_name: String,
+    },
     // Check whether a "{file_name}".json with analyzed texts exists
     #[serde(rename = "check_for_image_loaded")]
-    CheckForImageLoaded { file_path: String, file_name: String },
+    CheckForImageLoaded {
+        file_path: String,
+        file_name: String,
+    },
 
     #[serde(rename = "edit_text")]
     EditText { path: String, new_value: String },
@@ -191,15 +200,19 @@ pub enum Cmd {
     #[serde(rename = "zeile_neu")]
     ZeileNeu { file: String, page: usize, y: f32 },
     #[serde(rename = "zeile_loeschen")]
-    ZeileLoeschen { file: String, page: usize, zeilen_id: usize },
+    ZeileLoeschen {
+        file: String,
+        page: usize,
+        zeilen_id: usize,
+    },
     #[serde(rename = "bv_eintrag_typ_aendern")]
     BvEintragTypAendern { path: String, value: String },
-    
+
     #[serde(rename = "copy_text_to_clipboard")]
     CopyTextToClipboard { text: String },
     #[serde(rename = "save_state")]
     SaveState,
-    
+
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
     SetActiveRibbonTab { new_tab: usize },
@@ -207,4 +220,14 @@ pub enum Cmd {
     SetOpenFile { new_file: String },
     #[serde(rename = "set_open_page")]
     SetOpenPage { active_page: u32 },
+    #[serde(rename = "signal_pdf_page_rendered")]
+    SignalPdfPageRendered {
+        pdf_amtsgericht: String,
+        pdf_grundbuch_von: String,
+        pdf_blatt: String,
+        seite: usize,
+        geroetet: bool,
+        image_data_base64: String,
+        image_filename: String,
+    },
 }

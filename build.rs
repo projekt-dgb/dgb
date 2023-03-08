@@ -156,15 +156,23 @@ const RIBBON_CSS: &'static str = r#"
 "#;
 
 fn main() {
-    
     let mut main_css = include_str!("src/css/webkit-normalize.css").to_string();
     main_css.push_str(BODY_CSS);
     main_css.push_str(RIBBON_CSS);
     main_css.push_str(include_str!("src/css/view-grundbuch.css"));
-        
-    let main_script = include_str!("src/view.js");
-    
-    let main_html = format!("
+
+    let main_script = include_str!("src/view.js")
+        .replace(
+            "// INJECT_PDFJS_WORKER_SCRIPT",
+            include_str!("bin/pdfjs-3.0.279-legacy-dist/build/pdf.worker.js"),
+        )
+        .replace(
+            "// INJECT_PDFJS_SCRIPT",
+            include_str!("bin/pdfjs-3.0.279-legacy-dist/build/pdf.js"),
+        );
+
+    let main_html = format!(
+        "
     <!doctype html>
     <html>
         <head>
@@ -174,8 +182,9 @@ fn main() {
         </head>
         <body></body>
     </html>
-    ");
-    
+    "
+    );
+
     let mut file = File::create("src/app.html").unwrap();
     file.write_all(main_html.as_bytes()).unwrap();
 }

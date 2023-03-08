@@ -1,12 +1,12 @@
+use crate::Konfiguration;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use crate::Konfiguration;
-use serde::{Serialize, Deserialize};
-use wasmer::{Store, Module, Instance};
-use wasmer_wasi::{WasiFunctionEnv, WasiBidirectionalSharedPipePair, WasiState};
-use wasmer_vfs::{FileSystem, mem_fs::FileSystem as MemFileSystem};
+use wasmer::{Instance, Module, Store};
+use wasmer_vfs::{mem_fs::FileSystem as MemFileSystem, FileSystem};
+use wasmer_wasi::{WasiBidirectionalSharedPipePair, WasiFunctionEnv, WasiState};
 
 static PYTHON: &[u8] = include_bytes!("../bin/python.tar.gz");
 
@@ -32,7 +32,7 @@ enum PyResult {
     #[serde(rename = "ok")]
     Ok(PyOk),
     #[serde(rename = "err")]
-    Err(PyError)
+    Err(PyError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,129 +97,126 @@ impl SchuldenArt {
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub enum RechteArt {
-    SpeziellVormerkung { rechteverweis: usize },                          //     Vormerkung zur Sicherung
-    Abwasserleitungsrecht,                                                //     Abwasserleitungsrecht
-    Auflassungsvormerkung,                                                //     Auflassungsvormerkung
-    Ausbeutungsrecht,                                                     //     Ausbeutungsrecht
-    AusschlussDerAufhebungDerGemeinschaftGem1010BGB,                      //     Ausschluss der Aufhebung der Gemeinschaft gem. $ 1010 BGB
-    Baubeschraenkung,                                                     //     Baubeschränkung
-    Bebauungsverbot,                                                      //     Bebauungsverbot
-    Benutzungsrecht,                                                      //     Benutzungsrecht
-    BenutzungsregelungGem1010BGB,                                         //     Benutzungsregelung gem. §1010 BGB
-    Bepflanzungsverbot,                                                   //     Bepflanzungsverbot
-    Bergschadenverzicht,                                                  //     Bergschadenverzicht
-    Betretungsrecht,                                                      //     Betretungsrecht
-    Bewässerungsrecht,                                                    //     Bewässerungsrecht
-    BpD,                                                                  //     beschrankte persönliche Dienstbarkeit
-    BesitzrechtNachEGBGB,                                                 //     Besitzrecht nach EGBGB
-    BohrUndSchuerfrecht,                                                  //     Bohr- und Schürfrecht
-    Brunnenrecht,                                                         //     Brunnenrecht
-    Denkmalschutz,                                                        //     Denkmalschutz
-    DinglichesNutzungsrecht,                                              //     dingliches Nutzungsrecht
-    DuldungVonEinwirkungenDurchBaumwurf,                                  //     Duldung von Einwirkungen durch Baumwurf
-    DuldungVonFernmeldeanlagen,                                            //    Duldung von Femmeldeanlagen
-    Durchleitungsrecht,                                                   //     Durchleitungsrecht
-    EinsitzInsitzrecht,                                                   //     Einsitz-/ Insitzrecht
-    Entwasserungsrecht,                                                   //     Entwasserungsrecht
-    Erbbaurecht,                                                          //     Erbbaurecht
-    Erwerbsvormerkung,                                                    //     Erwerbsvormerkung
-    Fensterrecht,                                                         //     Fensterrecht
-    Fensterverbot,                                                        //     Fensterverbot
-    Fischereirecht,                                                       //     Fischereirecht
-    Garagenrecht,                                                         //     Garagenrecht
-    Gartenbenutzungsrecht,                                                //     Gartenbenutzungsrecht
-    GasleitungGasreglerstationFerngasltg,                                 //     Gasleitung‚ Gasreglerstation, Ferngasltg.
-    GehWegeFahrOderLeitungsrecht,                                         //     Geh-, Wege-, Fahr- oder Leitungsrecht
-    Gewerbebetriebsbeschrankung,                                          //     Gewerbebetriebsbeschrankung
-    GewerblichesBenutzungsrecht,                                          //     gewerbliches Benutzungsrecht
-    Grenzbebauungsrecht,                                                  //     Grenzbebauungsrecht
-    Grunddienstbarkeit,                                                   //     Grunddienstbarkeit
-    Hochspannungsleitungsrecht,                                           //     Hochspannungsleitungsrecht
-    Immissionsduldungsverpflichtung,                                      //     Immissionsduldungsverpflichtung
-    Insolvenzvermerk,                                                     //     Insolvenzvermerk
-    Kabelrecht,                                                           //     Kabelrecht
-    Kanalrecht,                                                           //     Kanalrecht
-    Kiesabbauberechtigung,                                                //     Kiesabbauberechtigung
-    Kraftfahrzeugabstellrecht,                                            //     Kraftfahrzeugabstellrecht
-    LeibgedingAltenteilsrechtAuszugsrecht,                                //     LeibgedingAttenteilsrechtAuszugsrecht
-    LeitungsOderAnlagenrecht,                                             //     LeitungsOderAnlagenrecht
-    Mauerrecht,                                                           //     Mauerrecht
-    Mitbenutzungsrecht,                                                   //     Mitbenutzungsrecht
-    Mobilfunkstationsrecht,                                               //     Mobilfunkstationsrecht
-    Muehlenrecht,                                                         //     Mühlenrecht
-    Mulltonnenabstellrecht,                                               //     Mulltonnenabstellrecht
-    Nacherbenvermerk,                                                     //     Nacherbenvermerk
-    Niessbrauchrecht,                                                     //     Nießbrauchrecht
-    Nutzungsbeschrankung,                                                 //     Nutzungsbeschrankung
-    Pfandung,                                                             //     Pfandung
-    Photovoltaikanlagenrecht,                                             //     Photovoltaikanlagenrecht
-    Pumpenrecht,                                                          //     Pumpenrecht
-    Reallast,                                                             //     Reallast
-    RegelungUeberDieHöheDerNotwegrenteGemaess912Bgb,                      //     Regelung über die Höhe der Notwegrente gemaß 8 912 BGB
-    RegelungUeberDieHöheDerUeberbaurenteGemaess912Bgb,                    //     Regelung über die Höhe der Überbaurente gemaß $ 912 BGB
-    Rueckauflassungsvormerkung,                                           //     Rueckauflassungsvormerkung
-    Ruckerwerbsvormerkung,                                                //     Ruckerwerbsvormerkung
-    Sanierungsvermerk,                                                    //     Sanierungsvermerk
-    Schachtrecht,                                                         //     Schachtrecht
-    SonstigeDabagrechteart,                                               //     sonstige dabag-Rechteart
-    SonstigeRechte,                                                       //     Sonstige Rechte
-    Tankstellenrecht,                                                     //     Tankstellenrecht
-    Testamentsvollstreckervermerk,                                        //     Testamentsvollstreckervermerk
-    Transformatorenrecht,                                                 //     Transformatorenrecht
-    Ueberbaurecht,                                                        //     Überbaurecht
-    UebernahmeVonAbstandsflachen,                                         //     Übernahme von Abstandsflachen
-    Umlegungsvermerk,                                                     //     Umlegungsvermerk
-    Umspannanlagenrecht,                                                  //     Umspannanlagenrecht
-    Untererbbaurecht,                                                     //     Untererbbaurecht
-    VerausserungsBelastungsverbot,                                        //     Veraußerungs-/Belastungsverbot
-    Verfuegungsverbot,                                                    //     Verfügungsverbot
-    VerwaltungsUndBenutzungsregelung,                                     //     Verwaltungs- und Benutzungsregelung
-    VerwaltungsregelungGem1010Bgb,                                        //     Verwaltungsregelung gem. & 1010 BGB
-    VerzichtAufNotwegerente,                                              //     Verzicht auf Notwegerente
-    VerzichtAufUeberbaurente,                                             //     Verzicht auf Überbaurente
-    Viehtrankerecht,                                                      //     Viehtrankerecht
-    Viehtreibrecht,                                                       //     Viehtreibrecht
-    Vorkaufsrecht,                                                        //     Vorkaufsrecht
-    Wasseraufnahmeverpflichtung,                                          //     Wasseraufnahmeverpflichtung
-    Wasserentnahmerecht,                                                  //     Wasserentnahmerecht
-    Weiderecht,                                                           //     Weiderecht
-    Widerspruch,                                                          //     Widerspruch
-    Windkraftanlagenrecht,                                                //     Windkraftanlagenrecht
-    Wohnrecht,                                                            //     Wohnrecht
-    WohnungsOderMitbenutzungsrecht,                                       //     Wohnungs- oder Mitbenutzungsrecht
-    Wohnungsbelegungsrecht,                                               //     Wohnungsbelegungsrecht
-    WohnungsrechtNach1093Bgb,                                             //     Wohnungsrecht nach 81093 BGB
-    Zaunerrichtungsverbot,                                                //     Zaunerrichtungsverbot
-    Zaunrecht,                                                            //     Zaunrecht
-    Zustimmungsvorbehalt,                                                 //     Zustimmungsvorbehalt
-    Zwangsversteigerungsvermerk,                                          //     Zwangsversteigerungsvermerk
-    Zwangsverwaltungsvermerk,                                             //     Zwangsverwaltungsvermerk
+    SpeziellVormerkung { rechteverweis: usize }, //     Vormerkung zur Sicherung
+    Abwasserleitungsrecht,                       //     Abwasserleitungsrecht
+    Auflassungsvormerkung,                       //     Auflassungsvormerkung
+    Ausbeutungsrecht,                            //     Ausbeutungsrecht
+    AusschlussDerAufhebungDerGemeinschaftGem1010BGB, //     Ausschluss der Aufhebung der Gemeinschaft gem. $ 1010 BGB
+    Baubeschraenkung,                                //     Baubeschränkung
+    Bebauungsverbot,                                 //     Bebauungsverbot
+    Benutzungsrecht,                                 //     Benutzungsrecht
+    BenutzungsregelungGem1010BGB,                    //     Benutzungsregelung gem. §1010 BGB
+    Bepflanzungsverbot,                              //     Bepflanzungsverbot
+    Bergschadenverzicht,                             //     Bergschadenverzicht
+    Betretungsrecht,                                 //     Betretungsrecht
+    Bewässerungsrecht,                              //     Bewässerungsrecht
+    BpD,                                             //     beschrankte persönliche Dienstbarkeit
+    BesitzrechtNachEGBGB,                            //     Besitzrecht nach EGBGB
+    BohrUndSchuerfrecht,                             //     Bohr- und Schürfrecht
+    Brunnenrecht,                                    //     Brunnenrecht
+    Denkmalschutz,                                   //     Denkmalschutz
+    DinglichesNutzungsrecht,                         //     dingliches Nutzungsrecht
+    DuldungVonEinwirkungenDurchBaumwurf,             //     Duldung von Einwirkungen durch Baumwurf
+    DuldungVonFernmeldeanlagen,                      //    Duldung von Femmeldeanlagen
+    Durchleitungsrecht,                              //     Durchleitungsrecht
+    EinsitzInsitzrecht,                              //     Einsitz-/ Insitzrecht
+    Entwasserungsrecht,                              //     Entwasserungsrecht
+    Erbbaurecht,                                     //     Erbbaurecht
+    Erwerbsvormerkung,                               //     Erwerbsvormerkung
+    Fensterrecht,                                    //     Fensterrecht
+    Fensterverbot,                                   //     Fensterverbot
+    Fischereirecht,                                  //     Fischereirecht
+    Garagenrecht,                                    //     Garagenrecht
+    Gartenbenutzungsrecht,                           //     Gartenbenutzungsrecht
+    GasleitungGasreglerstationFerngasltg, //     Gasleitung‚ Gasreglerstation, Ferngasltg.
+    GehWegeFahrOderLeitungsrecht,         //     Geh-, Wege-, Fahr- oder Leitungsrecht
+    Gewerbebetriebsbeschrankung,          //     Gewerbebetriebsbeschrankung
+    GewerblichesBenutzungsrecht,          //     gewerbliches Benutzungsrecht
+    Grenzbebauungsrecht,                  //     Grenzbebauungsrecht
+    Grunddienstbarkeit,                   //     Grunddienstbarkeit
+    Hochspannungsleitungsrecht,           //     Hochspannungsleitungsrecht
+    Immissionsduldungsverpflichtung,      //     Immissionsduldungsverpflichtung
+    Insolvenzvermerk,                     //     Insolvenzvermerk
+    Kabelrecht,                           //     Kabelrecht
+    Kanalrecht,                           //     Kanalrecht
+    Kiesabbauberechtigung,                //     Kiesabbauberechtigung
+    Kraftfahrzeugabstellrecht,            //     Kraftfahrzeugabstellrecht
+    LeibgedingAltenteilsrechtAuszugsrecht, //     LeibgedingAttenteilsrechtAuszugsrecht
+    LeitungsOderAnlagenrecht,             //     LeitungsOderAnlagenrecht
+    Mauerrecht,                           //     Mauerrecht
+    Mitbenutzungsrecht,                   //     Mitbenutzungsrecht
+    Mobilfunkstationsrecht,               //     Mobilfunkstationsrecht
+    Muehlenrecht,                         //     Mühlenrecht
+    Mulltonnenabstellrecht,               //     Mulltonnenabstellrecht
+    Nacherbenvermerk,                     //     Nacherbenvermerk
+    Niessbrauchrecht,                     //     Nießbrauchrecht
+    Nutzungsbeschrankung,                 //     Nutzungsbeschrankung
+    Pfandung,                             //     Pfandung
+    Photovoltaikanlagenrecht,             //     Photovoltaikanlagenrecht
+    Pumpenrecht,                          //     Pumpenrecht
+    Reallast,                             //     Reallast
+    RegelungUeberDieHöheDerNotwegrenteGemaess912Bgb, //     Regelung über die Höhe der Notwegrente gemaß 8 912 BGB
+    RegelungUeberDieHöheDerUeberbaurenteGemaess912Bgb, //     Regelung über die Höhe der Überbaurente gemaß $ 912 BGB
+    Rueckauflassungsvormerkung,                         //     Rueckauflassungsvormerkung
+    Ruckerwerbsvormerkung,                              //     Ruckerwerbsvormerkung
+    Sanierungsvermerk,                                  //     Sanierungsvermerk
+    Schachtrecht,                                       //     Schachtrecht
+    SonstigeDabagrechteart,                             //     sonstige dabag-Rechteart
+    SonstigeRechte,                                     //     Sonstige Rechte
+    Tankstellenrecht,                                   //     Tankstellenrecht
+    Testamentsvollstreckervermerk,                      //     Testamentsvollstreckervermerk
+    Transformatorenrecht,                               //     Transformatorenrecht
+    Ueberbaurecht,                                      //     Überbaurecht
+    UebernahmeVonAbstandsflachen,                       //     Übernahme von Abstandsflachen
+    Umlegungsvermerk,                                   //     Umlegungsvermerk
+    Umspannanlagenrecht,                                //     Umspannanlagenrecht
+    Untererbbaurecht,                                   //     Untererbbaurecht
+    VerausserungsBelastungsverbot,                      //     Veraußerungs-/Belastungsverbot
+    Verfuegungsverbot,                                  //     Verfügungsverbot
+    VerwaltungsUndBenutzungsregelung,                   //     Verwaltungs- und Benutzungsregelung
+    VerwaltungsregelungGem1010Bgb,                      //     Verwaltungsregelung gem. & 1010 BGB
+    VerzichtAufNotwegerente,                            //     Verzicht auf Notwegerente
+    VerzichtAufUeberbaurente,                           //     Verzicht auf Überbaurente
+    Viehtrankerecht,                                    //     Viehtrankerecht
+    Viehtreibrecht,                                     //     Viehtreibrecht
+    Vorkaufsrecht,                                      //     Vorkaufsrecht
+    Wasseraufnahmeverpflichtung,                        //     Wasseraufnahmeverpflichtung
+    Wasserentnahmerecht,                                //     Wasserentnahmerecht
+    Weiderecht,                                         //     Weiderecht
+    Widerspruch,                                        //     Widerspruch
+    Windkraftanlagenrecht,                              //     Windkraftanlagenrecht
+    Wohnrecht,                                          //     Wohnrecht
+    WohnungsOderMitbenutzungsrecht,                     //     Wohnungs- oder Mitbenutzungsrecht
+    Wohnungsbelegungsrecht,                             //     Wohnungsbelegungsrecht
+    WohnungsrechtNach1093Bgb,                           //     Wohnungsrecht nach 81093 BGB
+    Zaunerrichtungsverbot,                              //     Zaunerrichtungsverbot
+    Zaunrecht,                                          //     Zaunrecht
+    Zustimmungsvorbehalt,                               //     Zustimmungsvorbehalt
+    Zwangsversteigerungsvermerk,                        //     Zwangsversteigerungsvermerk
+    Zwangsverwaltungsvermerk,                           //     Zwangsverwaltungsvermerk
 }
 
 impl RechteArt {
     pub fn benoetigt_rechteinhaber(&self) -> bool {
         match self {
-            | RechteArt::VerausserungsBelastungsverbot
-            | RechteArt::Auflassungsvormerkung => false,
+            RechteArt::VerausserungsBelastungsverbot | RechteArt::Auflassungsvormerkung => false,
             _ => true,
         }
     }
 }
 
 impl PyVm {
-
     pub fn new() -> Result<Self, String> {
-
         let mut python_unpacked = unpack_tar_gz(PYTHON.to_vec(), "python/atom/").unwrap();
-        let python_wasm = python_unpacked.remove(
-            &DirOrFile::File(Path::new("lib/python.wasm").to_path_buf())
-        ).expect("cannot find lib/python.wasm?");
-        
+        let python_wasm = python_unpacked
+            .remove(&DirOrFile::File(Path::new("lib/python.wasm").to_path_buf()))
+            .expect("cannot find lib/python.wasm?");
+
         let mut store = Store::default();
         let mut module = Module::from_binary(&store, &python_wasm).unwrap();
         module.set_name("python");
         let bytes = module.serialize().unwrap();
-        
+
         Ok(Self {
             python_compiled_module: bytes.to_vec(),
             file_system: python_unpacked,
@@ -227,68 +224,72 @@ impl PyVm {
         })
     }
 
-    pub fn execute_script(&self, konfiguration: &Konfiguration, args: ExecuteScriptType) -> Result<PyOk, PyError> {
+    pub fn execute_script(
+        &self,
+        konfiguration: &Konfiguration,
+        args: ExecuteScriptType,
+    ) -> Result<PyOk, PyError> {
         use std::io::Read;
 
         let key = get_script_cache_key(&konfiguration.regex, &args);
 
         println!("execute script {key}: {:#?}", args);
 
-        match self.script_result.try_lock().ok().and_then(|lock| lock.get(&key).cloned()) {
+        match self
+            .script_result
+            .try_lock()
+            .ok()
+            .and_then(|lock| lock.get(&key).cloned())
+        {
             Some(PyResult::Ok(o)) => return Ok(o.clone()),
             Some(PyResult::Err(e)) => return Err(e.clone()),
-            _ => { },
+            _ => {}
         }
 
         let generated = generate_script(konfiguration, &args);
-        
+
         let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
-            DirOrFile::File(Path::new("lib/file.py").to_path_buf()), 
+            DirOrFile::File(Path::new("lib/file.py").to_path_buf()),
             generated.as_bytes().to_vec(),
         );
 
         let mut store = Store::default();
-        let mut module = unsafe { Module::deserialize(
-                &store, 
-                self.python_compiled_module.clone()
-            ) 
-        }.map_err(|e| PyError {
-            text: format!("failed to deserialize module: {e}")
-        })?;
-        
+        let mut module =
+            unsafe { Module::deserialize(&store, self.python_compiled_module.clone()) }.map_err(
+                |e| PyError {
+                    text: format!("failed to deserialize module: {e}"),
+                },
+            )?;
+
         module.set_name("python");
-        
-        let mut stdout_pipe = 
-            WasiBidirectionalSharedPipePair::new()
-            .with_blocking(false);
-    
-        let wasi_env = prepare_webc_env(
-            &mut store, 
-            stdout_pipe.clone(),
-            &python_unpacked, 
-            "python",
-        ).map_err(|e| PyError {
-            text: format!("{e}")
+
+        let mut stdout_pipe = WasiBidirectionalSharedPipePair::new().with_blocking(false);
+
+        let wasi_env =
+            prepare_webc_env(&mut store, stdout_pipe.clone(), &python_unpacked, "python").map_err(
+                |e| PyError {
+                    text: format!("{e}"),
+                },
+            )?;
+
+        exec_module(&mut store, &module, wasi_env).map_err(|e| PyError {
+            text: format!("{e}"),
         })?;
-    
-        exec_module(&mut store, &module, wasi_env)
-        .map_err(|e| PyError { text: format!("{e}") })?;
 
         let mut buf = Vec::new();
         stdout_pipe.read_to_end(&mut buf).map_err(|e| PyError {
-            text: format!("failed to read pipe: {e}")
+            text: format!("failed to read pipe: {e}"),
         })?;
 
-        let result: PyResult = serde_json::from_slice(&buf)
-        .map_err(|e| PyError {
-            text: format!("serde_json from slice: {e}")
+        let result: PyResult = serde_json::from_slice(&buf).map_err(|e| PyError {
+            text: format!("serde_json from slice: {e}"),
         })?;
-        
-        self.script_result.try_lock().ok()
-        .and_then(|mut lock| {
-            lock.insert(key, result.clone())
-        });
+
+        self.script_result
+            .try_lock()
+            .ok()
+            .and_then(|mut lock| lock.insert(key, result.clone()));
 
         println!("{result:?}");
 
@@ -320,8 +321,7 @@ fn unpack_tar_gz(bytes: Vec<u8>, prefix: &str) -> Result<FileMap, String> {
         .join(&format!("{rand_dir}"));
 
     let _ = std::fs::remove_dir(&tempdir); // no error if dir doesn't exist
-    let _ = std::fs::create_dir_all(&tempdir)
-        .map_err(|e| format!("{}: {e}", tempdir.display()))?;
+    let _ = std::fs::create_dir_all(&tempdir).map_err(|e| format!("{}: {e}", tempdir.display()))?;
 
     let mut files = BTreeMap::default();
 
@@ -355,12 +355,11 @@ fn unpack_tar_gz(bytes: Vec<u8>, prefix: &str) -> Result<FileMap, String> {
         };
 
         let bytes = match &path {
-            DirOrFile::File(_) => std::fs::read(&outpath)
-                .map_err(|e| format!("{}: {e}", outpath.display()))?,
+            DirOrFile::File(_) => {
+                std::fs::read(&outpath).map_err(|e| format!("{}: {e}", outpath.display()))?
+            }
             DirOrFile::Dir(_) => Vec::new(),
         };
-
-
 
         let path = match &path {
             DirOrFile::File(f) => {
@@ -369,19 +368,17 @@ fn unpack_tar_gz(bytes: Vec<u8>, prefix: &str) -> Result<FileMap, String> {
                 }
                 // python/atom/lib/
                 DirOrFile::File(
-                    Path::new(&format!("{}", f.display())
-                    .replacen(prefix, "", 1)
-                ).to_path_buf())
-            },
+                    Path::new(&format!("{}", f.display()).replacen(prefix, "", 1)).to_path_buf(),
+                )
+            }
             DirOrFile::Dir(d) => {
                 if !format!("{}", d.display()).starts_with(prefix) {
                     continue;
                 }
                 // python/atom/lib/
                 DirOrFile::Dir(
-                    Path::new(&format!("{}", d.display())
-                    .replacen(prefix, "", 1)
-                ).to_path_buf())
+                    Path::new(&format!("{}", d.display()).replacen(prefix, "", 1)).to_path_buf(),
+                )
             }
         };
 
@@ -402,23 +399,27 @@ fn prepare_webc_env(
     let fs = MemFileSystem::default();
     for key in files.keys() {
         match key {
-            DirOrFile::Dir(d) => { 
+            DirOrFile::Dir(d) => {
                 let mut s = format!("{}", d.display());
-                if s.is_empty() { continue; }
+                if s.is_empty() {
+                    continue;
+                }
                 let s = format!("/{s}");
-                let _ = fs.create_dir(Path::new(&s)); 
-            },
-            DirOrFile::File(f) => {
-
-            },
+                let _ = fs.create_dir(Path::new(&s));
+            }
+            DirOrFile::File(f) => {}
         }
     }
     for (k, v) in files.iter() {
         match k {
-            DirOrFile::Dir(d) => { continue; },
-            DirOrFile::File(d) => { 
+            DirOrFile::Dir(d) => {
+                continue;
+            }
+            DirOrFile::File(d) => {
                 let mut s = format!("{}", d.display());
-                if s.is_empty() { continue; }
+                if s.is_empty() {
+                    continue;
+                }
                 let s = format!("/{s}");
                 let mut file = fs
                     .new_open_options()
@@ -428,9 +429,9 @@ fn prepare_webc_env(
                     .create(true)
                     .open(&Path::new(&s))
                     .unwrap();
-                
+
                 file.write(&v).unwrap();
-            },
+            }
         }
     }
 
@@ -442,25 +443,22 @@ fn prepare_webc_env(
             DirOrFile::Dir(d) => format!("{}", d.display()),
             DirOrFile::File(f) => continue,
         };
-        if s.is_empty() { continue; }
+        if s.is_empty() {
+            continue;
+        }
         let s = format!("/{s}");
-        wasi_env.preopen(|p| {
-            p.directory(&s).read(true).write(true).create(true)
-        })
-        .map_err(|e| format!("E4: {e}"))?;
+        wasi_env
+            .preopen(|p| p.directory(&s).read(true).write(true).create(true))
+            .map_err(|e| format!("E4: {e}"))?;
     }
 
     let mut wasi_env = wasi_env
-    .env("PYTHONHOME", "/")
-    .env("PYTHONIOENCODING", "UTF-8")
-    .arg("/lib/file.py")
-    .stdout(Box::new(stdout));
+        .env("PYTHONHOME", "/")
+        .env("PYTHONIOENCODING", "UTF-8")
+        .arg("/lib/file.py")
+        .stdout(Box::new(stdout));
 
-    Ok(
-        wasi_env
-        .finalize(store)
-        .map_err(|e| format!("E5: {e}"))?    
-    )
+    Ok(wasi_env.finalize(store).map_err(|e| format!("E5: {e}"))?)
 }
 
 fn exec_module(
@@ -468,12 +466,13 @@ fn exec_module(
     module: &Module,
     mut wasi_env: wasmer_wasi::WasiFunctionEnv,
 ) -> Result<(), String> {
-
-    let import_object = wasi_env.import_object(store, &module)
+    let import_object = wasi_env
+        .import_object(store, &module)
         .map_err(|e| format!("{e}"))?;
-    let instance = Instance::new(store, &module, &import_object)
-        .map_err(|e| format!("{e}"))?;
-    let memory = instance.exports.get_memory("memory")
+    let instance = Instance::new(store, &module, &import_object).map_err(|e| format!("{e}"))?;
+    let memory = instance
+        .exports
+        .get_memory("memory")
         .map_err(|e| format!("{e}"))?;
     wasi_env.data_mut(store).set_memory(memory.clone());
 
@@ -484,20 +483,19 @@ fn exec_module(
             .map_err(|e| format!("failed to run _initialize function: {e}"))?;
     }
 
-    let result = instance.exports
+    let result = instance
+        .exports
         .get_function("_start")
         .map_err(|e| format!("{e}"))?
         .call(store, &[])
         .map_err(|e| format!("{e}"))?;
 
-        Ok(())
+    Ok(())
 }
 
 fn nuke_dir(path: &Path) -> Result<(), String> {
     use std::fs;
-    for entry in
-        fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?
-    {
+    for entry in fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))? {
         let entry = entry.map_err(|e| format!("{}: {e}", path.display()))?;
         let path = entry.path();
 
@@ -507,11 +505,9 @@ fn nuke_dir(path: &Path) -> Result<(), String> {
 
         if file_type.is_dir() {
             nuke_dir(&path)?;
-            fs::remove_dir(&path)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+            fs::remove_dir(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         } else {
-            fs::remove_file(&path)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+            fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         }
     }
 
@@ -519,7 +515,7 @@ fn nuke_dir(path: &Path) -> Result<(), String> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Waehrung { 
+pub enum Waehrung {
     Euro,
     DMark,
     MarkDDR,
@@ -565,7 +561,7 @@ pub struct Spalte1Eintrag {
     // Nummer im BV
     pub lfd_nr: usize,
     // "Teil von", "Teil v.", "X tlw."
-    pub voll_belastet: bool,    
+    pub voll_belastet: bool,
     // Leer = gesamte lfd. Nr. ist belastet
     pub nur_lastend_an: Vec<FlurFlurstueck>,
 }
@@ -594,17 +590,18 @@ impl fmt::Display for FlurFlurstueck {
 }
 
 pub fn text_saubern(
-    vm: PyVm, 
-    rechtstext: &str, 
-    konfiguration: &Konfiguration
+    vm: PyVm,
+    rechtstext: &str,
+    konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-
-    let result = vm.execute_script(
-        konfiguration, 
-        ExecuteScriptType::TextSaubern { 
-            recht: rechtstext.to_string() 
-        }
-    ).map_err(|e| format!("{:?}", e))?;
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::TextSaubern {
+                recht: rechtstext.to_string(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Str(s) => Ok(s),
@@ -613,19 +610,20 @@ pub fn text_saubern(
 }
 
 pub fn get_belastete_flurstuecke(
-    vm: PyVm, 
-	bv_nr: &str, 
-	text_sauber: &str, 
-	konfiguration: &Konfiguration,
+    vm: PyVm,
+    bv_nr: &str,
+    text_sauber: &str,
+    konfiguration: &Konfiguration,
 ) -> Result<Spalte1Eintraege, String> {
-    
-    let result = vm.execute_script(
-        konfiguration, 
-        ExecuteScriptType::FlurstueckeAuslesen { 
-            spalte1: bv_nr.to_string(), 
-            text: text_sauber.to_string() 
-        }
-    ).map_err(|e| format!("{:?}", e))?;
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::FlurstueckeAuslesen {
+                spalte1: bv_nr.to_string(),
+                text: text_sauber.to_string(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Spalte1(s) => Ok(s),
@@ -633,16 +631,11 @@ pub fn get_belastete_flurstuecke(
     }
 }
 
-pub fn get_abkuerzungen(
-    vm: PyVm,
-    konfiguration: &Konfiguration,
-) -> Result<Vec<String>, String> {
-    
-    let result = vm.execute_script(
-        konfiguration, 
-        ExecuteScriptType::GetAbkuerzungen,
-    ).map_err(|e| format!("{:?}", e))?;
-    
+pub fn get_abkuerzungen(vm: PyVm, konfiguration: &Konfiguration) -> Result<Vec<String>, String> {
+    let result = vm
+        .execute_script(konfiguration, ExecuteScriptType::GetAbkuerzungen)
+        .map_err(|e| format!("{:?}", e))?;
+
     match result {
         PyOk::List(s) => Ok(s),
         e => Err(format!("{:?}", e)),
@@ -656,13 +649,15 @@ pub fn get_rechte_art_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<RechteArt, String> {
-    let result = vm.execute_script(
-        konfiguration, 
-        ExecuteScriptType::KlassifiziereRechteArtAbt2 { 
-            saetze: saetze_clean.to_vec()  
-        }
-    ).map_err(|e| format!("{:?}", e))?;
-    
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::KlassifiziereRechteArtAbt2 {
+                saetze: saetze_clean.to_vec(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
+
     match result {
         PyOk::RechteArt(s) => Ok(s),
         e => Err(format!("{:?}", e)),
@@ -676,13 +671,15 @@ pub fn get_rangvermerk_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-    let result = vm.execute_script(
-        konfiguration, 
-        ExecuteScriptType::RangvermerkAuslesen { 
-            saetze: saetze_clean.to_vec() 
-        }
-    ).map_err(|e| format!("{:?}", e))?;
-    
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::RangvermerkAuslesen {
+                saetze: saetze_clean.to_vec(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
+
     match result {
         PyOk::Str(s) => Ok(s),
         e => Err(format!("{:?}", e)),
@@ -696,10 +693,15 @@ pub fn get_rechtsinhaber_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-    let result = vm.execute_script(konfiguration, ExecuteScriptType::RechtsinhaberAuslesenAbt2 { 
-        saetze: saetze_clean.to_vec() 
-    }).map_err(|e| format!("{:?}", e))?;
-    
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::RechtsinhaberAuslesenAbt2 {
+                saetze: saetze_clean.to_vec(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
+
     match result {
         PyOk::Str(s) => Ok(s),
         e => Err(format!("{:?}", e)),
@@ -713,13 +715,15 @@ pub fn get_betrag_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<Betrag, String> {
-    let result = vm.execute_script(
-        konfiguration,
-        ExecuteScriptType::BetragAuslesen { 
-            saetze: saetze_clean.to_vec() 
-        }
-    ).map_err(|e| format!("{:?}", e))?;
-    
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::BetragAuslesen {
+                saetze: saetze_clean.to_vec(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
+
     match result {
         PyOk::Betrag(s) => Ok(s),
         e => Err(format!("{:?}", e)),
@@ -733,13 +737,14 @@ pub fn get_schulden_art_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<SchuldenArt, String> {
-    
-    let result = vm.execute_script(
-        konfiguration,
-        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { 
-            saetze: saetze_clean.to_vec() 
-        }
-    ).map_err(|e| format!("{:?}", e))?;
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::KlassifiziereSchuldenArtAbt3 {
+                saetze: saetze_clean.to_vec(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::SchuldenArt(s) => Ok(s),
@@ -754,13 +759,15 @@ pub fn get_rechtsinhaber_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-    let result = vm.execute_script(
-        konfiguration,
-        ExecuteScriptType::RechtsinhaberAuslesenAbt3 { 
-            saetze: saetze_clean.to_vec(), 
-            recht_id: recht_id.to_string() 
-        }
-    ).map_err(|e| format!("{:?}", e))?;
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::RechtsinhaberAuslesenAbt3 {
+                saetze: saetze_clean.to_vec(),
+                recht_id: recht_id.to_string(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Str(s) => Ok(s),
@@ -777,14 +784,16 @@ pub fn get_kurztext_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-
-    let result = vm.execute_script(
-        &konfiguration, 
-        ExecuteScriptType::TextKuerzenAbt2 { 
-            saetze: saetze_clean.to_vec(), 
-            rechtsinhaber: rechtsinhaber.unwrap_or_default(), 
-            rangvermerk: rangvermerk.unwrap_or_default(),
-        }).map_err(|e| format!("{:?}", e))?;
+    let result = vm
+        .execute_script(
+            &konfiguration,
+            ExecuteScriptType::TextKuerzenAbt2 {
+                saetze: saetze_clean.to_vec(),
+                rechtsinhaber: rechtsinhaber.unwrap_or_default(),
+                rangvermerk: rangvermerk.unwrap_or_default(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Str(s) => Ok(s),
@@ -802,15 +811,17 @@ pub fn get_kurztext_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, String> {
-
-    let result = vm.execute_script(
-        konfiguration,
-        ExecuteScriptType::TextKuerzenAbt3 { 
-            saetze: saetze_clean.to_vec(), 
-            betrag: betrag.unwrap_or_default(), 
-            schuldenart: schuldenart.unwrap_or_default(), 
-            rechtsinhaber: rechtsinhaber.unwrap_or_default(),
-    }).map_err(|e| format!("{:?}", e))?;
+    let result = vm
+        .execute_script(
+            konfiguration,
+            ExecuteScriptType::TextKuerzenAbt3 {
+                saetze: saetze_clean.to_vec(),
+                betrag: betrag.unwrap_or_default(),
+                schuldenart: schuldenart.unwrap_or_default(),
+                rechtsinhaber: rechtsinhaber.unwrap_or_default(),
+            },
+        )
+        .map_err(|e| format!("{:?}", e))?;
 
     match result {
         PyOk::Str(s) => Ok(s),
@@ -822,13 +833,11 @@ pub fn get_kurztext_abt3(
 fn test_pym_script_1() {
     let vm = PyVm::new().unwrap();
     let konfiguration = Konfiguration {
-        text_saubern_script: vec![
-            "return \"hello\"".to_string()
-        ],
-        .. Konfiguration::parse_from(Konfiguration::DEFAULT).unwrap()
+        text_saubern_script: vec!["return \"hello\"".to_string()],
+        ..Konfiguration::parse_from(Konfiguration::DEFAULT).unwrap()
     };
-    let args = ExecuteScriptType::TextSaubern { 
-        recht: String::new(), 
+    let args = ExecuteScriptType::TextSaubern {
+        recht: String::new(),
     };
     let ok = vm.execute_script(&konfiguration, args).unwrap();
 }
@@ -839,7 +848,7 @@ pub type RegexMap = BTreeMap<String, String>;
 pub enum ExecuteScriptType {
     // text_saubern(recht: String, re: [String -> Regex]) -> String
     TextSaubern {
-        recht: String, 
+        recht: String,
     },
     // abkuerzungen(re: [String -> Regex]) -> [String]
     GetAbkuerzungen,
@@ -884,8 +893,8 @@ pub enum ExecuteScriptType {
         saetze: Vec<String>,
         betrag: String,
         schuldenart: String,
-        rechtsinhaber: String, 
-    }
+        rechtsinhaber: String,
+    },
 }
 
 fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) -> String {
@@ -894,7 +903,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
     let ra_sa = match script {
         ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => "ra = True",
         ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => "sa = True",
-        _ => ""
+        _ => "",
     };
 
     let script_args = match script {
@@ -905,7 +914,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             }
             s.push_str("])\n\n");
             s
-        },
+        }
         ExecuteScriptType::GetAbkuerzungen { .. } => String::new(),
         ExecuteScriptType::FlurstueckeAuslesen { spalte1, text, .. } => {
             let mut s = String::new();
@@ -920,7 +929,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             }
             s.push_str("])\n\n");
             s
-        },
+        }
         ExecuteScriptType::KlassifiziereRechteArtAbt2 { saetze, .. } => {
             let mut s = String::new();
             s.push_str(&format!("saetze = [\n"));
@@ -929,7 +938,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             }
             s.push_str("]\n\n");
             s
-        },
+        }
         ExecuteScriptType::RechtsinhaberAuslesenAbt2 { saetze, .. } => {
             let mut s = String::new();
             s.push_str(&format!("saetze = [\n"));
@@ -938,7 +947,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             }
             s.push_str("]\n\n");
             s
-        },
+        }
         ExecuteScriptType::RangvermerkAuslesen { saetze, .. } => {
             let mut s = String::new();
             s.push_str(&format!("saetze = [\n"));
@@ -947,12 +956,12 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             }
             s.push_str("]\n\n");
             s
-        },
-        ExecuteScriptType::TextKuerzenAbt2 { 
-            saetze, 
-            rechtsinhaber, 
-            rangvermerk, 
-            .. 
+        }
+        ExecuteScriptType::TextKuerzenAbt2 {
+            saetze,
+            rechtsinhaber,
+            rangvermerk,
+            ..
         } => {
             let mut s = String::new();
 
@@ -975,7 +984,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             s.push_str("])\n\n");
 
             s
-        },
+        }
         ExecuteScriptType::BetragAuslesen { saetze, .. } => {
             let mut s = String::new();
 
@@ -986,7 +995,7 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             s.push_str("])\n\n");
 
             s
-        },
+        }
         ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { saetze, .. } => {
             let mut s = String::new();
 
@@ -997,15 +1006,14 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             s.push_str("])\n\n");
 
             s
-        },
-        ExecuteScriptType::TextKuerzenAbt3 { 
-            saetze, 
-            betrag, 
-            schuldenart, 
-            rechtsinhaber, 
-            .. 
+        }
+        ExecuteScriptType::TextKuerzenAbt3 {
+            saetze,
+            betrag,
+            schuldenart,
+            rechtsinhaber,
+            ..
         } => {
-
             let mut s = String::new();
 
             s.push_str(&format!("saetze = [\n"));
@@ -1024,9 +1032,10 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
             s.push_str(&format!("rechtsinhaber = \"{rechtsinhaber}\"\n\n"));
 
             s
-        },
-        ExecuteScriptType::RechtsinhaberAuslesenAbt3 { saetze, recht_id, .. } => {
-            
+        }
+        ExecuteScriptType::RechtsinhaberAuslesenAbt3 {
+            saetze, recht_id, ..
+        } => {
             let mut s = String::new();
 
             s.push_str(&format!("saetze = [\n"));
@@ -1043,8 +1052,8 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
     .lines()
     .map(|l| {
         format!("    {}", l)
-        .replace("\t", "    ")
-        .replace("\u{00a0}", " ")
+            .replace("\t", "    ")
+            .replace("\u{00a0}", " ")
     })
     .collect::<Vec<_>>()
     .join("\n");
@@ -1052,50 +1061,63 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
     println!("SCRIPT_ARGS:\n{script_args}");
 
     WRAPPER
-    .replace("## RA_SA", &ra_sa)
-    .replace("## REGEX_LIST", &{
-        let mut s = format!("re = {{}}\n");
-        for (k, v) in konfiguration.regex.iter() {
-            let k = k
-                .replace("\"", "")
-                .replace("\n", "")
-                .replace("\r\n", "")
-                .replace("'", "\'");
-            let v = v
-                .replace("\n", "")
-                .replace("\r\n", "");
-            s.push_str(&format!("re[\"{k}\"] = Regex(r'{v}')\n"));
-        }
-        s
-    })
-    .replace("## MAIN_SCRIPT", &format!("{script_args}\n{}", match script {
-        ExecuteScriptType::TextSaubern { .. } => &konfiguration.text_saubern_script,
-        ExecuteScriptType::GetAbkuerzungen { .. } => &konfiguration.abkuerzungen_script,
-        ExecuteScriptType::FlurstueckeAuslesen { .. } => &konfiguration.flurstuecke_auslesen_script,
-        ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => &konfiguration.klassifiziere_rechteart,
-        ExecuteScriptType::RechtsinhaberAuslesenAbt2 { .. } => &konfiguration.rechtsinhaber_auslesen_abt2_script,
-        ExecuteScriptType::RangvermerkAuslesen { .. } => &konfiguration.rangvermerk_auslesen_abt2_script,
-        ExecuteScriptType::TextKuerzenAbt2 { .. } => &konfiguration.text_kuerzen_abt2_script,
-        ExecuteScriptType::BetragAuslesen { .. } => &konfiguration.betrag_auslesen_script,
-        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => &konfiguration.klassifiziere_schuldenart,
-        ExecuteScriptType::TextKuerzenAbt3 { .. } => &konfiguration.text_kuerzen_abt3_script,
-        ExecuteScriptType::RechtsinhaberAuslesenAbt3 { .. } => &konfiguration.rechtsinhaber_auslesen_abt3_script,
-    }
-    .iter()
-    .map(|l| {
-        format!("    {}", l)
-        .replace("\t", "    ")
-        .replace("\u{00a0}", " ")
-    })
-    .collect::<Vec<_>>()
-    .join("\n")))
+        .replace("## RA_SA", &ra_sa)
+        .replace("## REGEX_LIST", &{
+            let mut s = format!("re = {{}}\n");
+            for (k, v) in konfiguration.regex.iter() {
+                let k = k
+                    .replace("\"", "")
+                    .replace("\n", "")
+                    .replace("\r\n", "")
+                    .replace("'", "\'");
+                let v = v.replace("\n", "").replace("\r\n", "");
+                s.push_str(&format!("re[\"{k}\"] = Regex(r'{v}')\n"));
+            }
+            s
+        })
+        .replace(
+            "## MAIN_SCRIPT",
+            &format!(
+                "{script_args}\n{}",
+                match script {
+                    ExecuteScriptType::TextSaubern { .. } => &konfiguration.text_saubern_script,
+                    ExecuteScriptType::GetAbkuerzungen { .. } => &konfiguration.abkuerzungen_script,
+                    ExecuteScriptType::FlurstueckeAuslesen { .. } =>
+                        &konfiguration.flurstuecke_auslesen_script,
+                    ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } =>
+                        &konfiguration.klassifiziere_rechteart,
+                    ExecuteScriptType::RechtsinhaberAuslesenAbt2 { .. } =>
+                        &konfiguration.rechtsinhaber_auslesen_abt2_script,
+                    ExecuteScriptType::RangvermerkAuslesen { .. } =>
+                        &konfiguration.rangvermerk_auslesen_abt2_script,
+                    ExecuteScriptType::TextKuerzenAbt2 { .. } =>
+                        &konfiguration.text_kuerzen_abt2_script,
+                    ExecuteScriptType::BetragAuslesen { .. } =>
+                        &konfiguration.betrag_auslesen_script,
+                    ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } =>
+                        &konfiguration.klassifiziere_schuldenart,
+                    ExecuteScriptType::TextKuerzenAbt3 { .. } =>
+                        &konfiguration.text_kuerzen_abt3_script,
+                    ExecuteScriptType::RechtsinhaberAuslesenAbt3 { .. } =>
+                        &konfiguration.rechtsinhaber_auslesen_abt3_script,
+                }
+                .iter()
+                .map(|l| {
+                    format!("    {}", l)
+                        .replace("\t", "    ")
+                        .replace("\u{00a0}", " ")
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+            ),
+        )
 }
 
 // Um das Ergebnis eines einzelnen Scripts nicht unnötig wiederholen zu müssen,
 // speichert die VM das Ergebnis des Scripts mit dem Schlüssel der Inputs,
 // da f(x) -> y immer den gleichen Wert ergibt für denselben Input x
 fn get_script_cache_key(regex: &RegexMap, script: &ExecuteScriptType) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(serde_json::to_string(script).unwrap_or_default().as_bytes());
     hasher.update(serde_json::to_string(regex).unwrap_or_default().as_bytes());
