@@ -207,9 +207,6 @@ pub enum Cmd {
     },
     #[serde(rename = "bv_eintrag_typ_aendern")]
     BvEintragTypAendern { path: String, value: String },
-
-    #[serde(rename = "copy_text_to_clipboard")]
-    CopyTextToClipboard { text: String },
     #[serde(rename = "save_state")]
     SaveState,
 

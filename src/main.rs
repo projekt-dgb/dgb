@@ -5,22 +5,22 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::Mutex;
 
 use crate::analyse::GrundbuchAnalysiert;
+use crate::digital::HocrLayout;
 use crate::digital::{
     Abt1Eintrag, Abt1GrundEintragung, Abt1Loeschung, Abt1Veraenderung, Abt2Eintrag, Abt2Loeschung,
     Abt2Veraenderung, Abt3Eintrag, Abt3Loeschung, Abt3Veraenderung, Anrede, BvAbschreibung,
-    BvEintrag, BvZuschreibung, Fehler, Grundbuch, Nebenbeteiligter, NebenbeteiligterExport,
-    NebenbeteiligterExtra, NebenbeteiligterTyp, PdfToTextLayout, SeiteParsed, SeitenTyp,
-    Titelblatt,
+    BvEintrag, BvZuschreibung, Grundbuch, Nebenbeteiligter, NebenbeteiligterExport,
+    NebenbeteiligterExtra, NebenbeteiligterTyp, SeitenTyp, Titelblatt,
 };
 use crate::digital::{Abteilung1, Abteilung2, Abteilung3, Bestandsverzeichnis};
 use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt};
+use digital::HocrSeite;
+use digital::ParsedHocr;
 use serde_derive::{Deserialize, Serialize};
 use tinyfiledialogs::MessageBoxIcon;
-use urlencoding::encode;
 use wry::webview::WebView;
 
 const APP_TITLE: &str = "Digitales Grundbuch";
@@ -380,12 +380,9 @@ pub struct PdfFile {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     seitenzahlen: Vec<u32>,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(skip_serializing_if = "HocrLayout::is_empty")]
     #[serde(default)]
-    geladen: BTreeMap<String, SeiteParsed>,
-    #[serde(skip_serializing_if = "PdfToTextLayout::is_empty")]
-    #[serde(default)]
-    pdftotext_layout: PdfToTextLayout,
+    hocr: HocrLayout,
     #[serde(skip, default)]
     icon: Option<PdfFileIcon>,
     /// Seitennummern von Seiten, die versucht wurden, geladen zu werden
@@ -394,13 +391,7 @@ pub struct PdfFile {
     seiten_versucht_geladen: BTreeSet<u32>,
     #[serde(default)]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    seiten_ocr_text: BTreeMap<String, String>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     anpassungen_seite: BTreeMap<String, AnpassungSeite>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    klassifikation_neu: BTreeMap<String, SeitenTyp>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     nebenbeteiligte_dateipfade: Vec<String>,
@@ -446,6 +437,9 @@ impl PdfFileIcon {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AnpassungSeite {
     #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub klassifikation_neu: Option<SeitenTyp>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub spalten: BTreeMap<String, Rect>,
     #[serde(default)]
@@ -465,6 +459,20 @@ impl Rect {
     pub fn zero() -> Self {
         Self::default()
     }
+
+    pub fn contains_point(&self, x: f32, y: f32) -> bool {
+        x <= self.max_x && x >= self.min_x && y <= self.max_y && y >= self.min_y
+    }
+
+    pub fn overlaps(&self, other: &Rect) -> bool {
+        if self.max_x < other.min_x || self.min_x > other.max_x {
+            return false;
+        }
+        if self.max_y < other.min_y || self.min_y > other.max_y {
+            return false;
+        }
+        true
+    }
 }
 
 impl PdfFile {
@@ -479,6 +487,25 @@ impl PdfFile {
             (None, Some(gbx)) => Path::new(&gbx).to_path_buf(),
             (None, None) => default_parent.to_path_buf(),
         }
+    }
+
+    pub fn get_seiten_typ(&self, seite: &str) -> Option<SeitenTyp> {
+        if let Some(override_seitentyp) = self
+            .anpassungen_seite
+            .get(seite)
+            .and_then(|s| s.klassifikation_neu.clone())
+        {
+            return Some(override_seitentyp);
+        }
+
+        let hocr_seite = self.hocr.seiten.get(seite)?;
+        let querformat = hocr_seite.breite_mm > hocr_seite.hoehe_mm;
+
+        crate::digital::klassifiziere_seitentyp(
+            &hocr_seite.parsed.get_zeilen().join("\r\n"),
+            querformat,
+        )
+        .ok()
     }
 
     pub fn clear_personal_info(&mut self) {
@@ -535,10 +562,17 @@ impl PdfFile {
     }
 
     pub fn ist_geladen(&self) -> bool {
-        self.seitenzahlen.iter().all(|sz| {
-            self.geladen.contains_key(&format!("{}", sz))
-                || self.seiten_versucht_geladen.contains(sz)
-        })
+        let tempdir = std::env::temp_dir()
+            .join(&self.analysiert.titelblatt.grundbuch_von)
+            .join(self.analysiert.titelblatt.blatt.to_string());
+
+        for s in self.seitenzahlen.iter() {
+            if !tempdir.join(format!("{s}.hocr.json")).exists() {
+                return false;
+            }
+        }
+
+        true
     }
 
     pub fn hat_keine_fehler(
@@ -677,17 +711,13 @@ fn default_passwort_speichern() -> bool {
 
 pub mod pgp {
 
-    use sequoia_openpgp::cert::prelude::*;
-    use sequoia_openpgp::parse::{stream::*, Parse};
+    use sequoia_openpgp::parse::Parse;
     use sequoia_openpgp::policy::Policy;
-    use sequoia_openpgp::policy::StandardPolicy as P;
     use sequoia_openpgp::serialize::stream::*;
     use std::io::Write;
 
     pub fn parse_cert(cert: &[u8]) -> Result<sequoia_openpgp::Cert, String> {
-        use sequoia_openpgp::cert::prelude::*;
         use sequoia_openpgp::parse::PacketParser;
-        use std::convert::TryFrom;
 
         let ppr = PacketParser::from_bytes(cert).map_err(|e| format!("{e}"))?;
 
@@ -805,8 +835,6 @@ impl Konfiguration {
 
         let sig_str =
             String::from_utf8(signature).map_err(|e| format!("Ungültige Signatur: {e}"))?;
-
-        println!("msg created:\r\n{sig_str}");
 
         let lines = sig_str.lines().map(|s| s.to_string()).collect::<Vec<_>>();
 
@@ -1022,22 +1050,83 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             image_data_base64,
             image_filename,
         } => {
-            const DATA_START: &str = "data:image/png;base64,";
-            if image_data_base64.starts_with(DATA_START) {
+            let pdf_grundbuch_von = pdf_grundbuch_von.clone();
+            let pdf_blatt = pdf_blatt.clone();
+            let image_data_base64 = image_data_base64.clone();
+            let image_filename = image_filename.clone();
+            let seite = seite.clone();
+            let geroetet = geroetet.clone();
+            rayon::spawn(move || {
+                use image::io::Reader as ImageReader;
+                use std::io::Cursor;
+                const DATA_START: &str = "data:image/png;base64,";
+                if !image_data_base64.starts_with(DATA_START) {
+                    return;
+                }
+
                 let output_image = match base64::decode(&image_data_base64[DATA_START.len()..]) {
                     Ok(o) => o,
                     Err(_) => return,
                 };
-                let tempdir = std::env::temp_dir().join(pdf_grundbuch_von).join(pdf_blatt);
+                let reader = match ImageReader::new(Cursor::new(output_image)).with_guessed_format()
+                {
+                    Ok(o) => o,
+                    Err(_) => return,
+                };
+                let decoded = match reader.decode() {
+                    Ok(o) => o,
+                    Err(_) => return,
+                };
+                let flipped = decoded.flipv();
+                let mut bytes: Vec<u8> = Vec::new();
+                let _ =
+                    flipped.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
+                let tempdir = std::env::temp_dir()
+                    .join(&pdf_grundbuch_von)
+                    .join(&pdf_blatt);
                 let _ = std::fs::create_dir_all(&tempdir);
-                println!(
-                    "writing png image to  {}",
-                    tempdir.join(image_filename).display()
-                );
-                let _ = std::fs::write(tempdir.join(image_filename), output_image);
-            } else {
-                println!("error!!!!");
-            }
+                let _ = std::fs::write(tempdir.join(&image_filename), &bytes);
+
+                let target_path = tempdir.join(format!("{seite}.hocr.json"));
+                if !geroetet {
+                    println!("starting encoding grayscale...");
+                    let grayscale = flipped.grayscale();
+                    let mut pnm_bytes: Vec<u8> = Vec::new();
+                    let _ = grayscale.write_to(
+                        &mut Cursor::new(&mut pnm_bytes),
+                        image::ImageOutputFormat::Bmp,
+                    );
+                    let _ =
+                        std::fs::write(tempdir.join(&format!("{image_filename}.bmp")), &pnm_bytes);
+                    println!("grayscale done...");
+
+                    if pnm_bytes.is_empty() {
+                        println!("PNM BYTES EMPTY");
+                        return;
+                    }
+
+                    println!("writing to {} {image_filename}.bmp", tempdir.display());
+
+                    let hocr = match tesseract_get_hocr(&pnm_bytes) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            tinyfiledialogs::message_box_ok(
+                                &format!("Fehler beim OCR von {image_filename}"),
+                                &format!("{e}"),
+                                MessageBoxIcon::Error,
+                            );
+                            return;
+                        }
+                    };
+
+                    println!("writing hocr to {}", target_path.display());
+
+                    let _ = std::fs::write(
+                        &target_path,
+                        serde_json::to_string_pretty(&hocr).unwrap_or_default(),
+                    );
+                }
+            });
         }
         Cmd::Init => {
             let _ = webview.evaluate_script(&format!(
@@ -1073,7 +1162,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let mut pdf_zu_laden = Vec::new();
 
             for d in dateien.iter() {
-                println!("lese datei {}", d);
                 let datei_bytes = match std::fs::read(d) {
                     Ok(o) => o,
                     Err(e) => {
@@ -1113,14 +1201,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         data.open_page = Some((file_name.clone(), 2));
                     }
                 } else {
-                    println!("lese seitenzahlen...");
                     let mut seitenzahlen = match digital::lese_seitenzahlen(&datei_bytes) {
                         Ok(o) => o,
-                        Err(e) => {
-                            continue;
-                        }
+                        Err(e) => continue,
                     };
 
+                    let seiten_dimensionen = match digital::get_seiten_dimensionen(&datei_bytes) {
+                        Ok(o) => o,
+                        Err(e) => continue,
+                    };
                     let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
 
                     let titelblatt = match digital::lese_titelblatt(&datei_bytes) {
@@ -1130,7 +1219,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         }
                     };
 
-                    println!("titelblatt {:#?}", titelblatt);
                     let default_parent = Path::new("/");
                     let output_parent = Path::new(&d)
                         .parent()
@@ -1159,11 +1247,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         gbx_datei_pfad: None,
                         icon: None,
                         land: None,
-                        seiten_ocr_text: BTreeMap::new(),
                         seitenzahlen: seitenzahlen.clone(),
-                        klassifikation_neu: BTreeMap::new(),
-                        pdftotext_layout: PdfToTextLayout::default(),
-                        geladen: BTreeMap::new(),
+                        hocr: HocrLayout::init_from_dimensionen(&seiten_dimensionen),
+                        anpassungen_seite: BTreeMap::new(),
+                        seiten_versucht_geladen: BTreeSet::new(),
                         analysiert: Grundbuch {
                             titelblatt: titelblatt.clone(),
                             bestandsverzeichnis: Bestandsverzeichnis::default(),
@@ -1172,8 +1259,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                             abt3: Abteilung3::default(),
                         },
                         nebenbeteiligte_dateipfade: Vec::new(),
-                        anpassungen_seite: BTreeMap::new(),
-                        seiten_versucht_geladen: BTreeSet::new(),
                         previous_state: None,
                         next_state: None,
                     };
@@ -1215,14 +1300,12 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     data.loaded_files
                         .insert(file_name.clone(), pdf_parsed.clone());
                     pdf_zu_laden.push(pdf_parsed);
-                    println!("pdf_parsed ok");
                     if data.open_page.is_none() {
                         data.open_page = Some((file_name.clone(), 2));
                     }
                 }
             }
 
-            println!("rendering screen");
             let html_inner = ui::render_entire_screen(data);
             let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", html_inner));
             let _ = webview.evaluate_script("startCheckingForPdfErrors()");
@@ -1244,15 +1327,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ));
             }
 
-            println!("rendering pdf seiten...");
-
             render_pdf_seiten(webview, &pdf_zu_laden);
-
-            println!("pdf seiten rendering in progress...");
-
-            digital_dateien(data.vm.clone(), pdf_zu_laden, data.konfiguration.clone());
-
-            println!("digital_dateien done");
         }
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
@@ -1269,8 +1344,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             ));
         }
         Cmd::OpenGrundbuchUploadDialog => {
-            use rayon::prelude::*;
-
             if data.loaded_files.is_empty() {
                 return;
             }
@@ -1343,11 +1416,8 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 gbx_datei_pfad: Some(gbx_folder),
                 icon: None,
                 land: Some(land.trim().to_string()),
-                seiten_ocr_text: BTreeMap::new(),
                 seitenzahlen: Vec::new(),
-                klassifikation_neu: BTreeMap::new(),
-                pdftotext_layout: PdfToTextLayout::default(),
-                geladen: BTreeMap::new(),
+                hocr: HocrLayout::default(),
                 analysiert: Grundbuch {
                     titelblatt: Titelblatt {
                         amtsgericht: amtsgericht.trim().to_string().clone(),
@@ -1472,8 +1542,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let tag = urlencoding::encode(&tag);
             let url = format!("{server_url}/abo-neu/email/{download_id}/{tag}?email={server_email}&passwort={passwort}");
-
-            println!("url: {url}");
 
             let client = reqwest::blocking::Client::new();
             let res = client
@@ -1704,9 +1772,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            println!("Fingerprint:\r\n{}", fingerprint);
-            println!("Signatur:\r\n{:#?}", signatur.1);
-
             let passwort = match data.konfiguration.get_passwort() {
                 Some(s) => s,
                 None => return,
@@ -1788,8 +1853,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 webview.evaluate_script(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
         }
         Cmd::CheckPdfImageSichtbar => {
-            println!("CheckPdfImageSichtbar");
-
             match data.open_page.clone() {
                 Some(_) => {}
                 None => return,
@@ -1827,18 +1890,16 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ))
             };
 
-            if !pdftoppm_output_path.exists() {
-                if let Some(pdf) = file.datei.as_ref() {
-                    if let Ok(o) = std::fs::read(&pdf) {
-                        let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
-                            webview,
-                            &o,
-                            &file.seitenzahlen,
-                            open_file.1,
-                            &file.analysiert.titelblatt,
-                            !data.konfiguration.vorschau_ohne_geroetet,
-                        );
-                    }
+            if let Some(pdf) = file.datei.as_ref() {
+                if let Ok(o) = std::fs::read(&pdf) {
+                    let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
+                        webview,
+                        &o,
+                        &file.seitenzahlen,
+                        open_file.1,
+                        &file.analysiert.titelblatt,
+                        !data.konfiguration.vorschau_ohne_geroetet,
+                    );
                 }
             }
 
@@ -1868,9 +1929,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             {
                 Some(s) => s,
                 None => {
+                    let _ = webview
+                        .evaluate_script(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
                     return;
                 }
             };
+
+            pdf_parsed = reload_hocr_files(&pdf_parsed);
+
+            let _ = std::fs::write(
+                &cache_output_path,
+                serde_json::to_string_pretty(&pdf_parsed).unwrap_or_default(),
+            );
 
             data.loaded_files
                 .insert(file_name.clone(), pdf_parsed.clone());
@@ -1880,29 +1950,31 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ui::render_page_list(&data)
             ));
 
-            if pdf_parsed.ist_geladen() {
-                let _ = std::fs::remove_file(&cache_output_path);
-                if data.open_page.is_none() {
-                    data.open_page = Some((file_name.clone(), 2));
-                    let _ = webview.evaluate_script(&format!(
-                        "replaceEntireScreen(`{}`)",
-                        ui::render_entire_screen(data)
-                    ));
-                } else if data
-                    .open_page
-                    .as_ref()
-                    .map(|s| s.0.clone())
-                    .unwrap_or_default()
-                    == *file_name
-                {
-                    let _ = webview.evaluate_script(&format!(
-                        "replaceEntireScreen(`{}`)",
-                        ui::render_entire_screen(data)
-                    ));
-                }
-                let _ =
-                    webview.evaluate_script(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
+            if !pdf_parsed.ist_geladen() {
+                return;
             }
+
+            let _ = std::fs::remove_file(&cache_output_path);
+            if data.open_page.is_none() {
+                data.open_page = Some((file_name.clone(), 2));
+                let _ = webview.evaluate_script(&format!(
+                    "replaceEntireScreen(`{}`)",
+                    ui::render_entire_screen(data)
+                ));
+            } else if data
+                .open_page
+                .as_ref()
+                .map(|s| s.0.clone())
+                .unwrap_or_default()
+                == *file_name
+            {
+                let _ = webview.evaluate_script(&format!(
+                    "replaceEntireScreen(`{}`)",
+                    ui::render_entire_screen(data)
+                ));
+            }
+
+            let _ = webview.evaluate_script(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
         }
         Cmd::EditText { path, new_value } => {
             fn get_mut_or_insert_last<'a, T>(
@@ -3674,7 +3746,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 webview.evaluate_script(&format!("replaceSchuldenArtTestOutput(`{}`);", result));
         }
         Cmd::DeleteNebenbeteiligte => {
-            use tinyfiledialogs::{MessageBoxIcon, YesNo};
+            use tinyfiledialogs::YesNo;
 
             if data.loaded_files.is_empty() {
                 return;
@@ -3741,8 +3813,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             open_file
-                .klassifikation_neu
-                .insert(format!("{}", *seite), seiten_typ_neu);
+                .anpassungen_seite
+                .entry(format!("{}", *seite))
+                .or_insert_with(|| AnpassungSeite::default())
+                .klassifikation_neu = Some(seiten_typ_neu);
+
             data.popover_state = None;
 
             let open_file = match data
@@ -3862,11 +3937,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             page_width,
             page_height,
         } => {
-            use crate::digital::{formatiere_seitenzahl, zeilen_aus_tesseract_hocr};
-            use image::ImageOutputFormat;
-            use std::fs::File;
-            use std::process::Command;
-
             let file = match data.loaded_files.get_mut(file_name.as_str()) {
                 Some(s) => s,
                 None => {
@@ -3879,110 +3949,25 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 return;
             }
 
-            let temp_ordner = std::env::temp_dir().join(&format!(
-                "{gemarkung}/{blatt}",
-                gemarkung = file.analysiert.titelblatt.grundbuch_von,
-                blatt = file.analysiert.titelblatt.blatt
-            ));
-
-            let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
-
-            let pdftoppm_output_path = temp_ordner.clone().join(format!(
-                "page-clean-{}.png",
-                crate::digital::formatiere_seitenzahl(*page as u32, max_seitenzahl)
-            ));
-
-            if !Path::new(&pdftoppm_output_path).exists() {
-                if let Some(pdf) = file.datei.as_ref() {
-                    if let Ok(o) = std::fs::read(&pdf) {
-                        let _ = crate::digital::konvertiere_pdf_seiten_zu_png(
-                            &o,
-                            &[*page as u32],
-                            max_seitenzahl,
-                            &file.analysiert.titelblatt,
-                        );
-                    }
-                }
+            if !file.ist_geladen() {
+                return;
             }
 
-            let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
-                Ok(o) => o,
-                Err(_) => {
-                    let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
-                    return;
-                }
+            let hocr_page = match file.hocr.seiten.get(&format!("{page}")) {
+                Some(s) => s,
+                None => return,
             };
 
-            let (im_width, im_height) = match image::image_dimensions(&pdftoppm_output_path)
-                .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))
-            {
-                Ok(o) => o,
-                Err(_) => {
-                    let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
-                    return;
-                }
-            };
+            let text = hocr_page
+                .parsed
+                .get_words_within_bounds(&Rect {
+                    min_x: *min_x,
+                    min_y: *min_y,
+                    max_x: *max_x,
+                    max_y: *max_y,
+                })
+                .join("\r\n");
 
-            let im_width = im_width as f32;
-            let im_height = im_height as f32;
-
-            let x = min_x.min(*max_x) / page_width * im_width as f32;
-            let y = min_y.min(*max_y) / page_height * im_height as f32;
-            let width = (max_x - min_x).abs() / page_width * im_width as f32;
-            let height = (max_y - min_y).abs() / page_width * im_width as f32;
-
-            let x = x.round().max(0.0) as u32;
-            let y = y.round().max(0.0) as u32;
-            let width = width.round().max(0.0) as u32;
-            let height = height.round().max(0.0) as u32;
-
-            let im = match image::open(&pdftoppm_output_path.clone())
-                .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))
-            {
-                Ok(o) => o,
-                Err(_) => {
-                    let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
-                    return;
-                }
-            };
-
-            let cropped = im.crop_imm(x, y, width, height);
-
-            let cropped_output_path = temp_ordner.clone().join(format!(
-                "crop-{}-{}-{}.png",
-                formatiere_seitenzahl(*page as u32, max_seitenzahl),
-                width,
-                height
-            ));
-            if let Ok(mut output_file) = File::create(cropped_output_path.clone()) {
-                let _ = cropped.write_to(&mut output_file, ImageOutputFormat::Png);
-            }
-
-            let tesseract_output_path = temp_ordner.clone().join(format!(
-                "ocr-selection-{:02}-{:02}-{:02}-{:02}-{:02}.txt.hocr",
-                page, x, y, width, height
-            ));
-
-            let _ = get_tesseract_command()
-            .arg(&format!("{}", cropped_output_path.display()))
-            .arg(&format!("{}", temp_ordner.clone().join(format!("ocr-selection-{:02}-{:02}-{:02}-{:02}-{:02}.txt", page, x, y, width, height)).display()))     
-            .arg("--dpi")
-            .arg("600")
-            .arg("--psm")
-            .arg("6")
-            .arg("-l")
-            .arg("deu")
-            .arg("-c")
-            .arg("tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZüÜäÄöÖß,.-/%§()€0123456789 ")
-            .arg("-c")
-            .arg("tessedit_create_hocr=1")
-            .arg("-c")
-            .arg("debug_file=/dev/null") // TODO: funktioniert nur auf Linux!
-            .status();
-
-            let zeilen = zeilen_aus_tesseract_hocr(tesseract_output_path.display().to_string())
-                .unwrap_or_default();
-            let text = zeilen.join("\r\n");
             let text = if data.konfiguration.zeilenumbrueche_in_ocr_text {
                 text
             } else {
@@ -3994,15 +3979,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     Err(e) => e,
                 }
             };
-
-            let _ = webview.evaluate_script(&format!("copyTextToClipboard(`{}`)", text));
-            let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
-        }
-        Cmd::CopyTextToClipboard { text } => {
             let _ = webview.evaluate_script(&format!("copyTextToClipboard(`{}`)", text));
         }
         Cmd::ReloadGrundbuch => {
-            use tinyfiledialogs::{MessageBoxIcon, YesNo};
+            use tinyfiledialogs::YesNo;
 
             if data.loaded_files.is_empty() {
                 return;
@@ -4013,40 +3993,21 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
 
-            {
-                let open_file = match data.loaded_files.get_mut(&file_id) {
-                    Some(s) => s,
-                    None => return,
-                };
-
-                if tinyfiledialogs::message_box_yes_no(
-                    "Grundbuch neu laden?",
-                    &format!("Wenn das Grundbuch neu analysiert wird, werden alle manuell eingegebenen Daten überschrieben.\r\nFortfahren?"),
-                    MessageBoxIcon::Warning,
-                    YesNo::No,
-                ) == YesNo::No {
-                    return;
-                }
-
-                open_file.geladen.clear();
-                open_file.analysiert = Grundbuch {
-                    titelblatt: open_file.analysiert.titelblatt.clone(),
-                    bestandsverzeichnis: Bestandsverzeichnis::default(),
-                    abt1: Abteilung1::default(),
-                    abt2: Abteilung2::default(),
-                    abt3: Abteilung3::default(),
-                };
-            }
-
-            let _ = webview.evaluate_script(&format!(
-                "replaceEntireScreen(`{}`)",
-                ui::render_entire_screen(data)
-            ));
-
-            let open_file = match data.loaded_files.get(&file_id) {
+            let open_file = match data.loaded_files.get_mut(&file_id) {
                 Some(s) => s,
                 None => return,
             };
+
+            if tinyfiledialogs::message_box_yes_no(
+                "Grundbuch neu laden?",
+                &format!("Wenn das Grundbuch neu analysiert wird, werden alle manuell eingegebenen Daten überschrieben.\r\nFortfahren?"),
+                MessageBoxIcon::Warning,
+                YesNo::No,
+            ) == YesNo::No {
+                return;
+            }
+
+            *open_file = reload_hocr_files(&open_file);
 
             let file_name = format!(
                 "{}_{}",
@@ -4057,11 +4018,21 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let cache_output_path = output_parent
                 .clone()
                 .join(&format!("{}.cache.gbx", file_name));
-            let _ = reload_grundbuch(
-                data.vm.clone(),
-                open_file.clone(),
-                data.konfiguration.clone(),
-            );
+
+            let grundbuch_neu =
+                match analyse_grundbuch(data.vm.clone(), &open_file, &data.konfiguration) {
+                    Some(s) => s,
+                    None => return,
+                };
+
+            open_file.analysiert = grundbuch_neu;
+
+            open_file.speichern();
+
+            let _ = webview.evaluate_script(&format!(
+                "replaceEntireScreen(`{}`)",
+                ui::render_entire_screen(data)
+            ));
 
             let _ = webview.evaluate_script(&format!(
                 "startCheckingForPageLoaded(`{}`, `{}`)",
@@ -4085,10 +4056,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 .or_insert_with(|| AnpassungSeite::default());
 
             let (im_width, im_height, page_width, page_height) =
-                match open_file.pdftotext_layout.seiten.get(&format!("{}", *page)) {
+                match open_file.hocr.seiten.get(&format!("{}", *page)) {
                     Some(o) => (
-                        o.breite_mm as f32 / 25.4 * 600.0,
-                        o.hoehe_mm as f32 / 25.4 * 600.0,
+                        o.parsed.bounds.max_x,
+                        o.parsed.bounds.max_y,
                         o.breite_mm,
                         o.hoehe_mm,
                     ),
@@ -4132,10 +4103,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             let (im_width, im_height, page_width, page_height) =
-                match open_file.pdftotext_layout.seiten.get(&format!("{}", *page)) {
+                match open_file.hocr.seiten.get(&format!("{}", *page)) {
                     Some(o) => (
-                        o.breite_mm as f32 / 25.4 * 600.0,
-                        o.hoehe_mm as f32 / 25.4 * 600.0,
+                        o.parsed.bounds.max_x,
+                        o.parsed.bounds.max_y,
                         o.breite_mm,
                         o.hoehe_mm,
                     ),
@@ -4180,15 +4151,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
 
-            let open_page = match open_file.geladen.get_mut(&format!("{}", page)) {
-                Some(s) => s,
-                None => return,
-            };
-
-            let seitentyp = match open_file.klassifikation_neu.get(&format!("{}", page)) {
-                Some(s) => *s,
-                None => open_page.typ,
-            };
+            let seitentyp = open_file
+                .get_seiten_typ(&page.to_string())
+                .unwrap_or(SeitenTyp::BestandsverzeichnisVert);
 
             let current_column = match seitentyp
                 .get_columns(open_file.anpassungen_seite.get(&format!("{}", page)))
@@ -4200,10 +4165,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             let (im_width, im_height, page_width, page_height) =
-                match open_file.pdftotext_layout.seiten.get(&format!("{}", page)) {
+                match open_file.hocr.seiten.get(&format!("{}", page)) {
                     Some(o) => (
-                        o.breite_mm as f32 / 25.4 * 600.0,
-                        o.hoehe_mm as f32 / 25.4 * 600.0,
+                        o.parsed.bounds.max_x,
+                        o.parsed.bounds.max_y,
                         o.breite_mm,
                         o.hoehe_mm,
                     ),
@@ -4321,7 +4286,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let n_ohne_onr = nb.iter().filter(|n| n.ordnungsnummer.is_none()).count();
 
             if n_ohne_onr > 0 {
-                use tinyfiledialogs::{MessageBoxIcon, YesNo};
+                use tinyfiledialogs::YesNo;
 
                 if tinyfiledialogs::message_box_yes_no(
                     "Ordnungsnummern automatisch vergeben?",
@@ -4405,7 +4370,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             exportiere_in_eine_einzelne_datei,
         } => {
             use crate::pdf::{GenerateGrundbuchConfig, GrundbuchExportConfig, PdfExportTyp};
-            use tinyfiledialogs::MessageBoxIcon;
 
             if data.loaded_files.is_empty() {
                 return;
@@ -4694,7 +4658,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             }));
 
             if !fehler.is_empty() {
-                use tinyfiledialogs::{MessageBoxIcon, YesNo};
+                use tinyfiledialogs::YesNo;
 
                 if tinyfiledialogs::message_box_yes_no(
                     "Mit Fehlern exportieren?",
@@ -4805,32 +4769,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             let titelblatt = open_file.analysiert.titelblatt.clone();
-            let seitenzahlen = open_file
-                .pdftotext_layout
-                .seiten
-                .keys()
-                .filter_map(|i| i.parse::<u32>().ok())
-                .collect::<Vec<_>>();
-
-            if let Some(pdf) = open_file.datei.as_ref() {
-                let pdf_bytes = match std::fs::read(&pdf) {
-                    Ok(o) => o,
-                    Err(_) => return,
-                };
-
-                rayon::spawn(move || {
-                    use crate::digital::konvertiere_pdf_seiten_zu_png;
-
-                    let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
-
-                    let _ = konvertiere_pdf_seiten_zu_png(
-                        &pdf_bytes,
-                        &seitenzahlen,
-                        max_sz,
-                        &titelblatt,
-                    );
-                });
-            }
+            let seitenzahlen = open_file.seitenzahlen.clone();
 
             let _ = webview.evaluate_script(&format!(
                 "replacePageList(`{}`);",
@@ -5270,40 +5209,30 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
 }
 
 fn render_pdf_seiten(webview: &WebView, pdfs: &Vec<PdfFile>) {
-    println!("render_pdf_seiten {}", pdfs.len());
     for pdf in pdfs {
-        println!("pdf datei {:?}", pdf.datei);
         let pdf_datei_pfad = match pdf.datei.as_deref() {
             Some(s) => s,
             None => continue,
         };
 
-        println!("reading {}", pdf_datei_pfad);
         let pdf_bytes = match fs::read(&pdf_datei_pfad) {
             Ok(o) => o,
             Err(_) => continue,
         };
-
-        println!("ok!");
 
         let pdf_datei_pfad = match pdf.datei.clone() {
             None => continue,
             Some(s) => s.clone(),
         };
 
-        println!("pdf clean...");
-
         let pdf_clean = match digital::clean_pdf_bytes(&pdf_bytes) {
             Ok(o) => o,
             Err(_) => continue,
         };
 
-        println!("pdf clean ok");
-
         let pdf_base64 = base64::encode(&pdf_bytes);
         let pdf_clean_base64 = base64::encode(&pdf_clean);
         for seite in pdf.seitenzahlen.iter() {
-            println!("rendering seite {seite}");
             let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                 webview,
                 &pdf_bytes,
@@ -5324,215 +5253,52 @@ fn render_pdf_seiten(webview: &WebView, pdfs: &Vec<PdfFile>) {
     }
 }
 
-fn digital_dateien(vm: PyVm, pdfs: Vec<PdfFile>, konfiguration: Konfiguration) {
-    std::thread::spawn(move || {
-        let konfiguration = konfiguration.clone();
-        for mut pdf in pdfs {
-            let output_parent = pdf.get_gbx_datei_parent();
-            let file_name = format!(
-                "{}_{}",
-                pdf.analysiert.titelblatt.grundbuch_von, pdf.analysiert.titelblatt.blatt
-            );
-            let cache_output_path = output_parent
-                .clone()
-                .join(&format!("{}.cache.gbx", file_name));
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
+    let tempdir = std::env::temp_dir()
+        .join(&pdf_parsed.analysiert.titelblatt.grundbuch_von)
+        .join(&pdf_parsed.analysiert.titelblatt.blatt.to_string());
 
-            let pdf_datei_pfad = match pdf.datei.clone() {
-                None => {
-                    pdf.analysiert.abt1.migriere_v2();
-                    let json = match serde_json::to_string_pretty(&pdf) {
-                        Ok(o) => o,
-                        Err(_) => return,
-                    };
-                    let _ = std::fs::write(&target_output_path, json.as_bytes());
-                    continue;
-                }
-                Some(pfad) => pfad,
-            };
+    let hocr_loaded = pdf_parsed
+        .seitenzahlen
+        .iter()
+        .filter_map(|s| {
+            let hocr = std::fs::read_to_string(tempdir.join(format!("{s}.hocr.json"))).ok()?;
+            let json: HocrSeite = serde_json::from_str(&hocr).ok()?;
+            Some((format!("{s}"), json))
+        })
+        .collect::<BTreeMap<_, _>>();
 
-            let konfiguration_clone = konfiguration.clone();
-
-            let vm_clone = vm.clone();
-
-            rayon::spawn(move || {
-                let konfiguration = konfiguration_clone.clone();
-
-                let mut pdf = pdf;
-
-                let datei_bytes = match fs::read(&pdf_datei_pfad).ok() {
-                    Some(s) => s,
-                    None => return,
-                };
-
-                let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
-
-                if let Some(mut cached_pdf) = std::fs::read_to_string(&cache_output_path)
-                    .ok()
-                    .and_then(|s| serde_json::from_str::<PdfFile>(&s).ok())
-                {
-                    cached_pdf.analysiert.abt1.migriere_v2();
-                    pdf = cached_pdf;
-                }
-                if let Some(mut target_pdf) = std::fs::read_to_string(&target_output_path)
-                    .ok()
-                    .and_then(|s| serde_json::from_str::<PdfFile>(&s).ok())
-                {
-                    target_pdf.analysiert.abt1.migriere_v2();
-                    pdf = target_pdf;
-                }
-
-                let seitenzahlen_zu_laden = pdf
-                    .seitenzahlen
-                    .iter()
-                    .filter(|sz| !pdf.geladen.contains_key(&format!("{}", sz)))
-                    .copied()
-                    .collect::<Vec<_>>();
-
-                let json = match serde_json::to_string_pretty(&pdf) {
-                    Ok(o) => o,
-                    Err(_) => return,
-                };
-
-                let _ = std::fs::write(&cache_output_path, json.as_bytes());
-
-                // let _ = digital::konvertiere_pdf_seiten_zu_png(&datei_bytes, &seitenzahlen_zu_laden, max_sz, &pdf.analysiert.titelblatt);
-
-                for sz in seitenzahlen_zu_laden {
-                    pdf.seiten_versucht_geladen.insert(sz);
-
-                    let pdftotext_layout =
-                        match digital::get_pdftotext_layout(&pdf.analysiert.titelblatt, &[sz]) {
-                            Ok(o) => o,
-                            Err(_) => PdfToTextLayout::default(),
-                        };
-
-                    for (k, v) in pdftotext_layout.seiten.iter() {
-                        pdf.pdftotext_layout.seiten.insert(k.clone(), v.clone());
-                    }
-
-                    let mut ocr_text_cached = pdf.seiten_ocr_text.get(&format!("{}", sz)).cloned();
-
-                    let mut ocr_text_final = None;
-
-                    if ocr_text_cached.is_none() {
-                        match digital::ocr_seite(&pdf.analysiert.titelblatt, sz, max_sz) {
-                            Ok(o) => {
-                                pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
-                                ocr_text_final = Some(o);
-                            }
-                            Err(_) => {}
-                        }
-                    } else {
-                        ocr_text_final = ocr_text_cached;
-                    }
-
-                    let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)) {
-                        Some(s) => *s,
-                        None => {
-                            match digital::klassifiziere_seitentyp(
-                                &pdf.analysiert.titelblatt,
-                                sz,
-                                max_sz,
-                                ocr_text_final.as_ref(),
-                            ) {
-                                Ok(o) => o,
-                                Err(_) => SeitenTyp::Abt1Horz,
-                            }
-                        }
-                    };
-
-                    let spalten = match digital::formularspalten_ausschneiden(
-                        &pdf.analysiert.titelblatt,
-                        sz,
-                        max_sz,
-                        seitentyp,
-                        &pdftotext_layout,
-                        pdf.anpassungen_seite.get(&format!("{}", sz)),
-                    ) {
-                        Ok(o) => o,
-                        Err(_) => Vec::new(),
-                    };
-
-                    if digital::ocr_spalten(&pdf.analysiert.titelblatt, sz, max_sz, &spalten)
-                        .is_err()
-                    {
-                        continue;
-                    }
-
-                    let textbloecke = match digital::textbloecke_aus_spalten(
-                        &pdf.analysiert.titelblatt,
-                        sz,
-                        max_sz,
-                        &spalten,
-                        &pdftotext_layout,
-                        pdf.anpassungen_seite.get(&format!("{}", sz)),
-                    ) {
-                        Ok(o) => o,
-                        Err(_) => Vec::new(),
-                    };
-
-                    pdf.geladen.insert(
-                        format!("{}", sz),
-                        SeiteParsed {
-                            typ: seitentyp,
-                            texte: textbloecke,
-                        },
-                    );
-
-                    pdf.analysiert = match analyse_grundbuch(vm_clone.clone(), &pdf, &konfiguration)
-                    {
-                        Some(o) => o,
-                        None => Grundbuch {
-                            titelblatt: pdf.analysiert.titelblatt,
-                            bestandsverzeichnis: Bestandsverzeichnis::default(),
-                            abt1: Abteilung1::default(),
-                            abt2: Abteilung2::default(),
-                            abt3: Abteilung3::default(),
-                        },
-                    };
-
-                    let json = match serde_json::to_string_pretty(&pdf) {
-                        Ok(o) => o,
-                        Err(_) => continue,
-                    };
-
-                    let _ = std::fs::write(&cache_output_path, json.as_bytes());
-                }
-
-                crate::digital::bv_eintraege_roeten(
-                    &mut pdf.analysiert.bestandsverzeichnis.eintraege,
-                    &pdf.analysiert.titelblatt,
-                    max_sz,
-                    &pdf.pdftotext_layout,
-                );
-
-                pdf.analysiert.abt1.migriere_v2();
-
-                let json = match serde_json::to_string_pretty(&pdf) {
-                    Ok(o) => o,
-                    Err(_) => return,
-                };
-
-                let _ = std::fs::write(&target_output_path, json.as_bytes());
-            });
-        }
-    });
+    PdfFile {
+        hocr: HocrLayout {
+            seiten: hocr_loaded,
+        },
+        ..pdf_parsed.clone()
+    }
 }
 
 fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> Option<Grundbuch> {
+    let seiten = pdf
+        .hocr
+        .seiten
+        .iter()
+        .filter_map(|(sz, seite)| {
+            let typ = pdf.get_seiten_typ(sz)?;
+            let seite_parsed = seite.get_textbloecke(sz, typ, &pdf.anpassungen_seite);
+            Some((sz.clone(), seite_parsed))
+        })
+        .collect();
+
     let bestandsverzeichnis = digital::analysiere_bv(
         vm.clone(),
         &pdf.analysiert.titelblatt,
-        &pdf.pdftotext_layout,
-        &pdf.geladen,
+        &seiten,
         &pdf.anpassungen_seite,
         konfguration,
     )
     .ok()?;
     let mut abt1 = digital::analysiere_abt1(
         vm.clone(),
-        &pdf.geladen,
+        &seiten,
         &pdf.anpassungen_seite,
         &bestandsverzeichnis,
         konfguration,
@@ -5540,7 +5306,7 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     .ok()?;
     let abt2 = digital::analysiere_abt2(
         vm.clone(),
-        &pdf.geladen,
+        &seiten,
         &pdf.anpassungen_seite,
         &bestandsverzeichnis,
         konfguration,
@@ -5548,7 +5314,7 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     .ok()?;
     let abt3 = digital::analysiere_abt3(
         vm.clone(),
-        &pdf.geladen,
+        &seiten,
         &pdf.anpassungen_seite,
         &bestandsverzeichnis,
         konfguration,
@@ -5566,183 +5332,6 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     };
 
     Some(gb)
-}
-
-fn reload_grundbuch(vm: PyVm, pdf: PdfFile, konfiguration: Konfiguration) {
-    use tinyfiledialogs::MessageBoxIcon;
-
-    std::thread::spawn(move || {
-        let konfiguration = konfiguration;
-        if let Err(e) = reload_grundbuch_inner(vm.clone(), pdf, &konfiguration) {
-            tinyfiledialogs::message_box_ok(
-                "Fehler",
-                &format!("Fehler beim Laden des Grundbuchs: {:?}", e),
-                MessageBoxIcon::Error,
-            );
-        }
-    });
-}
-
-fn reload_grundbuch_inner(
-    vm: PyVm,
-    mut pdf: PdfFile,
-    konfiguration: &Konfiguration,
-) -> Result<(), Fehler> {
-    let pdf_datei = match pdf.datei.clone() {
-        Some(s) => s,
-        None => {
-            return Ok(());
-        }
-    };
-
-    let datei_bytes = match fs::read(&pdf_datei) {
-        Ok(s) => s,
-        Err(e) => return Err(Fehler::Io(pdf_datei.clone(), e)),
-    };
-
-    let seitenzahlen_zu_laden = pdf.seitenzahlen.clone();
-    let max_sz = pdf.seitenzahlen.iter().max().cloned().unwrap_or(0);
-
-    let ist_geladen = pdf.ist_geladen();
-    pdf.geladen.clear();
-    pdf.analysiert = Grundbuch {
-        titelblatt: pdf.analysiert.titelblatt.clone(),
-        bestandsverzeichnis: Bestandsverzeichnis::default(),
-        abt1: Abteilung1::default(),
-        abt2: Abteilung2::default(),
-        abt3: Abteilung3::default(),
-    };
-
-    let output_parent = pdf.get_gbx_datei_parent();
-    let file_name = format!(
-        "{}_{}",
-        pdf.analysiert.titelblatt.grundbuch_von, pdf.analysiert.titelblatt.blatt
-    );
-    let cache_output_path = output_parent
-        .clone()
-        .join(&format!("{}.cache.gbx", file_name));
-    let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
-
-    crate::digital::bv_eintraege_roetungen_loeschen(
-        &mut pdf.analysiert.bestandsverzeichnis.eintraege,
-    );
-
-    for sz in seitenzahlen_zu_laden {
-        pdf.seiten_versucht_geladen.insert(sz);
-
-        let _ = digital::konvertiere_pdf_seiten_zu_png(
-            &datei_bytes,
-            &[sz],
-            max_sz,
-            &pdf.analysiert.titelblatt,
-        )?;
-
-        let ocr_text_cached = pdf.seiten_ocr_text.get(&format!("{}", sz)).cloned();
-        let mut ocr_text_final = None;
-
-        if ocr_text_cached.is_none() {
-            match digital::ocr_seite(&pdf.analysiert.titelblatt, sz, max_sz) {
-                Ok(o) => {
-                    pdf.seiten_ocr_text.insert(format!("{}", sz), o.clone());
-                    ocr_text_final = Some(o);
-                }
-                Err(e) => {
-                    continue;
-                }
-            }
-        } else {
-            ocr_text_final = ocr_text_cached;
-        }
-
-        let seitentyp = match pdf.klassifikation_neu.get(&format!("{}", sz)).cloned() {
-            Some(s) => s,
-            None => {
-                match digital::klassifiziere_seitentyp(
-                    &pdf.analysiert.titelblatt,
-                    sz,
-                    max_sz,
-                    ocr_text_final.as_ref(),
-                ) {
-                    Ok(o) => o,
-                    Err(_) => continue,
-                }
-            }
-        };
-
-        pdf.klassifikation_neu.insert(format!("{}", sz), seitentyp);
-
-        let spalten = match digital::formularspalten_ausschneiden(
-            &pdf.analysiert.titelblatt,
-            sz,
-            max_sz,
-            seitentyp,
-            &pdf.pdftotext_layout,
-            pdf.anpassungen_seite.get(&format!("{}", sz)),
-        ) {
-            Ok(o) => o,
-            Err(e) => continue,
-        };
-
-        let _ = digital::ocr_spalten(&pdf.analysiert.titelblatt, sz, max_sz, &spalten)?;
-
-        let textbloecke = digital::textbloecke_aus_spalten(
-            &pdf.analysiert.titelblatt,
-            sz,
-            max_sz,
-            &spalten,
-            &pdf.pdftotext_layout,
-            pdf.anpassungen_seite.get(&format!("{}", sz)),
-        )?;
-
-        pdf.geladen.insert(
-            format!("{}", sz),
-            SeiteParsed {
-                typ: seitentyp,
-                texte: textbloecke.clone(),
-            },
-        );
-
-        pdf.analysiert = match analyse_grundbuch(vm.clone(), &pdf, konfiguration) {
-            Some(o) => o,
-            None => continue,
-        };
-
-        crate::digital::bv_eintraege_roeten(
-            &mut pdf.analysiert.bestandsverzeichnis.eintraege,
-            &pdf.analysiert.titelblatt,
-            max_sz,
-            &pdf.pdftotext_layout,
-        );
-
-        let json = match serde_json::to_string_pretty(&pdf) {
-            Ok(o) => o,
-            Err(_) => continue,
-        };
-
-        let _ = std::fs::write(&cache_output_path, json.as_bytes());
-    }
-
-    pdf.analysiert = match analyse_grundbuch(vm.clone(), &pdf, konfiguration) {
-        Some(o) => o,
-        None => return Ok(()),
-    };
-
-    crate::digital::bv_eintraege_roeten(
-        &mut pdf.analysiert.bestandsverzeichnis.eintraege,
-        &pdf.analysiert.titelblatt,
-        max_sz,
-        &pdf.pdftotext_layout,
-    );
-
-    let json = match serde_json::to_string_pretty(&pdf) {
-        Ok(o) => o,
-        Err(_) => return Ok(()),
-    };
-
-    let _ = std::fs::write(&cache_output_path, json.as_bytes());
-    let _ = std::fs::write(&target_output_path, json.as_bytes());
-
-    Ok(())
 }
 
 lazy_static::lazy_static! {
@@ -5920,39 +5509,6 @@ fn try_download_file_database(
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn selftest_startup() -> Result<(), String> {
-    use std::process::Command;
-
-    let mut programme_nicht_installiert = Vec::new();
-
-    if get_pdftotext_command().arg("-v").status().is_err() {
-        programme_nicht_installiert.push(format!("pdftotext"));
-    }
-
-    if get_pdftoppm_command().arg("-v").status().is_err() {
-        programme_nicht_installiert.push(format!("pdftoppm"));
-    }
-
-    if get_tesseract_command().arg("-v").status().is_err() {
-        programme_nicht_installiert.push(format!("tesseract"));
-    }
-
-    if Command::new("podofouncompress").status().is_err() {
-        programme_nicht_installiert.push(format!("podofouncompress"));
-    }
-
-    if get_qpdf_command().arg("--help").status().is_err() {
-        programme_nicht_installiert.push(format!("qpdf"));
-    }
-
-    if programme_nicht_installiert.is_empty() {
-        Ok(())
-    } else {
-        Err(programme_nicht_installiert.join(", "))
-    }
-}
-
 fn get_program_path() -> Result<String, String> {
     Ok(std::env::current_exe()
         .map_err(|e| format!("{e}"))?
@@ -5964,175 +5520,44 @@ fn get_program_path() -> Result<String, String> {
         .to_string())
 }
 
-#[cfg(target_os = "windows")]
-pub fn get_tesseract_command() -> Command {
-    let path = get_program_path().unwrap();
-    let exe = Path::new(&path)
-        .join("tesseract")
-        .join("Tesseract-OCR")
-        .join("tesseract.exe");
-    Command::new(format!("{}", exe.display()))
+pub enum TesseractMode {
+    Words,
+    Numbers,
 }
 
-#[cfg(not(target_os = "windows"))]
-pub fn get_tesseract_command() -> Command {
-    Command::new("tesseract")
-}
+pub fn tesseract_get_hocr(image: &[u8]) -> Result<ParsedHocr, String> {
+    use tesseract_static::tesseract::Tesseract;
 
-#[cfg(target_os = "windows")]
-pub fn get_pdftoppm_command() -> Command {
-    let path = get_program_path().unwrap();
-    let exe = Path::new(&path)
-        .join("pdftools")
-        .join("xpdf-tools-win-4.04")
-        .join("bin64")
-        .join("pdftoppm.exe");
-    Command::new(format!("{}", exe.display()))
-}
+    let dir = std::env::temp_dir().join("deu.traineddata");
 
-#[cfg(not(target_os = "windows"))]
-pub fn get_pdftoppm_command() -> Command {
-    Command::new("pdftoppm")
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn get_pdftotext_command() -> Command {
-    let path = get_program_path().unwrap();
-    let exe = Path::new(&path)
-        .join("pdftools")
-        .join("xpdf-tools-win-4.04")
-        .join("bin64")
-        .join("pdftotext.exe");
-    Command::new(format!("{}", exe.display()))
-}
-
-#[cfg(target_os = "linux")]
-pub fn get_pdftotext_command() -> Command {
-    Command::new("pdftotext")
-}
-
-#[cfg(target_os = "windows")]
-pub fn get_qpdf_command() -> Command {
-    let path = get_program_path().unwrap();
-    let exe = Path::new(&path)
-        .join("qpdf")
-        .join("qpdf-10.6.3")
-        .join("bin")
-        .join("qpdf.exe");
-    Command::new(format!("{}", exe.display()))
-}
-
-#[cfg(not(target_os = "windows"))]
-pub fn get_qpdf_command() -> Command {
-    Command::new("qpdf")
-}
-
-#[cfg(target_os = "windows")]
-fn unzip_tesseract() -> Result<(), String> {
-    use std::io::Cursor;
-    let mut reader = Cursor::new(TESSERACT_SOURCE_ZIP.to_vec());
-    let mut archive = zip::ZipArchive::new(reader).unwrap();
-    let program_path = get_program_path()?;
-
-    let program_path = Path::new(&program_path).join("tesseract");
-
-    if program_path.exists() {
-        return Ok(());
+    if !dir.exists() {
+        let _ = std::fs::write(&dir, include_bytes!("../deu.traineddata"));
     }
 
-    let _ = std::fs::create_dir_all(&program_path);
+    let hocr = Tesseract::new(
+        Some(&std::env::temp_dir().display().to_string()),
+        Some("deu"),
+    )
+    .unwrap()
+    .set_image_from_mem(image)
+    .unwrap()
+    .get_hocr_text(1)
+    .map_err(|e| format!("{e}"))?
+    .to_string();
 
-    archive.extract(&program_path).map_err(|e| format!("{e}"))
-}
-
-#[cfg(target_os = "windows")]
-fn unzip_pdftools() -> Result<(), String> {
-    use std::io::Cursor;
-    let mut reader = Cursor::new(PDFTOOLS_SOURCE_ZIP.to_vec());
-    let mut archive = zip::ZipArchive::new(reader).unwrap();
-    let program_path = get_program_path()?;
-
-    let program_path = Path::new(&program_path).join("pdftools");
-
-    if program_path.exists() {
-        return Ok(());
-    }
-
-    let _ = std::fs::create_dir_all(&program_path);
-
-    archive.extract(&program_path).map_err(|e| format!("{e}"))
-}
-
-#[cfg(target_os = "windows")]
-fn unzip_qpdf() -> Result<(), String> {
-    use std::io::Cursor;
-    let mut reader = Cursor::new(QPDF_SOURCE_ZIP.to_vec());
-    let mut archive = zip::ZipArchive::new(reader).unwrap();
-    let program_path = get_program_path()?;
-
-    let program_path = Path::new(&program_path).join("qpdf");
-
-    if program_path.exists() {
-        return Ok(());
-    }
-
-    let _ = std::fs::create_dir_all(&program_path);
-
-    archive.extract(&program_path).map_err(|e| format!("{e}"))
+    ParsedHocr::new(&hocr).map_err(|e| format!("{e}"))
 }
 
 fn main() -> wry::Result<()> {
     use std::env;
     use wry::{
         application::{
-            event::{Event, StartCause, WindowEvent},
+            event::{Event, WindowEvent},
             event_loop::{ControlFlow, EventLoop},
             window::WindowBuilder,
         },
         webview::WebViewBuilder,
     };
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Err(e) = unzip_tesseract() {
-            tinyfiledialogs::message_box_ok(
-                "Fehler beim Installieren von tesseract-ocr",
-                &format!("Fehler beim Installieren von tesseract-ocr:\r\n{e}"),
-                MessageBoxIcon::Warning,
-            );
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Err(e) = unzip_pdftools() {
-            tinyfiledialogs::message_box_ok(
-                "Fehler beim Installieren von pdftools",
-                &format!("Fehler beim Installieren von pdftools:\r\n{e}"),
-                MessageBoxIcon::Warning,
-            );
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Err(e) = unzip_qpdf() {
-            tinyfiledialogs::message_box_ok(
-                "Fehler beim Installieren von qpdf",
-                &format!("Fehler beim Installieren von qpdf:\r\n{e}"),
-                MessageBoxIcon::Warning,
-            );
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    if let Err(e) = selftest_startup() {
-        tinyfiledialogs::message_box_ok(
-            "Programme nicht installiert",
-            &format!("Die folgenden Programme benötigten sind nicht installiert:\r\n{}\r\nDas Programm wird möglicherweise nicht richtig funktionieren.", e),
-            MessageBoxIcon::Warning,
-        );
-    }
 
     let num = num_cpus::get();
     let max_threads = (num as f32 / 2.0).ceil().max(2.0) as usize;

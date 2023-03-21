@@ -1,5 +1,5 @@
 use crate::digital::BvEintrag;
-use crate::{get_qpdf_command, Abt2Eintrag, Abt3Eintrag, Grundbuch, Titelblatt};
+use crate::{Grundbuch, Titelblatt};
 use hyphenation::{Language, Load, Standard};
 use printpdf::{
     BuiltinFont, Cmyk, Color, IndirectFontRef, Line, Mm, PdfDocument, PdfDocumentReference,
@@ -127,40 +127,21 @@ fn export_grundbuch_single_file(
 ) -> Result<(), String> {
     match source {
         PdfExportTyp::AlleOriginalPdf(gb) => {
-            use std::process::Command;
-
             // qpdf --empty --pages *.pdf -- out.pdf
-            if get_qpdf_command().arg("--version").status().is_ok() {
-                let mut command = get_qpdf_command();
+            // TODO: include all rendered pages as IMAGES (avoid dependency on qpdf)
+            let mut files = Vec::new();
 
-                command.arg("--empty");
-                command.arg("--pages");
-
-                for d in gb {
-                    command.arg(d);
-                }
-
-                command
-                    .arg("--")
-                    .arg(datei)
-                    .status()
-                    .map_err(|e| format!("Fehler beim PDF-Export: {e}"))?;
-            } else {
-                let mut files = Vec::new();
-
-                for d in gb {
-                    let bytes = std::fs::read(&d).map_err(|e| format!("Fehler: {}: {}", d, e))?;
-                    let document = lopdf::Document::load_mem(&bytes)
-                        .map_err(|e| format!("Fehler: {}: {}", d, e))?;
-                    files.push(document);
-                }
-
-                let merged =
-                    merge_pdf_files(files).map_err(|e| format!("Fehler: {}: {}", datei, e))?;
-
-                let _ = std::fs::write(Path::new(&datei), &merged)
-                    .map_err(|e| format!("Fehler: {}: {}", datei, e))?;
+            for d in gb {
+                let bytes = std::fs::read(&d).map_err(|e| format!("Fehler: {}: {}", d, e))?;
+                let document = lopdf::Document::load_mem(&bytes)
+                    .map_err(|e| format!("Fehler: {}: {}", d, e))?;
+                files.push(document);
             }
+
+            let merged = merge_pdf_files(files).map_err(|e| format!("Fehler: {}: {}", datei, e))?;
+
+            let _ = std::fs::write(Path::new(&datei), &merged)
+                .map_err(|e| format!("Fehler: {}: {}", datei, e))?;
         }
         PdfExportTyp::OffenesGrundbuch(gb) => {
             let grundbuch_von = gb.titelblatt.grundbuch_von.clone();
@@ -768,7 +749,6 @@ fn pt_to_mm(pt: Pt) -> Mm {
 
 impl PdfHeader {
     pub fn get_max_col_width(&self, col_id: usize) -> usize {
-        use self::PdfHeader::*;
         let spalten_lines = self.get_spalten_lines();
         let width = ((if col_id == spalten_lines.len() - 1 {
             self.get_starting_x_spalte_mm(0) + self.get_max_width_mm()

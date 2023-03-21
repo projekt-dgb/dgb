@@ -3,21 +3,11 @@ use std::collections::BTreeMap;
 use std::io::Error as IoError;
 use std::{fmt, fs, process::Command};
 
-use crate::{
-    get_pdftoppm_command, get_pdftotext_command, get_tesseract_command, python::PyVm,
-    AnpassungSeite, Konfiguration, Rect,
-};
+use crate::{python::PyVm, AnpassungSeite, Konfiguration, Rect};
 use image::ImageError;
 use lopdf::Error as LoPdfError;
-use rayon::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use wry::webview::WebView;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SeiteParsed {
-    pub typ: SeitenTyp,
-    pub texte: Vec<Vec<Textblock>>,
-}
 
 /// Alle Fehler, die im Programm passieren können
 #[derive(Debug)]
@@ -25,7 +15,7 @@ pub enum Fehler {
     // Seite X kann mit pdftotext nicht gelesen werden
     FalscheSeitenZahl(u32),
     // Kann Seite X nicht klassifizieren
-    UnbekannterSeitentyp(u32),
+    UnbekannterSeitentyp,
     // Fehler beim Auslesen des Titelblatts
     Titelblatt(TitelblattFehler),
     // Datei ist kein PDF
@@ -34,6 +24,8 @@ pub enum Fehler {
     Bild(String, ImageError),
     // Fehler bei Lese- / Schreibvorgang
     Io(String, IoError), // String = FilePath
+    // Ungültiges hOCR Format
+    HocrUngueltig(String, &'static str),
 }
 
 impl From<LoPdfError> for Fehler {
@@ -54,8 +46,8 @@ impl fmt::Display for Fehler {
             Fehler::FalscheSeitenZahl(seite) => {
                 write!(f, "Seite {} kann mit pdftotext nicht gelesen werden", seite)
             }
-            Fehler::UnbekannterSeitentyp(seite) => {
-                write!(f, "Kann Seite {} nicht klassifizieren", seite)
+            Fehler::UnbekannterSeitentyp => {
+                write!(f, "Kann Seite nicht klassifizieren")
             }
             Fehler::Titelblatt(e) => write!(f, "Fehler beim Auslesen des Titelblatts: {}", e),
             Fehler::Pdf(e) => write!(f, "Fehler im PDF: {}", e),
@@ -65,6 +57,7 @@ impl fmt::Display for Fehler {
                 "Fehler beim Lesen / Schreiben vom Pfad \"{}\": {}",
                 pfad, e
             ),
+            Fehler::HocrUngueltig(hocr, e) => write!(f, "HOCR ungueltig:\r\n{}\r\n:{}", hocr, e),
         }
     }
 }
@@ -73,6 +66,41 @@ impl fmt::Display for Fehler {
 pub fn lese_seitenzahlen(pdf_bytes: &[u8]) -> Result<Vec<u32>, Fehler> {
     let pdf = lopdf::Document::load_mem(pdf_bytes)?;
     Ok(pdf.get_pages().keys().copied().collect())
+}
+
+pub fn get_seiten_dimensionen(pdf_bytes: &[u8]) -> Result<BTreeMap<u32, (f32, f32)>, Fehler> {
+    const PT_TO_MM: f32 = 2.835;
+
+    let pdf = lopdf::Document::load_mem(pdf_bytes)?;
+    let pages = pdf
+        .get_pages()
+        .into_iter()
+        .filter_map(|(page_num, page_obj)| {
+            let dict = pdf.get_dictionary(page_obj).ok()?;
+            let contents = dict.get(b"MediaBox").ok()?;
+            let array = contents.as_array().ok()?;
+
+            let width = if let Ok(o) = array[2].as_f64() {
+                o as f32
+            } else if let Ok(o) = array[2].as_i64() {
+                o as f32
+            } else {
+                return None;
+            } / PT_TO_MM;
+
+            let height = if let Ok(o) = array[3].as_f64() {
+                o as f32
+            } else if let Ok(o) = array[3].as_i64() {
+                o as f32
+            } else {
+                return None;
+            } / PT_TO_MM;
+
+            Some((page_num, (width, height)))
+        })
+        .collect();
+
+    Ok(pages)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
@@ -99,128 +127,123 @@ impl fmt::Display for TitelblattFehler {
     }
 }
 
-// Layout mit PdfToText (kein OCR! - schnell, aber nicht alle Rechte vorhanden)
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct PdfToTextLayout {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HocrLayout {
     #[serde(default)]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub seiten: BTreeMap<String, PdfToTextSeite>,
+    pub seiten: BTreeMap<String, HocrSeite>,
 }
 
-impl PdfToTextLayout {
+impl HocrLayout {
+    pub fn init_from_dimensionen(dim: &BTreeMap<u32, (f32, f32)>) -> Self {
+        Self {
+            seiten: dim
+                .iter()
+                .map(|(s, dim)| {
+                    (
+                        s.to_string(),
+                        HocrSeite {
+                            breite_mm: dim.0,
+                            hoehe_mm: dim.1,
+                            parsed: ParsedHocr {
+                                bounds: Rect {
+                                    min_x: 0.0,
+                                    min_y: 0.0,
+                                    max_x: dim.0,
+                                    max_y: dim.1,
+                                },
+                                careas: Vec::new(),
+                            },
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.seiten.is_empty()
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PdfToTextSeite {
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct HocrSeite {
     pub breite_mm: f32,
     pub hoehe_mm: f32,
-    pub texte: Vec<Textblock>,
+    pub parsed: ParsedHocr,
 }
 
-// pdftotext -bbox-layout ./temp.pdf
-pub fn get_pdftotext_layout(
-    titelblatt: &Titelblatt,
-    seitenzahlen: &[u32],
-) -> Result<PdfToTextLayout, Fehler> {
-    use kuchiki::traits::TendrilSink;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeiteParsed {
+    pub typ: SeitenTyp,
+    pub texte: Vec<Vec<Textblock>>,
+}
 
-    let temp_ordner = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
+impl HocrSeite {
+    pub fn get_default_zeilen(&self) -> Vec<f32> {
+        let im_height = self.parsed.bounds.max_y;
+        let pdf_height = self.hoehe_mm;
+        self.parsed
+            .careas
+            .iter()
+            .flat_map(|ca| {
+                ca.paragraphs.iter().map(
+                    |pa| (pdf_height / im_height * pa.bounds.max_y) + 1.0, /* mm */
+                )
+            })
+            .collect()
+    }
 
-    let temp_pdf_path = temp_ordner.clone().join("temp.pdf");
-    let temp_html_path = temp_ordner.clone().join(format!("pdftotext.html"));
+    pub fn get_textbloecke(
+        &self,
+        seite: &str,
+        seiten_typ: SeitenTyp,
+        anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
+    ) -> SeiteParsed {
+        let spalten = seiten_typ.get_columns(anpassungen_seite.get(seite));
+        let zeilen = anpassungen_seite
+            .get(seite)
+            .map(|ap| ap.zeilen.clone())
+            .unwrap_or(self.get_default_zeilen());
 
-    // pdftotext -bbox-layout /tmp/temp.pdf -o temp.html
-    // to get the layout
-    let _ = get_pdftotext_command()
-        .arg("-q")
-        .arg("-bbox-layout")
-        .arg(&format!("{}", temp_pdf_path.display()))
-        .arg(&format!("{}", temp_html_path.display()))
-        .status();
+        let texte = spalten
+            .iter()
+            .map(|col| {
+                zeilen
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(zeile_id, max_y)| {
+                        let min_y = if zeile_id == 0 {
+                            col.min_y
+                        } else {
+                            zeilen.get(zeile_id - 1).copied()?
+                        };
 
-    let html_pdftotext = fs::read_to_string(temp_html_path.clone())
-        .map_err(|e| Fehler::Io(format!("{}", temp_html_path.display()), e))?;
+                        let select_rect = Rect {
+                            min_x: col.min_x,
+                            max_x: col.max_x,
+                            min_y,
+                            max_y: *max_y,
+                        };
+                        let zeilen = self.parsed.get_words_within_bounds(&select_rect);
 
-    let _ = fs::remove_file(temp_html_path.clone());
-
-    let document = kuchiki::parse_html().one(html_pdftotext.as_str());
-
-    let seiten = seitenzahlen
-        .iter()
-        .filter_map(|sz| {
-            let css_selector = format!("page:nth-child(0n+{}) word", sz);
-            let flow_nodes = document.select(&css_selector).ok()?;
-
-            let texte = flow_nodes
-                .filter_map(|css_match| {
-                    let as_node = css_match.as_node();
-                    let as_element = as_node.as_element()?;
-                    let block_attributes = as_element.attributes.try_borrow().ok()?;
-
-                    let xmin = (&*block_attributes)
-                        .get("xmin")
-                        .and_then(|b| b.parse::<f32>().ok())?;
-                    let xmax = (&*block_attributes)
-                        .get("xmax")
-                        .and_then(|b| b.parse::<f32>().ok())?;
-                    let ymin = (&*block_attributes)
-                        .get("ymin")
-                        .and_then(|b| b.parse::<f32>().ok())?;
-                    let ymax = (&*block_attributes)
-                        .get("ymax")
-                        .and_then(|b| b.parse::<f32>().ok())?;
-
-                    let line_text = as_node
-                        .text_contents()
-                        .lines()
-                        .map(|l| l.trim().to_string())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                        .trim()
-                        .to_string();
-
-                    Some(Textblock {
-                        text: line_text,
-                        start_y: ymin,
-                        end_y: ymax,
-                        start_x: xmin,
-                        end_x: xmax,
+                        Some(Textblock {
+                            text: zeilen.join("\r\n"),
+                            start_x: col.min_x,
+                            end_x: col.max_x,
+                            start_y: min_y,
+                            end_y: *max_y,
+                        })
                     })
-                })
-                .collect();
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
-            let css_selector = format!("page:nth-child(0n+{})", sz);
-            let mut seite_node = document.select(&css_selector).ok()?;
-            let css_match = seite_node.next()?;
-            let as_node = css_match.as_node();
-            let as_element = as_node.as_element()?;
-            let seite_attributes = as_element.attributes.try_borrow().ok()?;
-            let breite_mm = (&*seite_attributes)
-                .get("width")
-                .and_then(|b| b.parse::<f32>().ok())?;
-            let hoehe_mm = (&*seite_attributes)
-                .get("height")
-                .and_then(|b| b.parse::<f32>().ok())?;
-
-            Some((
-                format!("{}", *sz),
-                PdfToTextSeite {
-                    breite_mm,
-                    hoehe_mm,
-                    texte,
-                },
-            ))
-        })
-        .collect();
-
-    Ok(PdfToTextLayout { seiten })
+        SeiteParsed {
+            typ: seiten_typ,
+            texte,
+        }
+    }
 }
 
 // Funktion, die das Titelblatt ausliest
@@ -305,11 +328,9 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     titelblatt: &Titelblatt,
     geroetet: bool,
 ) -> Result<(), Fehler> {
-    let temp_ordner = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
+    let temp_ordner = std::env::temp_dir()
+        .join(&titelblatt.grundbuch_von)
+        .join(&titelblatt.blatt.to_string());
 
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
@@ -322,19 +343,10 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
         pdftoppm_output_path = format!("page-clean-{}.png", formatiere_seitenzahl(seite, max_sz));
     }
 
-    if temp_ordner.join(&pdftoppm_output_path).exists() {
-        return Ok(());
-    }
-
     let mut pdf_bytes = pdf_bytes.to_vec();
     if !geroetet {
         pdf_bytes = clean_pdf_bytes(&pdf_bytes)?;
     }
-
-    println!(
-        "evaluate script renderPdfPage pdf with length {} bytes",
-        pdf_bytes.len()
-    );
 
     let pdf_base64 = base64::encode(pdf_bytes);
     let pdf_amtsgericht = &titelblatt.amtsgericht;
@@ -344,147 +356,6 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let _ = webview.evaluate_script(&format!("renderPdfPage(`{pdf_base64}`, `{pdf_amtsgericht}`, `{pdf_grundbuch_von}`, `{pdf_blatt}`, {seite}, {geroetet:?}, `{pdftoppm_output_path}`)"));
 
     Ok(())
-}
-
-// Konvertiert alle Seiten zu PNG Dateien (für Schrifterkennung)
-pub fn konvertiere_pdf_seiten_zu_png(
-    pdf_bytes: &[u8],
-    seitenzahlen: &[u32],
-    max_sz: u32,
-    titelblatt: &Titelblatt,
-) -> Result<(), Fehler> {
-    use std::path::Path;
-
-    let temp_ordner = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
-
-    let _ = fs::create_dir_all(temp_ordner.clone())
-        .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
-
-    let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-
-    if !Path::new(&temp_pdf_pfad).exists() {
-        fs::write(temp_pdf_pfad.clone(), pdf_bytes)
-            .map_err(|e| Fehler::Io(format!("{}", temp_pdf_pfad.display()), e))?;
-    }
-
-    let temp_clean_pdf_pfad = temp_ordner.clone().join("temp-clean.pdf");
-    if !Path::new(&temp_clean_pdf_pfad).exists() {
-        let pdf_clean = clean_pdf(pdf_bytes, titelblatt)?;
-
-        fs::write(temp_clean_pdf_pfad.clone(), pdf_clean)
-            .map_err(|e| Fehler::Io(format!("{}", temp_clean_pdf_pfad.display()), e))?;
-    }
-
-    seitenzahlen.par_iter().for_each(|sz| {
-        let pdftoppm_output_path = temp_ordner
-            .clone()
-            .join(format!("page-{}.png", formatiere_seitenzahl(*sz, max_sz)));
-
-        if !pdftoppm_output_path.exists() {
-            println!("{} existiert NICHT!", pdftoppm_output_path.display());
-
-            // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
-            // writes result to /tmp/test-01.png
-            let _ = get_pdftoppm_command()
-                .arg("-q")
-                .arg("-r")
-                .arg("600") // 600 DPI
-                .arg("-png")
-                .arg("-f")
-                .arg(&format!("{}", sz))
-                .arg("-l")
-                .arg(&format!("{}", sz))
-                .arg(&format!("{}", temp_pdf_pfad.display()))
-                .arg(&format!(
-                    "{}",
-                    temp_ordner.clone().join(format!("page")).display()
-                ))
-                .status();
-        } else {
-            println!("{} existiert!", pdftoppm_output_path.display());
-        }
-
-        let pdftoppm_clean_output_path = temp_ordner.clone().join(format!(
-            "page-clean-{}.png",
-            formatiere_seitenzahl(*sz, max_sz)
-        ));
-
-        if !pdftoppm_clean_output_path.exists() {
-            println!("{} existiert NICHT!", pdftoppm_clean_output_path.display());
-
-            // pdftoppm -q -r 600 -png -f 1 -l 1 /tmp/Ludwigsburg/17/temp.pdf /tmp/Ludwigsburg/17/test
-            // writes result to /tmp/page-clean-01.png
-            let _ = get_pdftoppm_command()
-                .arg("-q")
-                .arg("-r")
-                .arg("600") // 600 DPI
-                .arg("-png")
-                .arg("-f")
-                .arg(&format!("{}", sz))
-                .arg("-l")
-                .arg(&format!("{}", sz))
-                .arg(&format!("{}", temp_clean_pdf_pfad.display()))
-                .arg(&format!(
-                    "{}",
-                    temp_ordner.clone().join(format!("page-clean")).display()
-                ))
-                .status();
-        } else {
-            println!("{} existiert!", pdftoppm_clean_output_path.display());
-        }
-    });
-
-    Ok(())
-}
-
-pub fn ocr_seite(
-    titelblatt: &Titelblatt,
-    seitenzahl: u32,
-    max_seitenzahl: u32,
-) -> Result<String, Fehler> {
-    let temp_ordner = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
-
-    let pdftoppm_output_path = temp_ordner.clone().join(format!(
-        "page-clean-{}.png",
-        formatiere_seitenzahl(seitenzahl, max_seitenzahl)
-    ));
-    let tesseract_output_path = temp_ordner
-        .clone()
-        .join(format!("tesseract-{:02}.txt", seitenzahl));
-
-    if !tesseract_output_path.exists() {
-        // tesseract ./test-01.png ./tesseract-01 -l deu -c preserve_interword_spaces=1
-        // Ausgabe -> /tmp/tesseract-01.txt
-        let _ = get_tesseract_command()
-            .arg(&format!("{}", pdftoppm_output_path.display()))
-            .arg(&format!(
-                "{}",
-                temp_ordner
-                    .clone()
-                    .join(format!("tesseract-{:02}", seitenzahl))
-                    .display()
-            ))
-            .arg("-l")
-            .arg("deu")
-            .arg("--dpi")
-            .arg("600")
-            .arg("-c")
-            .arg("preserve_interword_spaces=1")
-            .arg("-c")
-            .arg("debug_file=/dev/null") // TODO: funktioniert nur auf Linux!
-            .status();
-    }
-
-    std::fs::read_to_string(tesseract_output_path.clone())
-        .map_err(|e| Fehler::Io(format!("{}", tesseract_output_path.display()), e))
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
@@ -529,43 +400,7 @@ pub enum SeitenTyp {
 }
 
 // Bestimmt den Seitentyp anhand des OCR-Textes der gesamten Seite
-pub fn klassifiziere_seitentyp(
-    titelblatt: &Titelblatt,
-    seitenzahl: u32,
-    max_sz: u32,
-    ocr_text: Option<&String>,
-) -> Result<SeitenTyp, Fehler> {
-    // Um die Seite zu erkennen, müssen wir erst den Typ der Seite erkennen
-    //
-    // Der OCR-Text (wenn auch nicht genau), enthält üblicherweise bereits den Typ der Seite
-
-    let temp_ordner = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
-
-    let pdftoppm_output_path = temp_ordner.clone().join(format!(
-        "page-clean-{}.png",
-        formatiere_seitenzahl(seitenzahl, max_sz)
-    ));
-
-    let (w, h) = image::image_dimensions(pdftoppm_output_path.clone())
-        .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
-
-    let is_landscape_page = w > h;
-
-    let ocr_text = match ocr_text {
-        Some(s) => s.clone(),
-        None => {
-            let tesseract_output_path = temp_ordner
-                .clone()
-                .join(format!("tesseract-{:02}.txt", seitenzahl));
-            fs::read_to_string(tesseract_output_path.clone())
-                .map_err(|e| Fehler::Io(format!("{}", tesseract_output_path.display()), e))?
-        }
-    };
-
+pub fn klassifiziere_seitentyp(ocr_text: &str, querformat: bool) -> Result<SeitenTyp, Fehler> {
     if ocr_text.contains("Dritte Abteilung")
         || ocr_text.contains("Dritte Abteilu ng")
         || ocr_text.contains("Abteilung 3")
@@ -577,7 +412,7 @@ pub fn klassifiziere_seitentyp(
         || ocr_text.contains("Abteilung IIl   ")
         || ocr_text.contains("Abteilung III   ")
     {
-        if is_landscape_page {
+        if querformat {
             if ocr_text.contains("Veränderungen") || ocr_text.contains("Löschungen") {
                 Ok(SeitenTyp::Abt3HorzVeraenderungenLoeschungen)
             } else {
@@ -598,7 +433,7 @@ pub fn klassifiziere_seitentyp(
         || ocr_text.contains("Abteilung II")
         || ocr_text.contains("Abteilung 2")
     {
-        if is_landscape_page {
+        if querformat {
             if ocr_text.contains("Veränderungen") || ocr_text.contains("Löschungen") {
                 Ok(SeitenTyp::Abt2HorzVeraenderungen)
             } else {
@@ -617,7 +452,7 @@ pub fn klassifiziere_seitentyp(
         || ocr_text.contains("Abteilung 1")
         || (ocr_text.contains("Eigentümer") && ocr_text.contains("Grundlage der Eintragung"))
     {
-        if is_landscape_page {
+        if querformat {
             Ok(SeitenTyp::Abt1Horz)
         } else {
             Ok(SeitenTyp::Abt1Vert)
@@ -629,7 +464,7 @@ pub fn klassifiziere_seitentyp(
         || ocr_text.contains("Wirtschaftsart und Lage")
         || ocr_text.contains("Bestand und Zuschreibungen")
     {
-        if is_landscape_page {
+        if querformat {
             if ocr_text.contains("Abschreibungen") {
                 Ok(SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen)
             } else {
@@ -645,7 +480,7 @@ pub fn klassifiziere_seitentyp(
             }
         }
     } else {
-        Err(Fehler::UnbekannterSeitentyp(seitenzahl))
+        Err(Fehler::UnbekannterSeitentyp)
     }
 }
 
@@ -2425,125 +2260,6 @@ impl SeitenTyp {
     }
 }
 
-// Wenn der Seitentyp bekannt ist, schneide die Seiten nach ihrem Seitentyp in Spalten
-//
-// Gibt die Spalten zurück
-pub fn formularspalten_ausschneiden(
-    titelblatt: &Titelblatt,
-    seitenzahl: u32,
-    max_seitenzahl: u32,
-    seitentyp: SeitenTyp,
-    pdftotext_layout: &PdfToTextLayout,
-    anpassungen_seite: Option<&AnpassungSeite>,
-) -> Result<Vec<Column>, Fehler> {
-    use image::ImageOutputFormat;
-    use std::fs::File;
-    use std::path::Path;
-
-    let columns = seitentyp.get_columns(anpassungen_seite);
-    let temp_dir = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
-
-    let columns_to_recalc = columns
-        .clone()
-        .par_iter()
-        .enumerate()
-        .filter_map(|(col_idx, col)| {
-            let cropped_output_path = temp_dir.clone().join(format!(
-                "page-{}-col-{:02}-{:02}-{:02}-{:02}-{:02}.png",
-                formatiere_seitenzahl(seitenzahl, max_seitenzahl),
-                col_idx,
-                col.min_x,
-                col.min_y,
-                col.max_x,
-                col.max_y,
-            ));
-
-            if Path::new(&cropped_output_path).exists() {
-                None
-            } else {
-                Some((col_idx, col.clone(), cropped_output_path))
-            }
-        })
-        .collect::<Vec<_>>();
-
-    if columns_to_recalc.is_empty() {
-        return Ok(columns);
-    }
-
-    let seite = pdftotext_layout
-        .seiten
-        .get(&format!("{}", seitenzahl))
-        .ok_or(Fehler::FalscheSeitenZahl(seitenzahl))?;
-
-    let _ = fs::create_dir_all(temp_dir.clone())
-        .map_err(|e| Fehler::Io(format!("{}", temp_dir.clone().display()), e))?;
-
-    let pdftoppm_output_path = temp_dir.clone().join(format!(
-        "page-clean-{}.png",
-        formatiere_seitenzahl(seitenzahl, max_seitenzahl)
-    ));
-    let (im_width, im_height) = image::image_dimensions(&pdftoppm_output_path)
-        .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
-
-    let im_width = im_width as f32;
-    let im_height = im_height as f32;
-
-    let mut im = image::open(&pdftoppm_output_path.clone())
-        .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
-
-    let page_width = seite.breite_mm;
-    let page_height = seite.hoehe_mm;
-
-    let mut rgb_bytes = im.to_rgb8();
-
-    // Textblöcke schwärzen, die bereits in pdftotext vorhanden sind
-    for t in seite.texte.iter() {
-        let t_start_y_px =
-            ((t.start_y * im_height / seite.hoehe_mm).floor() as u32).min(im_height as u32);
-        let t_end_y_px =
-            ((t.end_y * im_height / seite.hoehe_mm).floor() as u32).min(im_height as u32);
-        let t_start_x_px =
-            ((t.start_x * im_width / seite.breite_mm).floor() as u32).min(im_width as u32);
-        let t_end_x_px =
-            ((t.end_x * im_width / seite.breite_mm).floor() as u32).min(im_width as u32);
-
-        for y in t_start_y_px..t_end_y_px {
-            for x in t_start_x_px..t_end_x_px {
-                rgb_bytes.put_pixel(x, y, image::Rgb([255, 255, 255]));
-            }
-        }
-    }
-
-    im = image::DynamicImage::ImageRgb8(rgb_bytes);
-
-    columns_to_recalc
-        .into_par_iter()
-        .for_each(|(col_idx, col, col_path)| {
-            // crop columns of image
-            let x = col.min_x / page_width * im_width as f32;
-            let y = col.min_y / page_height * im_height as f32;
-            let width = (col.max_x - col.min_x) / page_width * im_width as f32;
-            let height = (col.max_y - col.min_y) / page_height * im_height as f32;
-
-            let cropped = im.crop_imm(
-                x.round().max(0.0) as u32,
-                y.round().max(0.0) as u32,
-                width.round().max(0.0) as u32,
-                height.round().max(0.0) as u32,
-            );
-
-            if let Ok(mut output_file) = File::create(col_path.clone()) {
-                let _ = cropped.write_to(&mut output_file, ImageOutputFormat::Png);
-            }
-        });
-
-    Ok(columns)
-}
-
 // Seitenzahlen sind
 pub fn formatiere_seitenzahl(zahl: u32, max_seiten: u32) -> String {
     if max_seiten < 10 {
@@ -2555,85 +2271,7 @@ pub fn formatiere_seitenzahl(zahl: u32, max_seiten: u32) -> String {
     }
 }
 
-// Lässt die Schrifterkennung über die Spalten laufen, Ausgabe in .hocr Dateien
-pub fn ocr_spalten(
-    titelblatt: &Titelblatt,
-    seitenzahl: u32,
-    max_seitenzahl: u32,
-    spalten: &[Column],
-) -> Result<(), Fehler> {
-    use std::path::Path;
-
-    let temp_dir = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
-
-    for (col_idx, col) in spalten.iter().enumerate() {
-        let cropped_output_path = temp_dir.clone().join(format!(
-            "page-{}-col-{:02}-{:02}-{:02}-{:02}-{:02}.png",
-            formatiere_seitenzahl(seitenzahl, max_seitenzahl),
-            col_idx,
-            col.min_x,
-            col.min_y,
-            col.max_x,
-            col.max_y,
-        ));
-
-        let tesseract_path = format!(
-            "tesseract-{:02}-col-{:02}-{:02}-{:02}-{:02}-{:02}",
-            seitenzahl, col_idx, col.min_x, col.min_y, col.max_x, col.max_y
-        );
-
-        let tesseract_output_path = temp_dir.clone().join(format!("{}.hocr", tesseract_path));
-
-        if Path::new(&tesseract_output_path).exists() {
-            continue;
-        }
-
-        if col.is_number_column {
-            let _ = get_tesseract_command()
-                .arg(&format!("{}", cropped_output_path.display()))
-                .arg(&format!(
-                    "{}",
-                    temp_dir.clone().join(tesseract_path.clone()).display()
-                ))
-                .arg("--dpi")
-                .arg("600")
-                .arg("--psm")
-                .arg("6")
-                .arg("-c")
-                .arg("tessedit_char_whitelist=,.-/%€0123456789 ")
-                .arg("-c")
-                .arg("tessedit_create_hocr=1")
-                .arg("-c")
-                .arg("debug_file=/dev/null") // TODO: funktioniert nur auf Linux!
-                .status();
-        } else {
-            let _ = get_tesseract_command()
-            .arg(&format!("{}", cropped_output_path.display()))
-            .arg(&format!("{}", temp_dir.clone().join(tesseract_path.clone()).display()))     
-            .arg("--dpi")
-            .arg("600")
-            .arg("--psm")
-            .arg("6")
-            .arg("-l")
-            .arg("deu")
-            .arg("-c")
-            .arg("tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZüÜäÄöÖß,.-/%§()€0123456789 ")
-            .arg("-c")
-            .arg("tessedit_create_hocr=1")
-            .arg("-c")
-            .arg("debug_file=/dev/null") // TODO: funktioniert nur auf Linux!
-            .status();
-        }
-    }
-
-    Ok(())
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Textblock {
     pub text: String,
     pub start_y: f32,
@@ -2642,377 +2280,403 @@ pub struct Textblock {
     pub end_x: f32,
 }
 
-pub fn zeilen_aus_tesseract_hocr(tesseract_hocr_path: String) -> Result<Vec<String>, Fehler> {
-    use kuchiki::traits::TendrilSink;
-
-    let hocr_tesseract = fs::read_to_string(tesseract_hocr_path.clone())
-        .map_err(|e| Fehler::Io(tesseract_hocr_path.clone(), e))?;
-
-    let document = kuchiki::parse_html().one(hocr_tesseract.as_str());
-
-    let css_selector = ".ocr_line";
-    let mut result = Vec::new();
-
-    if let Ok(m) = document.select(css_selector) {
-        for css_match in m {
-            let as_node = css_match.as_node();
-            let as_element = match as_node.as_element() {
-                Some(s) => s,
-                None => continue,
-            };
-
-            let line_text = as_node
-                .text_contents()
-                .lines()
-                .map(|l| l.trim().to_string())
-                .collect::<Vec<_>>()
-                .join(" ")
-                .trim()
-                .to_string();
-
-            result.push(line_text.clone());
-        }
-    }
-
-    Ok(result)
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ParsedHocr {
+    pub bounds: Rect,
+    pub careas: Vec<HocrArea>,
 }
 
-// Liest die Textblöcke aus den Spalten (mit Koordinaten in Pixeln) aus
-pub fn textbloecke_aus_spalten(
-    titelblatt: &Titelblatt,
-    seitenzahl: u32,
-    max_seitenzahl: u32,
-    spalten: &[Column],
-    pdftotext: &PdfToTextLayout,
-    anpassungen_seite: Option<&AnpassungSeite>,
-) -> Result<Vec<Vec<Textblock>>, Fehler> {
-    let temp_dir = std::env::temp_dir().join(&format!(
-        "{gemarkung}/{blatt}",
-        gemarkung = titelblatt.grundbuch_von,
-        blatt = titelblatt.blatt
-    ));
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HocrArea {
+    pub bounds: Rect,
+    pub paragraphs: Vec<HocrParagraph>,
+}
 
-    let pdftoppm_output_path = temp_dir.clone().join(format!(
-        "page-clean-{}.png",
-        formatiere_seitenzahl(seitenzahl, max_seitenzahl)
-    ));
-    let (im_width, im_height) = image::image_dimensions(&pdftoppm_output_path)
-        .map_err(|e| Fehler::Bild(format!("{}", pdftoppm_output_path.display()), e))?;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HocrParagraph {
+    pub bounds: Rect,
+    pub lines: Vec<HocrLine>,
+}
 
-    let im_width = im_width as f32;
-    let im_height = im_height as f32;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HocrLine {
+    pub bounds: Rect,
+    pub words: Vec<HocrWord>,
+}
 
-    Ok(spalten
-        .par_iter()
-        .enumerate()
-        .map(|(col_idx, col)| {
-            use kuchiki::traits::TendrilSink;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 
-            // Textblöcke tesseract
+pub struct HocrWord {
+    pub bounds: Rect,
+    pub confidence: f32,
+    pub text: String,
+}
 
-            let zeilen_vordefiniert = anpassungen_seite
-                .map(|aps| aps.zeilen.clone())
+#[test]
+fn test_ocr_parsing() {
+    let string = r#"
+    <div class='ocr_page' id='page_2' title='image "unknown"; bbox 0 0 640 480; ppageno 1; scan_res 70 70'>
+    <div class='ocr_carea' id='block_2_1' title="bbox 36 92 618 361">
+     <p class='ocr_par' id='par_2_1' lang='eng' title="bbox 36 92 618 184">
+      <span class='ocr_line' id='line_2_1' title="bbox 36 92 580 122; baseline 0 -6; x_size 30; x_descenders 6; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_1' title='bbox 36 92 96 116; x_wconf 94'>This</span>
+       <span class='ocrx_word' id='word_2_2' title='bbox 109 92 129 116; x_wconf 94'>is</span>
+       <span class='ocrx_word' id='word_2_3' title='bbox 141 98 156 116; x_wconf 94'>a</span>
+       <span class='ocrx_word' id='word_2_4' title='bbox 169 92 201 116; x_wconf 94'>lot</span>
+       <span class='ocrx_word' id='word_2_5' title='bbox 212 92 240 116; x_wconf 96'>of</span>
+       <span class='ocrx_word' id='word_2_6' title='bbox 251 92 282 116; x_wconf 96'>12</span>
+       <span class='ocrx_word' id='word_2_7' title='bbox 296 92 364 122; x_wconf 96'>point</span>
+       <span class='ocrx_word' id='word_2_8' title='bbox 374 93 427 116; x_wconf 96'>text</span>
+       <span class='ocrx_word' id='word_2_9' title='bbox 437 93 463 116; x_wconf 96'>to</span>
+       <span class='ocrx_word' id='word_2_10' title='bbox 474 93 526 116; x_wconf 96'>test</span>
+       <span class='ocrx_word' id='word_2_11' title='bbox 536 92 580 116; x_wconf 96'>the</span>
+      </span>
+      <span class='ocr_line' id='line_2_2' title="bbox 36 126 618 157; baseline 0 -7; x_size 31; x_descenders 7; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_12' title='bbox 36 132 81 150; x_wconf 95'>ocr</span>
+       <span class='ocrx_word' id='word_2_13' title='bbox 91 126 160 150; x_wconf 96'>code</span>
+       <span class='ocrx_word' id='word_2_14' title='bbox 172 126 223 150; x_wconf 95'>and</span>
+       <span class='ocrx_word' id='word_2_15' title='bbox 236 132 286 150; x_wconf 95'>see</span>
+       <span class='ocrx_word' id='word_2_16' title='bbox 299 126 314 150; x_wconf 92'>if</span>
+       <span class='ocrx_word' id='word_2_17' title='bbox 325 126 339 150; x_wconf 96'>it</span>
+       <span class='ocrx_word' id='word_2_18' title='bbox 348 126 433 150; x_wconf 96'>works</span>
+       <span class='ocrx_word' id='word_2_19' title='bbox 445 132 478 150; x_wconf 75'>on</span>
+       <span class='ocrx_word' id='word_2_20' title='bbox 500 126 529 150; x_wconf 75'>all</span>
+       <span class='ocrx_word' id='word_2_21' title='bbox 541 127 618 157; x_wconf 96'>types</span>
+      </span>
+      <span class='ocr_line' id='line_2_3' title="bbox 36 160 223 184; baseline 0 0; x_size 31.214842; x_descenders 7.2148418; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_22' title='bbox 36 160 64 184; x_wconf 96'>of</span>
+       <span class='ocrx_word' id='word_2_23' title='bbox 72 160 113 184; x_wconf 96'>file</span>
+       <span class='ocrx_word' id='word_2_24' title='bbox 123 160 223 184; x_wconf 96'>format.</span>
+      </span>
+     </p>
+ 
+     <p class='ocr_par' id='par_2_2' lang='eng' title="bbox 36 194 597 361">
+      <span class='ocr_line' id='line_2_4' title="bbox 36 194 585 225; baseline 0 -7; x_size 31; x_descenders 7; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_25' title='bbox 36 194 91 218; x_wconf 95'>The</span>
+       <span class='ocrx_word' id='word_2_26' title='bbox 102 194 177 224; x_wconf 95'>quick</span>
+       <span class='ocrx_word' id='word_2_27' title='bbox 189 194 274 218; x_wconf 95'>brown</span>
+       <span class='ocrx_word' id='word_2_28' title='bbox 287 194 339 225; x_wconf 96'>dog</span>
+       <span class='ocrx_word' id='word_2_29' title='bbox 348 194 456 225; x_wconf 96'>jumped</span>
+       <span class='ocrx_word' id='word_2_30' title='bbox 468 200 531 218; x_wconf 96'>over</span>
+       <span class='ocrx_word' id='word_2_31' title='bbox 540 194 585 218; x_wconf 96'>the</span>
+      </span>
+      <span class='ocr_line' id='line_2_5' title="bbox 37 228 585 259; baseline 0 -7; x_size 31; x_descenders 7; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_32' title='bbox 37 228 92 259; x_wconf 96'>lazy</span>
+       <span class='ocrx_word' id='word_2_33' title='bbox 103 228 153 252; x_wconf 96'>fox.</span>
+       <span class='ocrx_word' id='word_2_34' title='bbox 165 228 220 252; x_wconf 96'>The</span>
+       <span class='ocrx_word' id='word_2_35' title='bbox 232 228 307 258; x_wconf 95'>quick</span>
+       <span class='ocrx_word' id='word_2_36' title='bbox 319 228 404 252; x_wconf 95'>brown</span>
+       <span class='ocrx_word' id='word_2_37' title='bbox 417 228 468 259; x_wconf 95'>dog</span>
+       <span class='ocrx_word' id='word_2_38' title='bbox 478 228 585 259; x_wconf 95'>jumped</span>
+      </span>
+      <span class='ocr_line' id='line_2_6' title="bbox 36 262 597 293; baseline 0 -7; x_size 31; x_descenders 7; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_39' title='bbox 36 268 99 286; x_wconf 96'>over</span>
+       <span class='ocrx_word' id='word_2_40' title='bbox 109 262 153 286; x_wconf 96'>the</span>
+       <span class='ocrx_word' id='word_2_41' title='bbox 165 262 221 293; x_wconf 96'>lazy</span>
+       <span class='ocrx_word' id='word_2_42' title='bbox 231 262 281 286; x_wconf 96'>fox.</span>
+       <span class='ocrx_word' id='word_2_43' title='bbox 294 262 349 286; x_wconf 96'>The</span>
+       <span class='ocrx_word' id='word_2_44' title='bbox 360 262 435 292; x_wconf 96'>quick</span>
+       <span class='ocrx_word' id='word_2_45' title='bbox 447 262 532 286; x_wconf 95'>brown</span>
+       <span class='ocrx_word' id='word_2_46' title='bbox 545 262 597 293; x_wconf 95'>dog</span>
+      </span>
+      <span class='ocr_line' id='line_2_7' title="bbox 43 296 561 327; baseline 0 -7; x_size 31; x_descenders 7; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_47' title='bbox 43 296 150 327; x_wconf 96'>jumped</span>
+       <span class='ocrx_word' id='word_2_48' title='bbox 162 302 226 320; x_wconf 96'>over</span>
+       <span class='ocrx_word' id='word_2_49' title='bbox 235 296 279 320; x_wconf 96'>the</span>
+       <span class='ocrx_word' id='word_2_50' title='bbox 292 296 347 327; x_wconf 96'>lazy</span>
+       <span class='ocrx_word' id='word_2_51' title='bbox 357 296 407 320; x_wconf 96'>fox.</span>
+       <span class='ocrx_word' id='word_2_52' title='bbox 420 296 475 320; x_wconf 96'>The</span>
+       <span class='ocrx_word' id='word_2_53' title='bbox 486 296 561 326; x_wconf 96'>quick</span>
+      </span>
+      <span class='ocr_line' id='line_2_8' title="bbox 37 330 561 361; baseline 0 -7; x_size 31; x_descenders 7; x_ascenders 6">
+       <span class='ocrx_word' id='word_2_54' title='bbox 37 330 122 354; x_wconf 96'>brown</span>
+       <span class='ocrx_word' id='word_2_55' title='bbox 135 330 187 361; x_wconf 96'>dog</span>
+       <span class='ocrx_word' id='word_2_56' title='bbox 196 330 304 361; x_wconf 96'>jumped</span>
+       <span class='ocrx_word' id='word_2_57' title='bbox 316 336 379 354; x_wconf 95'>over</span>
+       <span class='ocrx_word' id='word_2_58' title='bbox 388 330 433 354; x_wconf 96'>the</span>
+       <span class='ocrx_word' id='word_2_59' title='bbox 445 330 500 361; x_wconf 96'>lazy</span>
+       <span class='ocrx_word' id='word_2_60' title='bbox 511 330 561 354; x_wconf 96'>fox.</span>
+      </span>
+     </p>
+    </div>
+   </div>
+    "#;
+
+    let parsed = ParsedHocr::new(&string).unwrap();
+
+    assert_eq!(
+        parsed.get_zeilen(),
+        vec![
+            "This is a lot of 12 point text to test the".to_string(),
+            "ocr code and see if it works on all types".to_string(),
+            "of file format.".to_string(),
+            "".to_string(),
+            "The quick brown dog jumped over the".to_string(),
+            "lazy fox. The quick brown dog jumped".to_string(),
+            "over the lazy fox. The quick brown dog".to_string(),
+            "jumped over the lazy fox. The quick".to_string(),
+            "brown dog jumped over the lazy fox.".to_string(),
+        ]
+    );
+}
+
+impl ParsedHocr {
+    pub fn new(hocr_tesseract: &str) -> Result<Self, Fehler> {
+        use kuchiki::traits::TendrilSink;
+
+        let document = kuchiki::parse_html().one(hocr_tesseract);
+
+        let page_node = document
+            .select(".ocr_page")
+            .map_err(|_| {
+                Fehler::HocrUngueltig(hocr_tesseract.to_string(), "Kein .ocr_page vorhanden")
+            })?
+            .next()
+            .ok_or_else(|| {
+                Fehler::HocrUngueltig(hocr_tesseract.to_string(), "Kein .ocr_page vorhanden")
+            })?;
+
+        let infos = page_node
+            .as_node()
+            .0
+            .as_element()
+            .ok_or_else(|| {
+                Fehler::HocrUngueltig(
+                    hocr_tesseract.to_string(),
+                    ".ocr_page ist nicht vom Typ ElementNode",
+                )
+            })?
+            .attributes
+            .borrow()
+            .get("title")
+            .ok_or_else(|| {
+                Fehler::HocrUngueltig(hocr_tesseract.to_string(), ".ocr_page hat kein <title>")
+            })?
+            .to_string();
+
+        let page_bounds = get_bbox(&infos).ok_or_else(|| {
+            Fehler::HocrUngueltig(
+                hocr_tesseract.to_string(),
+                ".ocr_page hat ungültige <bounds>",
+            )
+        })?;
+
+        let careas =
+            page_node
+                .as_node()
+                .select(".ocr_carea")
+                .and_then(|carea_node| {
+                    carea_node
+                        .map(|carea_node| {
+                            let infos = carea_node
+                                .as_node()
+                                .0
+                                .as_element()
+                                .ok_or_else(|| ())?
+                                .attributes
+                                .borrow()
+                                .get("title")
+                                .ok_or_else(|| ())?
+                                .to_string();
+
+                            let carea_bounds = get_bbox(&infos).ok_or_else(|| ())?;
+
+                            let paragraphs =
+                                page_node
+                                    .as_node()
+                                    .select(".ocr_par")
+                                    .and_then(|ocr_par_node| {
+                                        ocr_par_node
+                                            .map(|ocr_par_node| {
+                                                let infos = ocr_par_node
+                                                    .as_node()
+                                                    .0
+                                                    .as_element()
+                                                    .ok_or_else(|| ())?
+                                                    .attributes
+                                                    .borrow()
+                                                    .get("title")
+                                                    .ok_or_else(|| ())?
+                                                    .to_string();
+
+                                                let paragraph_bounds =
+                                                    get_bbox(&infos).ok_or_else(|| ())?;
+
+                                                let lines =
+                                                    ocr_par_node
+                                                        .as_node()
+                                                        .select(".ocr_line")
+                                                        .and_then(|ocr_line_node| {
+                                                            ocr_line_node
+                            .map(|ocr_line_node| {
+                                let infos = ocr_line_node.as_node().0.as_element()
+                                .ok_or_else(|| ())?
+                                .attributes
+                                .borrow()
+                                .get("title")
+                                .ok_or_else(|| ())?
+                                .to_string();
+                        
+                                let line_bounds = get_bbox(&infos)
+                                .ok_or_else(|| ())?;
+            
+                                let words = ocr_line_node.as_node()
+                                .select(".ocrx_word")
+                                .and_then(|ocr_word_node| {
+                                    ocr_word_node.map(|ocr_word_node| {
+                                        
+                                        let infos = ocr_word_node.as_node().0.as_element()
+                                        .ok_or_else(|| ())?
+                                        .attributes
+                                        .borrow()
+                                        .get("title")
+                                        .ok_or_else(|| ())?
+                                        .to_string();
+    
+                                        let word_bounds = get_bbox(&infos)
+                                        .ok_or_else(|| ())?;
+                    
+                                        let text = ocr_word_node.as_node()
+                                        .text_contents()
+                                        .trim()
+                                        .to_string();
+            
+                                        Ok(HocrWord {
+                                            bounds: word_bounds,
+                                            text,
+                                            confidence: 100.0,
+                                        })
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()
+                                }).unwrap_or_default();
+            
+                                Ok(HocrLine {
+                                    bounds: line_bounds,
+                                    words,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                                                        })
+                                                        .unwrap_or_default();
+
+                                                Ok(HocrParagraph {
+                                                    bounds: paragraph_bounds,
+                                                    lines,
+                                                })
+                                            })
+                                            .collect::<Result<Vec<_>, _>>()
+                                    })
+                                    .unwrap_or_default();
+
+                            Ok(HocrArea {
+                                bounds: carea_bounds,
+                                paragraphs,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                })
                 .unwrap_or_default();
 
-            let tesseract_path = format!(
-                "tesseract-{:02}-col-{:02}-{:02}-{:02}-{:02}-{:02}",
-                seitenzahl, col_idx, col.min_x, col.min_y, col.max_x, col.max_y
-            );
+        Ok(Self {
+            bounds: page_bounds,
+            careas,
+        })
+    }
 
-            let tesseract_hocr_path = temp_dir.clone().join(format!("{}.hocr", tesseract_path));
+    pub fn get_zeilen(&self) -> Vec<String> {
+        let mut zeilen = Vec::new();
 
-            // Read /tmp/tesseract-01-col-00.hocr
-            let hocr_tesseract = match fs::read_to_string(tesseract_hocr_path.clone()) {
-                Ok(o) => o,
-                Err(e) => {
-                    return Err(Fehler::Io(format!("{}", tesseract_hocr_path.display()), e));
-                }
-            };
-
-            let document = kuchiki::parse_html().one(hocr_tesseract.as_str());
-
-            let css_selector = ".ocr_line";
-
-            let (page_width, page_height) = match pdftotext.seiten.get(&format!("{}", seitenzahl)) {
-                Some(o) => (o.breite_mm, o.hoehe_mm),
-                None => {
-                    return Err(Fehler::FalscheSeitenZahl(seitenzahl));
-                }
-            };
-
-            let col_width_px = (col.max_x - col.min_x).abs() / page_width * im_width as f32;
-            let col_height_px = (col.max_y - col.min_y).abs() / page_height * im_height as f32;
-            let col_width_mm = (col.max_x - col.min_x).abs();
-            let col_height_mm = (col.max_y - col.min_y).abs();
-
-            if zeilen_vordefiniert.is_empty() {
-                let mut text_blocks = Vec::new();
-                let mut block_start_y = 0.0;
-                let mut block_end_y = 0.0;
-                let mut block_start_x = 0.0;
-                let mut block_end_x = 0.0;
-
-                let mut current_text_block = Vec::new();
-
-                if let Ok(m) = document.select(css_selector) {
-                    for css_match in m {
-                        let as_node = css_match.as_node();
-                        let as_element = match as_node.as_element() {
-                            Some(s) => s,
-                            None => continue,
-                        };
-
-                        let bbox_attribute = as_element.attributes.borrow();
-                        let bbox = (&*bbox_attribute)
-                            .get("title")
-                            .and_then(|b| b.split(";").next());
-
-                        let line_text = as_node
-                            .text_contents()
-                            .lines()
-                            .map(|l| l.trim().to_string())
+        for ca in self.careas.iter() {
+            for pa in ca.paragraphs.iter() {
+                for li in pa.lines.iter() {
+                    zeilen.push(
+                        li.words
+                            .iter()
+                            .map(|w| w.text.clone())
                             .collect::<Vec<_>>()
-                            .join(" ")
-                            .trim()
-                            .to_string();
+                            .join(" "),
+                    );
+                }
+                zeilen.push(String::new());
+            }
+        }
 
-                        // "bbox 882 201 1227 254"
-                        let bbox_clean = match bbox {
-                            Some(s) => s,
-                            None => continue,
-                        };
+        if zeilen.last().cloned() == Some(String::new()) {
+            zeilen.pop();
+        }
 
-                        // startx, starty, endx, endy
-                        // 882 201 1227 254
-                        let bbox = bbox_clean.replace("bbox", "");
-                        let values = bbox
-                            .trim()
-                            .split_whitespace()
-                            .filter_map(|s| s.parse::<f32>().ok())
-                            .collect::<Vec<_>>();
+        zeilen
+    }
 
-                        let current_line_start_x = match values.get(0) {
-                            Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
-                            None => continue,
-                        };
+    pub fn get_text(&self) -> String {
+        self.get_zeilen().join("")
+    }
 
-                        let current_line_start_y = match values.get(1) {
-                            Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
-                            None => continue,
-                        };
+    pub fn get_words_within_bounds(&self, rect: &Rect) -> Vec<String> {
+        let mut zeilen = Vec::new();
 
-                        let current_line_end_x = match values.get(2) {
-                            Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
-                            None => continue,
-                        };
+        for ca in self.careas.iter() {
+            for pa in ca.paragraphs.iter() {
+                if !pa.bounds.overlaps(rect) {
+                    continue;
+                }
 
-                        let current_line_end_y = match values.get(3) {
-                            Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
-                            None => continue,
-                        };
+                for li in pa.lines.iter() {
+                    let mut include_word = false;
+                    let mut words_until_max_x = Vec::new();
 
-                        // new text block start
-                        if current_line_start_y > block_end_y + col.line_break_after_px
-                            && !current_text_block.is_empty()
-                        {
-                            text_blocks.push(Textblock {
-                                text: current_text_block.join(" "),
-                                start_y: block_start_y,
-                                end_y: block_end_y,
-                                start_x: block_start_x,
-                                end_x: block_end_x,
-                            });
-
-                            block_start_y = current_line_start_y;
-                            block_end_y = current_line_start_y;
-                            block_start_x = current_line_start_x;
-                            block_end_x = current_line_start_x;
-                            current_text_block.clear();
+                    for w in li.words.iter() {
+                        if !w.bounds.overlaps(rect) {
+                            continue;
                         }
-
-                        block_end_y = current_line_end_y.max(block_end_y);
-                        block_end_x = current_line_end_x.max(block_end_x);
-                        current_text_block.push(line_text.clone());
+                        words_until_max_x.push(w.text.clone());
                     }
+
+                    zeilen.push(words_until_max_x.join(" "));
                 }
 
-                if !current_text_block.is_empty() {
-                    text_blocks.push(Textblock {
-                        text: current_text_block.join(" "),
-                        start_y: block_start_y,
-                        end_y: block_end_y,
-                        start_x: block_start_x,
-                        end_x: block_end_x,
-                    });
-                }
+                zeilen.push(String::new());
+            }
+        }
 
-                // Textblöcke pdftotext
-                let texts_on_page = pdftotext
-                    .seiten
-                    .get(&format!("{}", seitenzahl))
-                    .map(|s| s.texte.clone())
-                    .unwrap_or_default();
+        if zeilen.last().cloned() == Some(String::new()) {
+            zeilen.pop();
+        }
 
-                for t in texts_on_page {
-                    if column_contains_point(col, t.start_x, t.start_y) {
-                        let mut merge = false;
+        zeilen
+    }
+}
 
-                        if let Some(last_y) = text_blocks.last().map(|last_t| last_t.end_y) {
-                            if t.start_y - last_y < col.line_break_after_px {
-                                merge = true;
-                            }
-                        }
-
-                        if merge {
-                            if let Some(l) = text_blocks.last_mut() {
-                                l.text.push_str(&format!(" {}", t.text));
-                                l.end_x = l.end_x.max(t.end_x);
-                                l.start_x = l.start_x.min(t.start_x);
-                                l.start_y = l.start_y.min(t.start_y);
-                                l.end_y = l.end_y.max(t.end_y);
-                            }
-                        } else {
-                            text_blocks.push(t.clone());
-                        }
-                    }
-                }
-
-                Ok(text_blocks)
+// "image "unknown"; bbox 0 0 640 480; ppageno 1; scan_res 70 70"
+// parse_info("bbox", s) == Some("0 0 640 480")
+fn parse_info<'a>(key: &str, input: &'a str) -> Option<&'a str> {
+    input
+        .split(';')
+        .find_map(|s| {
+            if !s.trim().starts_with(key) {
+                None
             } else {
-                let mut zellen = zeilen_vordefiniert
-                    .iter()
-                    .map(|z| Rect {
-                        min_x: col.min_x,
-                        min_y: col.min_y,
-                        max_x: col.max_x,
-                        max_y: col.max_y,
-                    })
-                    .collect::<Vec<_>>();
-
-                zellen.push(Rect {
-                    min_x: col.min_x,
-                    min_y: col.min_y,
-                    max_x: col.max_x,
-                    max_y: col.max_y,
-                });
-
-                for (i, y) in zeilen_vordefiniert.iter().enumerate() {
-                    zellen[i + 1].min_y = *y;
-                    zellen[i].max_y = *y;
-                }
-
-                let mut zeilen = Vec::new();
-
-                if let Ok(m) = document.select(css_selector) {
-                    for css_match in m {
-                        let as_node = css_match.as_node();
-                        let as_element = match as_node.as_element() {
-                            Some(s) => s,
-                            None => continue,
-                        };
-
-                        let bbox_attribute = as_element.attributes.borrow();
-                        let bbox = (&*bbox_attribute)
-                            .get("title")
-                            .and_then(|b| b.split(";").next());
-
-                        let line_text = as_node
-                            .text_contents()
-                            .lines()
-                            .map(|l| l.trim().to_string())
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                            .trim()
-                            .to_string();
-
-                        // "bbox 882 201 1227 254"
-                        let bbox_clean = match bbox {
-                            Some(s) => s,
-                            None => continue,
-                        };
-
-                        // startx, starty, endx, endy
-                        // 882 201 1227 254
-                        let bbox = bbox_clean.replace("bbox", "");
-                        let values = bbox
-                            .trim()
-                            .split_whitespace()
-                            .filter_map(|s| s.parse::<f32>().ok())
-                            .collect::<Vec<_>>();
-
-                        let current_line_start_x = match values.get(0) {
-                            Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
-                            None => continue,
-                        };
-
-                        let current_line_start_y = match values.get(1) {
-                            Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
-                            None => continue,
-                        };
-
-                        let current_line_end_x = match values.get(2) {
-                            Some(s) => (*s / col_width_px * col_width_mm) + col.min_x,
-                            None => continue,
-                        };
-
-                        let current_line_end_y = match values.get(3) {
-                            Some(s) => (*s / col_height_px * col_height_mm) + col.min_y,
-                            None => continue,
-                        };
-
-                        zeilen.push(Textblock {
-                            text: line_text,
-                            start_y: current_line_start_y,
-                            end_y: current_line_end_y,
-                            start_x: current_line_start_x,
-                            end_x: current_line_end_x,
-                        });
-                    }
-                }
-
-                let texts_on_page = pdftotext
-                    .seiten
-                    .get(&format!("{}", seitenzahl))
-                    .map(|s| s.texte.clone())
-                    .unwrap_or_default();
-
-                // Textblöcke pdftotext
-                for t in texts_on_page {
-                    if column_contains_point(col, t.start_x, t.start_y) {
-                        zeilen.push(t.clone());
-                    }
-                }
-
-                fn zelle_contains_point(z: &Rect, x: f32, y: f32) -> bool {
-                    x <= z.max_x && x >= z.min_x && y <= z.max_y && y >= z.min_y
-                }
-
-                Ok(zellen
-                    .into_iter()
-                    .map(|z| {
-                        let texte_in_zelle = zeilen
-                            .iter()
-                            .filter(|zeile| zelle_contains_point(&z, zeile.start_x, zeile.start_y))
-                            .collect::<Vec<_>>();
-
-                        let texte_in_zelle_string = texte_in_zelle
-                            .iter()
-                            .map(|s| s.text.clone())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-
-                        Textblock {
-                            text: texte_in_zelle_string,
-                            start_y: z.min_y,
-                            end_y: z.max_y,
-                            start_x: z.min_x,
-                            end_x: z.max_x,
-                        }
-                    })
-                    .collect::<Vec<_>>())
+                s.split(key).nth(1)
             }
         })
-        .collect::<Result<Vec<Vec<Textblock>>, Fehler>>()?)
+        .map(|r| r.trim())
+}
+
+fn get_bbox(s: &str) -> Option<Rect> {
+    let bounds_string = parse_info("bbox", s.trim())?;
+    let numbers = bounds_string
+        .split_whitespace()
+        .filter_map(|s| s.parse::<f32>().ok())
+        .collect::<Vec<_>>();
+    if !numbers.len() == 4 {
+        return None;
+    }
+    Some(Rect {
+        min_x: numbers[0],
+        min_y: numbers[1],
+        max_x: numbers[2],
+        max_y: numbers[3],
+    })
 }
 
 /// Stroke path
@@ -3839,7 +3503,6 @@ impl BvAbschreibung {
 pub fn analysiere_bv(
     vm: PyVm,
     titelblatt: &Titelblatt,
-    pdftotext_layout: &PdfToTextLayout,
     seiten: &BTreeMap<String, SeiteParsed>,
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     konfiguration: &Konfiguration,
@@ -4964,11 +4627,18 @@ pub fn bv_eintraege_roetungen_loeschen(bv_eintraege: &mut [BvEintrag]) {
     }
 }
 
+pub fn bv_eintraege_roeten_2(
+    bv_eintraege: &mut [BvEintrag],
+    titelblatt: &Titelblatt,
+    max_seitenzahl: u32,
+    hocr_layout: &HocrLayout,
+) {
+}
+/*
 pub fn bv_eintraege_roeten(
     bv_eintraege: &mut [BvEintrag],
     titelblatt: &Titelblatt,
     max_seitenzahl: u32,
-    pdftotext_layout: &PdfToTextLayout,
 ) {
     // Automatisch BV Einträge röten
     bv_eintraege.par_iter_mut().for_each(|bv| {
@@ -5033,6 +4703,7 @@ pub fn bv_eintraege_roeten(
         bv.set_automatisch_geroetet(ist_geroetet);
     });
 }
+*/
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Abteilung1 {

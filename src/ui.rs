@@ -1683,12 +1683,10 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
     
         use crate::digital::SeitenTyp;
         
-        let page_is_loaded = open_file.geladen.contains_key(&format!("{}", page_num));
+        let page_is_loaded = open_file.hocr.seiten.contains_key(&format!("{}", page_num));
         let page_is_active = rpc_data.open_page.as_ref().map(|s| s.1) == Some(*page_num);
-        let seiten_typ = open_file.klassifikation_neu
-            .get(&format!("{}", page_num)).cloned()
-            .or(open_file.geladen.get(&format!("{}", page_num)).map(|p| p.typ.clone()));
-        
+        let seiten_typ = open_file.get_seiten_typ(&page_num.to_string());
+
         let page_color = seiten_typ.map(|t| match t {
               SeitenTyp::BestandsverzeichnisHorz
             | SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen
@@ -3086,7 +3084,6 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
         } else { 
             "background:white;" 
         };
-        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
 
@@ -3182,141 +3179,142 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         Err(_) => return String::new(),
     };
 
-    let (im_width, im_height, page_width, page_height) = match file
-        .pdftotext_layout
-        .seiten
-        .get(&format!("{}", open_file.1))
-    {
-        Some(o) => (
-            o.breite_mm as f32 / 25.4 * 600.0,
-            o.hoehe_mm as f32 / 25.4 * 600.0,
-            o.breite_mm,
-            o.hoehe_mm,
-        ),
-        None => (25.4, 21.0, 25.4, 21.0), // TODO
-    };
+    let (im_width, im_height, page_width, page_height) =
+        match file.hocr.seiten.get(&format!("{}", open_file.1)) {
+            Some(o) => (
+                o.parsed.bounds.max_x,
+                o.parsed.bounds.max_y,
+                o.breite_mm,
+                o.hoehe_mm,
+            ),
+            None => {
+                // TODO?
+                let breite_mm = 210.0;
+                let hoehe_mm = 297.0;
+                (
+                    breite_mm as f32 / 25.4 * 600.0,
+                    hoehe_mm as f32 / 25.4 * 600.0,
+                    breite_mm,
+                    hoehe_mm,
+                )
+            }
+        };
 
     let img_ui_width = 1200.0; // px
     let aspect_ratio = im_height / im_width;
     let img_ui_height = img_ui_width * aspect_ratio;
 
-    let columns = match file.geladen.get(&format!("{}", open_file.1)) {
-        Some(page) => {
-            let seitentyp = match file.klassifikation_neu.get(&format!("{}", open_file.1)) {
-                Some(s) => *s,
-                None => page.typ,
-            };
+    let seitentyp = file
+        .get_seiten_typ(&open_file.1.to_string())
+        .unwrap_or(crate::SeitenTyp::BestandsverzeichnisVert);
 
-            seitentyp
-                .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
-                .into_iter()
-                .map(|col| {
-                    let x = col.min_x / page_width * img_ui_width;
-                    let y = col.min_y / page_height * img_ui_height;
-                    let width = (col.max_x - col.min_x) / page_width * img_ui_width;
-                    let height = (col.max_y - col.min_y) / page_height * img_ui_height;
+    let columns = seitentyp
+        .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
+        .into_iter()
+        .map(|col| {
+            let x = col.min_x / page_width * img_ui_width;
+            let y = col.min_y / page_height * img_ui_height;
+            let width = (col.max_x - col.min_x) / page_width * img_ui_width;
+            let height = (col.max_y - col.min_y) / page_height * img_ui_height;
 
-                    format!(
-                        "
-                    <div class='__application_spalte' id='__application_spalte_{id}' style='
-                        position:absolute;
-                        width:{width}px;
-                        height:{height}px;
-                        opacity: 0.5;
-                        background:none;
-                        border: 3px solid blue;
-                        top: 0px;
-                        transform-origin: top left;
-                        left: 0px;
-                        transform: translate({x}px, {y}px);
-                        pointer-events:none;
-                    '>
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            top:-7.5px;
-                            left:-7.5px;
-                            cursor:nw-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        '   
-                            data-columnId = '{id}' 
-                            data-direction='nw' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            top:-7.5px;
-                            right:-7.5px;
-                            cursor:ne-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' 
-                            data-columnId = '{id}' 
-                            data-direction='ne' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            bottom:-7.5px;
-                            right:-7.5px;
-                            cursor:se-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' 
-                        data-columnId = '{id}' 
-                        data-direction='se' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            bottom:-7.5px;
-                            left:-7.5px;
-                            cursor:sw-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' 
-                            data-columnId = '{id}' 
-                            data-direction='sw' 
-                            onmousedown='resizeColumnOnMouseDown(event);'
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'
-                        ></div>
-                    </div>
-                ",
-                        id = col.id,
-                        x = x,
-                        y = y,
-                        width = width.abs(),
-                        height = height.abs(),
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\r\n")
-        }
-        None => String::new(),
-    };
+            format!(
+                "
+        <div class='__application_spalte' id='__application_spalte_{id}' style='
+            position:absolute;
+            width:{width}px;
+            height:{height}px;
+            opacity: 0.5;
+            background:none;
+            border: 3px solid blue;
+            top: 0px;
+            transform-origin: top left;
+            left: 0px;
+            transform: translate({x}px, {y}px);
+            pointer-events:none;
+        '>
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                top:-7.5px;
+                left:-7.5px;
+                cursor:nw-resize;
+                z-index:1;
+                pointer-events: initial;
+            '   
+                data-columnId = '{id}' 
+                data-direction='nw' 
+                onmousedown='resizeColumnOnMouseDown(event);' 
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'></div>
+            
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                top:-7.5px;
+                right:-7.5px;
+                cursor:ne-resize;
+                z-index:1;
+                pointer-events: initial;
+            ' 
+                data-columnId = '{id}' 
+                data-direction='ne' 
+                onmousedown='resizeColumnOnMouseDown(event);' 
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'></div>
+            
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                bottom:-7.5px;
+                right:-7.5px;
+                cursor:se-resize;
+                z-index:1;
+                pointer-events: initial;
+            ' 
+            data-columnId = '{id}' 
+            data-direction='se' 
+                onmousedown='resizeColumnOnMouseDown(event);' 
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'></div>
+            
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                bottom:-7.5px;
+                left:-7.5px;
+                cursor:sw-resize;
+                z-index:1;
+                pointer-events: initial;
+            ' 
+                data-columnId = '{id}' 
+                data-direction='sw' 
+                onmousedown='resizeColumnOnMouseDown(event);'
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'
+            ></div>
+        </div>
+    ",
+                id = col.id,
+                x = x,
+                y = y,
+                width = width.abs(),
+                height = height.abs(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n");
 
     let zeilen = file
         .anpassungen_seite

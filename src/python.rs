@@ -233,8 +233,6 @@ impl PyVm {
 
         let key = get_script_cache_key(&konfiguration.regex, &args);
 
-        println!("execute script {key}: {:#?}", args);
-
         match self
             .script_result
             .try_lock()
@@ -290,8 +288,6 @@ impl PyVm {
             .try_lock()
             .ok()
             .and_then(|mut lock| lock.insert(key, result.clone()));
-
-        println!("{result:?}");
 
         match result {
             PyResult::Ok(o) => Ok(o),
@@ -1057,8 +1053,6 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
     })
     .collect::<Vec<_>>()
     .join("\n");
-
-    println!("SCRIPT_ARGS:\n{script_args}");
 
     WRAPPER
         .replace("## RA_SA", &ra_sa)

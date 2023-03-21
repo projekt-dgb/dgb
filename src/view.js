@@ -203,10 +203,9 @@ async function renderPdfPage(
     geroetet,
     image_filename,
 ) {
-
-  console.log("renderPdfPage " + pdf_amtsgericht + " " + pdf_grundbuch_von + " " + pdf_blatt);
+  
+console.log("renderPdfPage");
   var pdf_bytes = atob(pdf_base64);
-  console.log("pdf bytes decoded " + pdf_bytes.length);
   var loadingTask = pdfjsLib.getDocument({data: pdf_bytes});
 
   await loadingTask.promise.then(function(pdf) {
@@ -226,7 +225,6 @@ async function renderPdfPage(
             transform: [resolution, 0, 0, resolution, 0, 0]
         });
         rendertask.promise.then(function() {
-            console.log("page rendered!");
             var dataURL = canvasorig.toDataURL("image/png");
             rpc.signal_pdf_page_rendered(
                 pdf_amtsgericht, 
