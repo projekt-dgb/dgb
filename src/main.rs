@@ -3974,7 +3974,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             let text = hocr_page
-                .parsed
                 .get_words_within_bounds(&Rect {
                     min_x: *min_x,
                     min_y: *min_y,

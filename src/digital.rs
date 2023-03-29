@@ -208,7 +208,8 @@ impl HocrSeite {
 
         let texte = spalten
             .iter()
-            .map(|col| {
+            .enumerate()
+            .map(|(col_idx, col)| {
                 zeilen
                     .iter()
                     .enumerate()
@@ -225,7 +226,8 @@ impl HocrSeite {
                             min_y,
                             max_y: *max_y,
                         };
-                        let zeilen = self.parsed.get_words_within_bounds(&select_rect);
+                        println!("Seite {seite} spalte {col_idx} (get textbloecke) get_words_within_bounds {select_rect:#?}");
+                        let zeilen = self.get_words_within_bounds(&select_rect);
 
                         Some(Textblock {
                             text: zeilen.join("\r\n"),
@@ -243,6 +245,52 @@ impl HocrSeite {
             typ: seiten_typ,
             texte,
         }
+    }
+
+    pub fn get_words_within_bounds(&self, rect: &Rect) -> Vec<String> {
+        let mut zeilen = Vec::new();
+
+        let self_width_mm = self.breite_mm;
+        let self_height_mm = self.hoehe_mm;
+        let self_width_px = self.parsed.bounds.max_x;
+        let self_height_px = self.parsed.bounds.max_y;
+
+        let rect_projected_into_px = Rect {
+            min_x: rect.min_x / self_width_mm * self_width_px,
+            min_y: rect.min_y / self_height_mm * self_height_px,
+            max_x: rect.max_x / self_width_mm * self_width_px,
+            max_y: rect.max_y / self_height_mm * self_height_px,
+        };
+
+        for ca in self.parsed.careas.iter() {
+            for pa in ca.paragraphs.iter() {
+                if !pa.bounds.overlaps(&rect_projected_into_px) {
+                    continue;
+                }
+
+                for li in pa.lines.iter() {
+                    let mut include_word = false;
+                    let mut words_until_max_x = Vec::new();
+
+                    for w in li.words.iter() {
+                        if !w.bounds.overlaps(&rect_projected_into_px) {
+                            continue;
+                        }
+                        words_until_max_x.push(w.text.clone());
+                    }
+
+                    zeilen.push(words_until_max_x.join(" "));
+                }
+
+                zeilen.push(String::new());
+            }
+        }
+
+        if zeilen.last().cloned() == Some(String::new()) {
+            zeilen.pop();
+        }
+
+        zeilen
     }
 }
 
@@ -2602,40 +2650,6 @@ impl ParsedHocr {
 
     pub fn get_text(&self) -> String {
         self.get_zeilen().join("")
-    }
-
-    pub fn get_words_within_bounds(&self, rect: &Rect) -> Vec<String> {
-        let mut zeilen = Vec::new();
-
-        for ca in self.careas.iter() {
-            for pa in ca.paragraphs.iter() {
-                if !pa.bounds.overlaps(rect) {
-                    continue;
-                }
-
-                for li in pa.lines.iter() {
-                    let mut include_word = false;
-                    let mut words_until_max_x = Vec::new();
-
-                    for w in li.words.iter() {
-                        if !w.bounds.overlaps(rect) {
-                            continue;
-                        }
-                        words_until_max_x.push(w.text.clone());
-                    }
-
-                    zeilen.push(words_until_max_x.join(" "));
-                }
-
-                zeilen.push(String::new());
-            }
-        }
-
-        if zeilen.last().cloned() == Some(String::new()) {
-            zeilen.pop();
-        }
-
-        zeilen
     }
 }
 
