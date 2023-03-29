@@ -1,8 +1,8 @@
 use crate::{
     digital::{
         Abt1Loeschung, Abt1Veraenderung, Abt2Loeschung, Abt2Veraenderung, Abt3Loeschung,
-        Abt3Veraenderung, BvAbschreibung, BvZuschreibung, FocusType, Nebenbeteiligter,
-        StringOrLines, TextInputType,
+        Abt3Veraenderung, BvAbschreibung, BvZuschreibung, FocusType, HocrSeite, Nebenbeteiligter,
+        ParsedHocr, SeiteParsed, StringOrLines, TextInputType,
     },
     python::PyVm,
     GbxAenderungen, GrundbuchSucheResponse, Konfiguration, PdfFile, PopoverState, RpcData,
@@ -3175,33 +3175,25 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         Err(_) => return String::new(),
     };
 
-    let (im_width, im_height, page_width, page_height) =
-        match file.hocr.seiten.get(&format!("{}", open_file.1)) {
-            Some(o) => (
-                o.parsed.bounds.max_x,
-                o.parsed.bounds.max_y,
-                o.breite_mm,
-                o.hoehe_mm,
-            ),
-            None => return String::new(),
-        };
+    let hocr = match file.hocr.seiten.get(&format!("{}", open_file.1)) {
+        Some(s) => s,
+        None => return String::new(),
+    };
+
+    let (im_width, im_height, page_width, page_height) = (
+        hocr.parsed.bounds.max_x,
+        hocr.parsed.bounds.max_y,
+        hocr.breite_mm,
+        hocr.hoehe_mm,
+    );
 
     let img_ui_width = 1200.0; // px
     let aspect_ratio = im_height / im_width;
     let img_ui_height = img_ui_width * aspect_ratio;
 
-    println!(
-        "rendering pdf image columns = {im_width}px {im_height}px - {page_width}mm {page_height}mm"
-    );
-
-    println!("img_ui_width = 1200 px");
-    println!("img_ui_height = {img_ui_height}");
-
     let seitentyp = file
         .get_seiten_typ(&open_file.1.to_string())
         .unwrap_or(crate::SeitenTyp::BestandsverzeichnisVert);
-
-    println!("seitentyp {seitentyp:?}");
 
     let columns = seitentyp
         .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
@@ -3211,8 +3203,6 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
             let y = col.min_y / page_height * img_ui_height;
             let width = (col.max_x - col.min_x) / page_width * img_ui_width;
             let height = (col.max_y - col.min_y) / page_height * img_ui_height;
-
-            println!("column {col:?} - {width}px x {height}px @ {x}px {y}px");
 
             format!(
                 "
@@ -3321,6 +3311,13 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
 
     let zeilen = render_pdf_image_zeilen(&zeilen, page_height, img_ui_height);
 
+    let hocr_lines = render_pdf_image_hocr(img_ui_width, img_ui_height, &hocr);
+
+    let textbloecke =
+        hocr.get_textbloecke(&open_file.1.to_string(), seitentyp, &file.anpassungen_seite);
+    let textbloecke =
+        render_pdf_image_textbloecke(img_ui_width, img_ui_height, &hocr, &textbloecke);
+
     normalize_for_js(format!("
         <div style='padding:20px;user-select:none;-webkit-user-select:none;'>
             <div data-fileName='{file_name}' data-pageNumber='{page_number}' style='position:relative;user-select:none;-webkit-user-select:none;margin:0 auto;'>
@@ -3339,6 +3336,10 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                     cursor:crosshair;
                 ' />            
             
+                {textbloecke}
+
+                {hocr_lines}
+
                 {spalten}
                 
                 <div id='__application_page_lines' style='
@@ -3413,6 +3414,93 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 String::new()
             }
         ))
+}
+
+fn render_pdf_image_hocr(img_ui_width: f32, img_ui_height: f32, hocr: &HocrSeite) -> String {
+    let all_words = hocr
+        .parsed
+        .careas
+        .iter()
+        .flat_map(|ca| {
+            ca.paragraphs
+                .iter()
+                .flat_map(|pa| pa.lines.iter().flat_map(|li| li.words.iter()))
+        })
+        .collect::<Vec<_>>();
+
+    let page_width_px = hocr.parsed.bounds.max_x;
+    let page_height_px = hocr.parsed.bounds.max_y;
+
+    all_words
+        .iter()
+        .map(|word| {
+            let width = (word.bounds.max_x - word.bounds.min_x) / page_width_px * img_ui_width;
+            let height = (word.bounds.max_y - word.bounds.min_y) / page_height_px * img_ui_height;
+            let x = word.bounds.min_x / page_width_px * img_ui_width;
+            let y = word.bounds.min_y / page_height_px * img_ui_height;
+
+            let title = normalize_for_js(word.text.clone());
+            format!(
+                "
+            <div style='
+                position:absolute;
+                width:{width}px;
+                height:{height}px;
+                opacity: 0.8;
+                background:none;
+                border: 0.5px solid green;
+                top: 0px;
+                transform-origin: top left;
+                left: 0px;
+                transform: translate({x}px, {y}px);
+                pointer-events:auto;
+            ' title = '{title}'></div>"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+fn render_pdf_image_textbloecke(
+    img_ui_width: f32,
+    img_ui_height: f32,
+    hocr: &HocrSeite,
+    textbloecke: &SeiteParsed,
+) -> String {
+    let page_width_mm = hocr.breite_mm;
+    let page_height_mm = hocr.hoehe_mm;
+
+    textbloecke
+        .texte
+        .iter()
+        .flat_map(|col| {
+            col.iter().map(|tb| {
+                let width = (tb.end_x - tb.start_x) / page_width_mm * img_ui_width;
+                let height = (tb.end_y - tb.start_y) / page_height_mm * img_ui_height;
+                let x = tb.start_x / page_width_mm * img_ui_width;
+                let y = tb.start_y / page_height_mm * img_ui_height;
+
+                let title = normalize_for_js(tb.text.clone());
+                format!(
+                    "
+            <div style='
+                position:absolute;
+                width:{width}px;
+                height:{height}px;
+                opacity: 0.8;
+                background:none;
+                border: 0.5px solid red;
+                top: 0px;
+                transform-origin: top left;
+                left: 0px;
+                transform: translate({x}px, {y}px);
+                pointer-events:auto;
+            ' title = '{title}'></div>"
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
 }
 
 pub fn render_pdf_image_zeilen(zeilen: &[f32], page_height: f32, img_ui_height: f32) -> String {

@@ -7,6 +7,7 @@ use crate::{python::PyVm, AnpassungSeite, Konfiguration, Rect};
 use image::ImageError;
 use lopdf::Error as LoPdfError;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use wry::webview::WebView;
 
 /// Alle Fehler, die im Programm passieren können
@@ -206,10 +207,40 @@ impl HocrSeite {
             .map(|ap| ap.zeilen.clone())
             .unwrap_or(self.get_default_zeilen());
 
+        let map = &[
+            ('⁰', '0'),
+            ('¹', '1'),
+            ('²', '2'),
+            ('³', '3'),
+            ('⁴', '4'),
+            ('⁵', '5'),
+            ('⁶', '6'),
+            ('⁷', '7'),
+            ('⁸', '8'),
+            ('⁹', '9'),
+            ('ı', '1'),
+            ('₀', '0'),
+            ('₁', '1'),
+            ('₂', '2'),
+            ('₃', '3'),
+            ('₄', '4'),
+            ('₅', '5'),
+            ('₆', '6'),
+            ('₇', '7'),
+            ('₈', '8'),
+            ('₉', '9'),
+        ];
+        let transform_map = map.iter().copied().collect::<BTreeMap<_, _>>();
+
+        let allowed_chars = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.'];
+        let allowed_chars = allowed_chars.iter().copied().collect::<BTreeSet<_>>();
+
         let texte = spalten
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
+                let mut zeilen = zeilen.clone();
+                zeilen.push(col.max_y);
                 zeilen
                     .iter()
                     .enumerate()
@@ -226,11 +257,37 @@ impl HocrSeite {
                             min_y,
                             max_y: *max_y,
                         };
-                        println!("Seite {seite} spalte {col_idx} (get textbloecke) get_words_within_bounds {select_rect:#?}");
                         let zeilen = self.get_words_within_bounds(&select_rect);
+                        let mut text = zeilen
+                            .join("\r\n")
+                            .trim()
+                            .to_string()
+                            .trim_end_matches('|')
+                            .trim_start_matches('|')
+                            .trim()
+                            .to_string();
 
+                        if col.is_number_column {
+                            text = text
+                                .chars()
+                                .filter_map(|mut c| {
+                                    if let Some(transform) = transform_map.get(&c) {
+                                        c = *transform;
+                                    }
+                                    if c == ',' {
+                                        c = '.'
+                                    }
+
+                                    if allowed_chars.contains(&c) {
+                                        Some(c)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect()
+                        }
                         Some(Textblock {
-                            text: zeilen.join("\r\n"),
+                            text,
                             start_x: col.min_x,
                             end_x: col.max_x,
                             start_y: min_y,
@@ -547,7 +604,7 @@ pub struct Column {
 
 impl SeitenTyp {
     pub fn get_columns(&self, anpassungen_seite: Option<&AnpassungSeite>) -> Vec<Column> {
-        let scale_factor = 3.0;
+        let scale_factor = 2.85;
         match self {
             SeitenTyp::BestandsverzeichnisHorz => vec![
                 // "lfd. Nr. der Grundstücke"
@@ -2719,54 +2776,8 @@ const OPERATIONS_TO_CLEAN: &[&str; 10] = &[
     OP_PATH_PAINT_END,
 ];
 
-// Löscht alle gemalten Linien aus dem PDF heraus
-pub fn clean_pdf(pdf_bytes: &[u8], titelblatt: &Titelblatt) -> Result<Vec<u8>, Fehler> {
-    use std::path::Path;
-
-    let target = std::env::temp_dir()
-        .join(&format!(
-            "{gemarkung}/{blatt}/temp-clean.pdf",
-            gemarkung = titelblatt.grundbuch_von,
-            blatt = titelblatt.blatt
-        ))
-        .display()
-        .to_string();
-
-    if Path::new(&target).exists() {
-        return std::fs::read(target.clone()).map_err(|e| Fehler::Io(target.clone(), e));
-    }
-
-    // Dekomprimierung mit LZW funktioniert nicht, erst
-    // mit podofouncompress alle PDF-Streams dekomprimieren!
-    let tmp = std::env::temp_dir()
-        .join(&format!(
-            "{gemarkung}/{blatt}/decompress.pdf",
-            gemarkung = titelblatt.grundbuch_von,
-            blatt = titelblatt.blatt
-        ))
-        .display()
-        .to_string();
-
-    let _ = std::fs::write(tmp.clone(), pdf_bytes);
-    let _ = Command::new("podofouncompress")
-        .arg(tmp.clone())
-        .arg(tmp.clone())
-        .status();
-
-    let pdf_bytes = std::fs::read(tmp.clone()).map_err(|e| Fehler::Io(tmp.clone(), e))?;
-
-    let _ = std::fs::remove_file(tmp.clone());
-
-    let bytes = clean_pdf_bytes(&pdf_bytes)?;
-
-    let _ = std::fs::write(target, &bytes);
-
-    Ok(bytes)
-}
-
 pub fn clean_pdf_bytes(pdf_bytes: &[u8]) -> Result<Vec<u8>, Fehler> {
     use lopdf::Object;
-    use std::collections::BTreeSet;
 
     let bad_operators = OPERATIONS_TO_CLEAN
         .iter()
@@ -2777,22 +2788,21 @@ pub fn clean_pdf_bytes(pdf_bytes: &[u8]) -> Result<Vec<u8>, Fehler> {
 
     let mut stream_ids = Vec::new();
 
-    for (page_num, page_id) in pdf.get_pages().into_iter() {
-        if let Some(Object::Dictionary(page_dict)) = pdf.objects.get(&page_id) {
-            if let Some(Object::Dictionary(resources_dict)) = page_dict.get(b"Resources").ok() {
-                if let Some(Object::Dictionary(xobjects)) = resources_dict.get(b"XObject").ok() {
-                    for (_, xo) in xobjects.iter() {
-                        if let Object::Reference(xobject_id) = xo {
-                            stream_ids.push(xobject_id.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let resources_dict_ids = pdf
+        .objects
+        .iter()
+        .filter_map(|(_, object)| {
+            let dict = object.as_dict().ok()?;
+            let contents_dict = dict.get(b"Contents").ok()?.as_reference().ok()?;
+            Some(contents_dict)
+        })
+        .collect::<Vec<_>>();
+    stream_ids.extend(resources_dict_ids);
 
     for sid in stream_ids.into_iter() {
         if let Some(Object::Stream(s)) = pdf.objects.get_mut(&sid) {
+            s.decompress();
+
             let mut stream_decoded = match s.decode_content().ok() {
                 Some(s) => s,
                 None => {

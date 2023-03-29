@@ -549,6 +549,8 @@ impl PdfFile {
         nb: &[Nebenbeteiligter],
         konfiguration: &Konfiguration,
     ) -> Option<PdfFileIcon> {
+        return None;
+        /*
         if !self.ist_geladen() {
             return None;
         }
@@ -562,6 +564,7 @@ impl PdfFile {
         }
 
         Some(PdfFileIcon::AllesOkay)
+        */
     }
 
     pub fn ist_geladen(&self) -> bool {
