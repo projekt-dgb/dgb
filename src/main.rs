@@ -377,18 +377,11 @@ pub struct PdfFile {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     land: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    #[serde(default)]
-    seitenzahlen: Vec<u32>,
     #[serde(skip_serializing_if = "HocrLayout::is_empty")]
     #[serde(default)]
     hocr: HocrLayout,
     #[serde(skip, default)]
     icon: Option<PdfFileIcon>,
-    /// Seitennummern von Seiten, die versucht wurden, geladen zu werden
-    #[serde(default)]
-    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-    seiten_versucht_geladen: BTreeSet<u32>,
     #[serde(default)]
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     anpassungen_seite: BTreeMap<String, AnpassungSeite>,
@@ -401,6 +394,16 @@ pub struct PdfFile {
     previous_state: Option<Box<PdfFile>>,
 
     analysiert: Grundbuch,
+}
+
+impl PdfFile {
+    pub fn get_seitenzahlen(&self) -> Vec<u32> {
+        self.datei
+            .clone()
+            .and_then(|p| fs::read(p).ok())
+            .and_then(|pdf_bytes: Vec<u8>| digital::lese_seitenzahlen(&pdf_bytes).ok())
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -566,7 +569,7 @@ impl PdfFile {
             .join(&self.analysiert.titelblatt.grundbuch_von)
             .join(self.analysiert.titelblatt.blatt.to_string());
 
-        for s in self.seitenzahlen.iter() {
+        for s in self.get_seitenzahlen().iter() {
             if !tempdir.join(format!("{s}.hocr.json")).exists() {
                 return false;
             }
@@ -1050,42 +1053,68 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             image_data_base64,
             image_filename,
         } => {
+            println!("SignalPdfPageRendered geroetet = {geroetet:?}!");
+
             let pdf_grundbuch_von = pdf_grundbuch_von.clone();
             let pdf_blatt = pdf_blatt.clone();
             let image_data_base64 = image_data_base64.clone();
             let image_filename = image_filename.clone();
             let seite = seite.clone();
             let geroetet = geroetet.clone();
-            rayon::spawn(move || {
+            std::thread::spawn(move || {
                 use image::io::Reader as ImageReader;
                 use std::io::Cursor;
                 const DATA_START: &str = "data:image/png;base64,";
                 if !image_data_base64.starts_with(DATA_START) {
+                    println!("wrong start bytes");
                     return;
                 }
 
+                println!("{seite} ok 1");
+
                 let output_image = match base64::decode(&image_data_base64[DATA_START.len()..]) {
                     Ok(o) => o,
-                    Err(_) => return,
+                    Err(_) => {
+                        println!("wrong start bytes");
+                        return;
+                    }
                 };
+
+                println!("{seite} ok 2");
+
                 let reader = match ImageReader::new(Cursor::new(output_image)).with_guessed_format()
                 {
                     Ok(o) => o,
-                    Err(_) => return,
+                    Err(_) => {
+                        println!("reader not ok");
+                        return;
+                    }
                 };
+
+                println!("{seite} ok 3");
+
                 let decoded = match reader.decode() {
                     Ok(o) => o,
-                    Err(_) => return,
+                    Err(_) => {
+                        println!("reader decode not ok");
+                        return;
+                    }
                 };
+
+                println!("{seite} ok 4");
+
                 let flipped = decoded.flipv();
                 let mut bytes: Vec<u8> = Vec::new();
                 let _ =
                     flipped.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
+
+                println!("{seite} ok 5");
                 let tempdir = std::env::temp_dir()
                     .join(&pdf_grundbuch_von)
                     .join(&pdf_blatt);
                 let _ = std::fs::create_dir_all(&tempdir);
                 let _ = std::fs::write(tempdir.join(&image_filename), &bytes);
+                println!("wrote {} - geroetet = {:?}", image_filename, geroetet);
 
                 let target_path = tempdir.join(format!("{seite}.hocr.json"));
                 if !geroetet {
@@ -1107,24 +1136,26 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
                     println!("writing to {} {image_filename}.bmp", tempdir.display());
 
-                    let hocr = match tesseract_get_hocr(&pnm_bytes) {
-                        Ok(o) => o,
-                        Err(e) => {
-                            tinyfiledialogs::message_box_ok(
-                                &format!("Fehler beim OCR von {image_filename}"),
-                                &format!("{e}"),
-                                MessageBoxIcon::Error,
-                            );
-                            return;
-                        }
-                    };
+                    if !target_path.exists() {
+                        let hocr = match tesseract_get_hocr(&pnm_bytes) {
+                            Ok(o) => o,
+                            Err(e) => {
+                                tinyfiledialogs::message_box_ok(
+                                    &format!("Fehler beim OCR von {image_filename}"),
+                                    &format!("{e}"),
+                                    MessageBoxIcon::Error,
+                                );
+                                return;
+                            }
+                        };
 
-                    println!("writing hocr to {}", target_path.display());
+                        println!("writing hocr to {}", target_path.display());
 
-                    let _ = std::fs::write(
-                        &target_path,
-                        serde_json::to_string_pretty(&hocr).unwrap_or_default(),
-                    );
+                        let _ = std::fs::write(
+                            &target_path,
+                            serde_json::to_string_pretty(&hocr).unwrap_or_default(),
+                        );
+                    }
                 }
             });
         }
@@ -1173,6 +1204,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     .ok()
                     .and_then(|s| serde_json::from_str::<PdfFile>(&s).ok())
                 {
+                    println!(
+                        "ok existing grundbuch json parsed!\r\n{:#?}",
+                        grundbuch_json_parsed
+                    );
+
                     let file_name = format!(
                         "{}_{}",
                         grundbuch_json_parsed.analysiert.titelblatt.grundbuch_von,
@@ -1201,15 +1237,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         data.open_page = Some((file_name.clone(), 2));
                     }
                 } else {
-                    let mut seitenzahlen = match digital::lese_seitenzahlen(&datei_bytes) {
-                        Ok(o) => o,
-                        Err(e) => continue,
-                    };
-
                     let seiten_dimensionen = match digital::get_seiten_dimensionen(&datei_bytes) {
                         Ok(o) => o,
                         Err(e) => continue,
                     };
+
+                    let seitenzahlen = crate::digital::lese_seitenzahlen(&datei_bytes)
+                        .ok()
+                        .unwrap_or_default();
+
                     let max_sz = seitenzahlen.iter().max().cloned().unwrap_or(0);
 
                     let titelblatt = match digital::lese_titelblatt(&datei_bytes) {
@@ -1236,44 +1272,38 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     }
 
                     // Lösche Titelblattseite von Seiten, die gerendert werden müssen
-                    seitenzahlen.remove(0);
-
-                    let datei_bytes_clone = datei_bytes.clone();
-                    let titelblatt_clone = titelblatt.clone();
-                    let seitenzahlen_clone = seitenzahlen.clone();
-
                     let mut pdf_parsed = PdfFile {
                         datei: Some(d.to_string()),
                         gbx_datei_pfad: None,
                         icon: None,
                         land: None,
-                        seitenzahlen: seitenzahlen.clone(),
                         hocr: HocrLayout::init_from_dimensionen(&seiten_dimensionen),
                         anpassungen_seite: BTreeMap::new(),
-                        seiten_versucht_geladen: BTreeSet::new(),
-                        analysiert: Grundbuch {
-                            titelblatt: titelblatt.clone(),
-                            bestandsverzeichnis: Bestandsverzeichnis::default(),
-                            abt1: Abteilung1::default(),
-                            abt2: Abteilung2::default(),
-                            abt3: Abteilung3::default(),
-                        },
+                        analysiert: Grundbuch::new(titelblatt),
                         nebenbeteiligte_dateipfade: Vec::new(),
                         previous_state: None,
                         next_state: None,
                     };
 
+                    println!("cache output path {}", cache_output_path.display());
+
                     if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path)
                         .ok()
                         .and_then(|s| serde_json::from_str(&s).ok())
                     {
+                        println!("cached file {} exists", cache_output_path.display());
                         pdf_parsed = cached_pdf;
                     }
 
-                    if let Some(target_pdf) = std::fs::read_to_string(&target_output_path)
+                    if let Some(mut target_pdf) = std::fs::read_to_string(&target_output_path)
                         .ok()
                         .and_then(|s| serde_json::from_str::<PdfFile>(&s).ok())
                     {
+                        let json = match serde_json::to_string_pretty(&target_pdf) {
+                            Ok(o) => o,
+                            Err(_) => continue,
+                        };
+                        let _ = std::fs::write(&target_output_path, json.as_bytes());
                         pdf_parsed = target_pdf.clone();
                         data.create_diff_save_point(&file_name, target_pdf.clone());
                     }
@@ -1306,6 +1336,8 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             }
 
+            println!("data loaded: {:#?}, rendering screen...", pdf_zu_laden);
+
             let html_inner = ui::render_entire_screen(data);
             let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", html_inner));
             let _ = webview.evaluate_script("startCheckingForPdfErrors()");
@@ -1321,13 +1353,16 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     .clone()
                     .join(&format!("{}.cache.gbx", file_name));
                 let _ = webview.evaluate_script(&format!(
-                    "startCheckingForPageLoaded(`{}`, `{}`)",
+                    "startCheckingForPageLoaded(`{}`, `{}`, `{}`)",
                     cache_output_path.display(),
-                    file_name
+                    file_name,
+                    pdf_parsed.datei.clone().unwrap_or_default()
                 ));
             }
 
-            render_pdf_seiten(webview, &pdf_zu_laden);
+            println!("render pdf seiten...");
+
+            render_pdf_seiten(webview, &mut pdf_zu_laden);
         }
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
@@ -1416,7 +1451,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 gbx_datei_pfad: Some(gbx_folder),
                 icon: None,
                 land: Some(land.trim().to_string()),
-                seitenzahlen: Vec::new(),
                 hocr: HocrLayout::default(),
                 analysiert: Grundbuch {
                     titelblatt: Titelblatt {
@@ -1431,7 +1465,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 },
                 nebenbeteiligte_dateipfade: Vec::new(),
                 anpassungen_seite: BTreeMap::new(),
-                seiten_versucht_geladen: BTreeSet::new(),
                 previous_state: None,
                 next_state: None,
             };
@@ -1844,14 +1877,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ui::render_entire_screen(data)
             ));
         }
-        Cmd::CheckForImageLoaded {
-            file_path,
-            file_name,
-        } => {
-            // TODO
-            let _ =
-                webview.evaluate_script(&format!("stopCheckingForImageLoaded(`{}`)", file_name));
-        }
         Cmd::CheckPdfImageSichtbar => {
             match data.open_page.clone() {
                 Some(_) => {}
@@ -1872,36 +1897,19 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
-
-            let temp_ordner = std::env::temp_dir()
-                .join(&file.analysiert.titelblatt.grundbuch_von)
-                .join(file.analysiert.titelblatt.blatt.to_string());
-
-            let pdftoppm_output_path = if data.konfiguration.vorschau_ohne_geroetet {
-                temp_ordner.clone().join(format!(
-                    "page-clean-{}.png",
-                    crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)
-                ))
-            } else {
-                temp_ordner.clone().join(format!(
-                    "page-{}.png",
-                    crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)
-                ))
-            };
-
+            /*
             if let Some(pdf) = file.datei.as_ref() {
                 if let Ok(o) = std::fs::read(&pdf) {
                     let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                         webview,
                         &o,
-                        &file.seitenzahlen,
                         open_file.1,
                         &file.analysiert.titelblatt,
                         !data.konfiguration.vorschau_ohne_geroetet,
                     );
                 }
             }
+            */
 
             let _ = webview.evaluate_script(&format!(
                 "replacePdfImage(`{}`)",
@@ -1911,6 +1919,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         Cmd::CheckForPdfLoaded {
             file_path,
             file_name,
+            pdf_path,
         } => {
             let default_parent = Path::new("/");
             let output_parent = Path::new(&file_path)
@@ -1921,7 +1930,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let cache_output_path = output_parent
                 .clone()
                 .join(&format!("{}.cache.gbx", file_name));
-            let target_output_path = output_parent.clone().join(&format!("{}.gbx", file_name));
+
+            println!(
+                "{arg:#?} checking if {} exists",
+                cache_output_path.display()
+            );
 
             let mut pdf_parsed: PdfFile = match std::fs::read_to_string(&cache_output_path)
                 .ok()
@@ -1935,7 +1948,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
+            println!("reload_hocr_files...");
             pdf_parsed = reload_hocr_files(&pdf_parsed);
+            println!("hocr {:#?}", pdf_parsed.hocr);
 
             let _ = std::fs::write(
                 &cache_output_path,
@@ -4029,15 +4044,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             open_file.speichern();
 
+            let pdf_path = open_file.datei.clone().unwrap_or_default();
+
             let _ = webview.evaluate_script(&format!(
                 "replaceEntireScreen(`{}`)",
                 ui::render_entire_screen(data)
             ));
 
             let _ = webview.evaluate_script(&format!(
-                "startCheckingForPageLoaded(`{}`, `{}`)",
+                "startCheckingForPageLoaded(`{}`, `{}`, `{}`)",
                 cache_output_path.display(),
-                file_name
+                file_name,
+                pdf_path,
             ));
         }
         Cmd::ZeileNeu { file, page, y } => {
@@ -4769,7 +4787,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             let titelblatt = open_file.analysiert.titelblatt.clone();
-            let seitenzahlen = open_file.seitenzahlen.clone();
 
             let _ = webview.evaluate_script(&format!(
                 "replacePageList(`{}`);",
@@ -5208,7 +5225,7 @@ fn get_nebenbeteiligte_tsv(data: &RpcData) -> String {
     tsv
 }
 
-fn render_pdf_seiten(webview: &WebView, pdfs: &Vec<PdfFile>) {
+fn render_pdf_seiten(webview: &WebView, pdfs: &mut Vec<PdfFile>) {
     for pdf in pdfs {
         let pdf_datei_pfad = match pdf.datei.as_deref() {
             Some(s) => s,
@@ -5220,23 +5237,22 @@ fn render_pdf_seiten(webview: &WebView, pdfs: &Vec<PdfFile>) {
             Err(_) => continue,
         };
 
-        let pdf_datei_pfad = match pdf.datei.clone() {
-            None => continue,
-            Some(s) => s.clone(),
-        };
+        let pdf_path = pdf.datei.clone();
+        let seitenzahlen = if pdf_path.clone().unwrap_or_default().is_empty() {
+            None
+        } else {
+            pdf_path
+        }
+        .and_then(|p| fs::read(p).ok())
+        .map(|pdf_bytes| digital::lese_seitenzahlen(&pdf_bytes).ok())
+        .unwrap_or_default();
 
-        let pdf_clean = match digital::clean_pdf_bytes(&pdf_bytes) {
-            Ok(o) => o,
-            Err(_) => continue,
-        };
+        println!("seitenzahlen {:#?}", seitenzahlen);
 
-        let pdf_base64 = base64::encode(&pdf_bytes);
-        let pdf_clean_base64 = base64::encode(&pdf_clean);
-        for seite in pdf.seitenzahlen.iter() {
+        for seite in pdf.get_seitenzahlen().iter() {
             let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                 webview,
                 &pdf_bytes,
-                &pdf.seitenzahlen,
                 *seite,
                 &pdf.analysiert.titelblatt,
                 false,
@@ -5244,7 +5260,6 @@ fn render_pdf_seiten(webview: &WebView, pdfs: &Vec<PdfFile>) {
             let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                 webview,
                 &pdf_bytes,
-                &pdf.seitenzahlen,
                 *seite,
                 &pdf.analysiert.titelblatt,
                 true,
@@ -5258,13 +5273,37 @@ fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
         .join(&pdf_parsed.analysiert.titelblatt.grundbuch_von)
         .join(&pdf_parsed.analysiert.titelblatt.blatt.to_string());
 
+    let breite_hoehe_mm = pdf_parsed
+        .datei
+        .clone()
+        .and_then(|d| fs::read(d).ok())
+        .and_then(|d| crate::digital::get_seiten_dimensionen(&d).ok())
+        .unwrap_or_default();
+
     let hocr_loaded = pdf_parsed
-        .seitenzahlen
+        .get_seitenzahlen()
         .iter()
         .filter_map(|s| {
-            let hocr = std::fs::read_to_string(tempdir.join(format!("{s}.hocr.json"))).ok()?;
-            let json: HocrSeite = serde_json::from_str(&hocr).ok()?;
-            Some((format!("{s}"), json))
+            let p = tempdir.join(format!("{s}.hocr.json"));
+            println!("reading {}", p.display());
+            let hocr = std::fs::read_to_string(&p).ok()?;
+            println!("got hocr for {}", p.display());
+            let json: ParsedHocr = match serde_json::from_str(&hocr) {
+                Ok(o) => o,
+                Err(e) => {
+                    println!("{e}");
+                    return None;
+                }
+            };
+
+            let (breite, hoehe) = breite_hoehe_mm.get(s)?;
+            let seite = HocrSeite {
+                breite_mm: *breite,
+                hoehe_mm: *hoehe,
+                parsed: json,
+            };
+            println!("ok hocr loaded!");
+            Some((format!("{s}"), seite))
         })
         .collect::<BTreeMap<_, _>>();
 

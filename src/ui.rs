@@ -1024,7 +1024,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>", 
                 cm.x, 
                 cm.y,
-                if cm.seite_ausgewaehlt > 20 { "transform:translateY(-100%);" } else { "" }, 
+                if cm.seite_ausgewaehlt > 10 { "transform:translateY(-100%);" } else { "" }, 
                 seite = cm.seite_ausgewaehlt
             )
         }
@@ -1679,7 +1679,7 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
         return String::new();
     }
 
-    let pages_div = open_file.seitenzahlen.iter().map(|page_num| {
+    let pages_div = open_file.get_seitenzahlen().iter().map(|page_num| {
     
         use crate::digital::SeitenTyp;
         
@@ -3156,22 +3156,18 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         return String::new();
     }
 
-    let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
-
     let temp_ordner = std::env::temp_dir()
         .join(&file.analysiert.titelblatt.grundbuch_von)
         .join(file.analysiert.titelblatt.blatt.to_string());
 
     let pdftoppm_output_path = if rpc_data.konfiguration.vorschau_ohne_geroetet {
-        temp_ordner.clone().join(format!(
-            "page-clean-{}.png",
-            crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)
-        ))
+        temp_ordner
+            .clone()
+            .join(format!("page-clean-{}.png", open_file.1))
     } else {
-        temp_ordner.clone().join(format!(
-            "page-{}.png",
-            crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)
-        ))
+        temp_ordner
+            .clone()
+            .join(format!("page-{}.png", open_file.1))
     };
 
     let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
@@ -3187,26 +3183,25 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 o.breite_mm,
                 o.hoehe_mm,
             ),
-            None => {
-                // TODO?
-                let breite_mm = 210.0;
-                let hoehe_mm = 297.0;
-                (
-                    breite_mm as f32 / 25.4 * 600.0,
-                    hoehe_mm as f32 / 25.4 * 600.0,
-                    breite_mm,
-                    hoehe_mm,
-                )
-            }
+            None => return String::new(),
         };
 
     let img_ui_width = 1200.0; // px
     let aspect_ratio = im_height / im_width;
     let img_ui_height = img_ui_width * aspect_ratio;
 
+    println!(
+        "rendering pdf image columns = {im_width}px {im_height}px - {page_width}mm {page_height}mm"
+    );
+
+    println!("img_ui_width = 1200 px");
+    println!("img_ui_height = {img_ui_height}");
+
     let seitentyp = file
         .get_seiten_typ(&open_file.1.to_string())
         .unwrap_or(crate::SeitenTyp::BestandsverzeichnisVert);
+
+    println!("seitentyp {seitentyp:?}");
 
     let columns = seitentyp
         .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
@@ -3216,6 +3211,8 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
             let y = col.min_y / page_height * img_ui_height;
             let width = (col.max_x - col.min_x) / page_width * img_ui_width;
             let height = (col.max_y - col.min_y) / page_height * img_ui_height;
+
+            println!("column {col:?} - {width}px x {height}px @ {x}px {y}px");
 
             format!(
                 "

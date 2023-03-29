@@ -323,11 +323,15 @@ pub fn lese_titelblatt(pdf_bytes: &[u8]) -> Result<Titelblatt, Fehler> {
 pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     webview: &WebView,
     pdf_bytes: &[u8],
-    seitenzahlen: &[u32],
     seite: u32,
     titelblatt: &Titelblatt,
     geroetet: bool,
 ) -> Result<(), Fehler> {
+    println!(
+        "konvertiere_pdf_seite_zu_png_prioritaet {:#?} {}",
+        titelblatt, seite
+    );
+
     let temp_ordner = std::env::temp_dir()
         .join(&titelblatt.grundbuch_von)
         .join(&titelblatt.blatt.to_string());
@@ -335,12 +339,10 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
 
-    let max_sz = seitenzahlen.iter().cloned().max().unwrap_or(0);
-
-    let mut pdftoppm_output_path = format!("page-{}.png", formatiere_seitenzahl(seite, max_sz));
+    let mut pdftoppm_output_path = format!("page-{}.png", seite);
 
     if !geroetet {
-        pdftoppm_output_path = format!("page-clean-{}.png", formatiere_seitenzahl(seite, max_sz));
+        pdftoppm_output_path = format!("page-clean-{}.png", seite);
     }
 
     let mut pdf_bytes = pdf_bytes.to_vec();
@@ -497,6 +499,7 @@ pub struct Column {
 
 impl SeitenTyp {
     pub fn get_columns(&self, anpassungen_seite: Option<&AnpassungSeite>) -> Vec<Column> {
+        let scale_factor = 3.0;
         match self {
             SeitenTyp::BestandsverzeichnisHorz => vec![
                 // "lfd. Nr. der Grundstücke"
@@ -505,19 +508,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(60.0),
+                        .unwrap_or(60.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -527,19 +530,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(100.0),
+                        .unwrap_or(100.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(140.0),
+                        .unwrap_or(140.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-bisherige_lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -549,19 +552,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-gemarkung"))
                         .map(|m| m.min_x)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-gemarkung"))
                         .map(|m| m.max_x)
-                        .unwrap_or(255.0),
+                        .unwrap_or(255.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-gemarkung"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-gemarkung"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -571,19 +574,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flur"))
                         .map(|m| m.min_x)
-                        .unwrap_or(265.0),
+                        .unwrap_or(265.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flur"))
                         .map(|m| m.max_x)
-                        .unwrap_or(300.0),
+                        .unwrap_or(300.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flur"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flur"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -593,19 +596,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flurstueck"))
                         .map(|m| m.min_x)
-                        .unwrap_or(305.0),
+                        .unwrap_or(305.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flurstueck"))
                         .map(|m| m.max_x)
-                        .unwrap_or(370.0),
+                        .unwrap_or(370.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flurstueck"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-flurstueck"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -615,19 +618,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lage"))
                         .map(|m| m.min_x)
-                        .unwrap_or(375.0),
+                        .unwrap_or(375.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lage"))
                         .map(|m| m.max_x)
-                        .unwrap_or(670.0),
+                        .unwrap_or(670.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lage"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-lage"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 40.0, // 10.0,
                 },
@@ -637,19 +640,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_ha"))
                         .map(|m| m.min_x)
-                        .unwrap_or(675.0),
+                        .unwrap_or(675.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_ha"))
                         .map(|m| m.max_x)
-                        .unwrap_or(710.0),
+                        .unwrap_or(710.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_ha"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_ha"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -659,19 +662,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_a"))
                         .map(|m| m.min_x)
-                        .unwrap_or(715.0),
+                        .unwrap_or(715.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_a"))
                         .map(|m| m.max_x)
-                        .unwrap_or(735.0),
+                        .unwrap_or(735.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_a"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_a"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -681,19 +684,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_m2"))
                         .map(|m| m.min_x)
-                        .unwrap_or(740.0),
+                        .unwrap_or(740.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_m2"))
                         .map(|m| m.max_x)
-                        .unwrap_or(763.0),
+                        .unwrap_or(763.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_m2"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz-groesse_m2"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -705,19 +708,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(32.0),
+                        .unwrap_or(32.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(68.0),
+                        .unwrap_or(68.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -727,19 +730,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(72.0),
+                        .unwrap_or(72.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(108.0),
+                        .unwrap_or(108.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-bisherige_lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -749,19 +752,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flur"))
                         .map(|m| m.min_x)
-                        .unwrap_or(115.0),
+                        .unwrap_or(115.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flur"))
                         .map(|m| m.max_x)
-                        .unwrap_or(153.0),
+                        .unwrap_or(153.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flur"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flur"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -771,19 +774,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flurstueck"))
                         .map(|m| m.min_x)
-                        .unwrap_or(157.0),
+                        .unwrap_or(157.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flurstueck"))
                         .map(|m| m.max_x)
-                        .unwrap_or(219.0),
+                        .unwrap_or(219.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flurstueck"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-flurstueck"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -793,19 +796,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lage"))
                         .map(|m| m.min_x)
-                        .unwrap_or(221.0),
+                        .unwrap_or(221.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lage"))
                         .map(|m| m.max_x)
-                        .unwrap_or(500.0),
+                        .unwrap_or(500.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lage"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-lage"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -815,19 +818,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-groesse_m2"))
                         .map(|m| m.min_x)
-                        .unwrap_or(508.0),
+                        .unwrap_or(508.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-groesse_m2"))
                         .map(|m| m.max_x)
-                        .unwrap_or(567.0),
+                        .unwrap_or(567.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-groesse_m2"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-groesse_m2"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -839,19 +842,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(35.0),
+                        .unwrap_or(35.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(72.0),
+                        .unwrap_or(72.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(128.0),
+                        .unwrap_or(128.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -861,19 +864,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(75.0),
+                        .unwrap_or(75.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(110.0),
+                        .unwrap_or(110.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(128.0),
+                        .unwrap_or(128.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-bisherige_lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -883,19 +886,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck"))
                         .map(|m| m.min_x)
-                        .unwrap_or(115.0),
+                        .unwrap_or(115.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck"))
                         .map(|m| m.max_x)
-                        .unwrap_or(230.0),
+                        .unwrap_or(230.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck"))
                         .map(|m| m.min_y)
-                        .unwrap_or(128.0),
+                        .unwrap_or(128.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-gemarkung_flur_flurstueck"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -905,19 +908,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lage"))
                         .map(|m| m.min_x)
-                        .unwrap_or(235.0),
+                        .unwrap_or(235.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lage"))
                         .map(|m| m.max_x)
-                        .unwrap_or(485.0),
+                        .unwrap_or(485.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lage"))
                         .map(|m| m.min_y)
-                        .unwrap_or(128.0),
+                        .unwrap_or(128.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-lage"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -927,19 +930,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2"))
                         .map(|m| m.min_x)
-                        .unwrap_or(490.0),
+                        .unwrap_or(490.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2"))
                         .map(|m| m.max_x)
-                        .unwrap_or(555.0),
+                        .unwrap_or(555.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2"))
                         .map(|m| m.min_y)
-                        .unwrap_or(128.0),
+                        .unwrap_or(128.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -954,28 +957,28 @@ impl SeitenTyp {
                                 .get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.min_x)
-                        .unwrap_or(57.0),
+                        .unwrap_or(57.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.min_y)
-                        .unwrap_or(125.0),
+                        .unwrap_or(125.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_horz_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.max_y)
-                        .unwrap_or(560.0),
+                        .unwrap_or(560.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -985,19 +988,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(105.0),
+                        .unwrap_or(105.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(420.0),
+                        .unwrap_or(420.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(125.0),
+                        .unwrap_or(125.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(560.0),
+                        .unwrap_or(560.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1010,28 +1013,28 @@ impl SeitenTyp {
                                 .get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.min_x)
-                        .unwrap_or(425.0),
+                        .unwrap_or(425.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.max_x)
-                        .unwrap_or(470.0),
+                        .unwrap_or(470.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.min_y)
-                        .unwrap_or(125.0),
+                        .unwrap_or(125.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_horz_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.max_y)
-                        .unwrap_or(560.0),
+                        .unwrap_or(560.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1041,19 +1044,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(480.0),
+                        .unwrap_or(480.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(763.0),
+                        .unwrap_or(763.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(125.0),
+                        .unwrap_or(125.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_horz_zu_abschreibung-abschreibungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(560.0),
+                        .unwrap_or(560.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1068,28 +1071,28 @@ impl SeitenTyp {
                                 .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.min_x)
-                        .unwrap_or(35.0),
+                        .unwrap_or(35.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.max_x)
-                        .unwrap_or(72.0),
+                        .unwrap_or(72.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
                         })
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1099,19 +1102,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(78.0),
+                        .unwrap_or(78.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(330.0),
+                        .unwrap_or(330.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1124,28 +1127,28 @@ impl SeitenTyp {
                                 .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.min_x)
-                        .unwrap_or(337.0),
+                        .unwrap_or(337.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.max_x)
-                        .unwrap_or(375.0),
+                        .unwrap_or(375.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| {
                             s.spalten
                                 .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
                         })
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1155,19 +1158,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(382.0),
+                        .unwrap_or(382.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(520.0),
+                        .unwrap_or(520.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1180,19 +1183,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(55.0),
+                        .unwrap_or(55.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1202,19 +1205,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-eigentuemer"))
                         .map(|m| m.min_x)
-                        .unwrap_or(100.0),
+                        .unwrap_or(100.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-eigentuemer"))
                         .map(|m| m.max_x)
-                        .unwrap_or(405.0),
+                        .unwrap_or(405.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-eigentuemer"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-eigentuemer"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1224,19 +1227,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(413.0),
+                        .unwrap_or(413.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(520.0),
+                        .unwrap_or(520.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1246,19 +1249,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung"))
                         .map(|m| m.min_x)
-                        .unwrap_or(525.0),
+                        .unwrap_or(525.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung"))
                         .map(|m| m.max_x)
-                        .unwrap_or(762.0),
+                        .unwrap_or(762.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_horz-grundlage_der_eintragung"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1270,19 +1273,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(32.0),
+                        .unwrap_or(32.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(60.0),
+                        .unwrap_or(60.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1292,19 +1295,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
                         .map(|m| m.min_x)
-                        .unwrap_or(65.0),
+                        .unwrap_or(65.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
                         .map(|m| m.max_x)
-                        .unwrap_or(290.0),
+                        .unwrap_or(290.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1314,19 +1317,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(298.0),
+                        .unwrap_or(298.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(337.0),
+                        .unwrap_or(337.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1336,19 +1339,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
                         .map(|m| m.min_x)
-                        .unwrap_or(343.0),
+                        .unwrap_or(343.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
                         .map(|m| m.max_x)
-                        .unwrap_or(567.0),
+                        .unwrap_or(567.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1361,19 +1364,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(55.0),
+                        .unwrap_or(55.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1383,19 +1386,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(103.0),
+                        .unwrap_or(103.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(192.0),
+                        .unwrap_or(192.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1405,19 +1408,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(200.0),
+                        .unwrap_or(200.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(765.0),
+                        .unwrap_or(765.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz-lasten_und_beschraenkungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 25.0, // 10.0,
                 },
@@ -1429,19 +1432,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(55.0),
+                        .unwrap_or(55.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1451,19 +1454,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(103.0),
+                        .unwrap_or(103.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(505.0),
+                        .unwrap_or(505.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-veraenderungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1473,19 +1476,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(515.0),
+                        .unwrap_or(515.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(552.0),
+                        .unwrap_or(552.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1495,19 +1498,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(560.0),
+                        .unwrap_or(560.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(770.0),
+                        .unwrap_or(770.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_horz_veraenderungen-loeschungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1519,19 +1522,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(32.0),
+                        .unwrap_or(32.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(60.0),
+                        .unwrap_or(60.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1541,19 +1544,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(65.0),
+                        .unwrap_or(65.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(105.0),
+                        .unwrap_or(105.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1563,19 +1566,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(112.0),
+                        .unwrap_or(112.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(567.0),
+                        .unwrap_or(567.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1587,19 +1590,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(32.0),
+                        .unwrap_or(32.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(65.0),
+                        .unwrap_or(65.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1609,19 +1612,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(72.0),
+                        .unwrap_or(72.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(362.0),
+                        .unwrap_or(362.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-veraenderungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1631,19 +1634,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(370.0),
+                        .unwrap_or(370.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(400.0),
+                        .unwrap_or(400.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1653,19 +1656,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen"))
                         .map(|m| m.min_x)
-                        .unwrap_or(406.0),
+                        .unwrap_or(406.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt2_vert_veraenderungen-loeschungen"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1678,19 +1681,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(55.0),
+                        .unwrap_or(55.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1700,19 +1703,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(103.0),
+                        .unwrap_or(103.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(170.0),
+                        .unwrap_or(170.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1722,19 +1725,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(180.0),
+                        .unwrap_or(180.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(275.0),
+                        .unwrap_or(275.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1744,19 +1747,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(285.0),
+                        .unwrap_or(285.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(760.0),
+                        .unwrap_or(760.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(130.0),
+                        .unwrap_or(130.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 25.0, // 10.0,
                 },
@@ -1768,19 +1771,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(32.0),
+                        .unwrap_or(32.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(60.0),
+                        .unwrap_or(60.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1790,19 +1793,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv"))
                         .map(|m| m.min_x)
-                        .unwrap_or(65.0),
+                        .unwrap_or(65.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv"))
                         .map(|m| m.max_x)
-                        .unwrap_or(100.0),
+                        .unwrap_or(100.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-lfd_nr_bv"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1812,19 +1815,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(105.0),
+                        .unwrap_or(105.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(193.0),
+                        .unwrap_or(193.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1834,19 +1837,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(195.0),
+                        .unwrap_or(195.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(567.0),
+                        .unwrap_or(567.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(785.0),
+                        .unwrap_or(785.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 25.0, // 10.0,
                 },
@@ -1858,19 +1861,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(55.0),
+                        .unwrap_or(55.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(95.0),
+                        .unwrap_or(95.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1880,19 +1883,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(105.0),
+                        .unwrap_or(105.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(200.0),
+                        .unwrap_or(200.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1902,19 +1905,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(202.0),
+                        .unwrap_or(202.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(490.0),
+                        .unwrap_or(490.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1924,19 +1927,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(495.0),
+                        .unwrap_or(495.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(535.0),
+                        .unwrap_or(535.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1946,19 +1949,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(542.0),
+                        .unwrap_or(542.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(640.0),
+                        .unwrap_or(640.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1968,19 +1971,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(645.0),
+                        .unwrap_or(645.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(765.0),
+                        .unwrap_or(765.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_horz_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -1992,19 +1995,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(37.0),
+                        .unwrap_or(37.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(75.0),
+                        .unwrap_or(75.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(783.0),
+                        .unwrap_or(783.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2014,19 +2017,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(80.0),
+                        .unwrap_or(80.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(142.0),
+                        .unwrap_or(142.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(783.0),
+                        .unwrap_or(783.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2036,19 +2039,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(147.0),
+                        .unwrap_or(147.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(388.0),
+                        .unwrap_or(388.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(783.0),
+                        .unwrap_or(783.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2058,19 +2061,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(390.0),
+                        .unwrap_or(390.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(415.0),
+                        .unwrap_or(415.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(783.0),
+                        .unwrap_or(783.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2080,19 +2083,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(420.0),
+                        .unwrap_or(420.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(485.0),
+                        .unwrap_or(485.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(783.0),
+                        .unwrap_or(783.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2102,19 +2105,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(492.0),
+                        .unwrap_or(492.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(127.0),
+                        .unwrap_or(127.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen_loeschungen-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(783.0),
+                        .unwrap_or(783.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2127,19 +2130,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(32.0),
+                        .unwrap_or(32.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(60.0),
+                        .unwrap_or(60.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2149,19 +2152,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(70.0),
+                        .unwrap_or(70.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(160.0),
+                        .unwrap_or(160.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2171,19 +2174,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(165.0),
+                        .unwrap_or(165.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(565.0),
+                        .unwrap_or(565.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_veraenderungen-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2195,19 +2198,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr"))
                         .map(|m| m.min_x)
-                        .unwrap_or(175.0),
+                        .unwrap_or(175.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr"))
                         .map(|m| m.max_x)
-                        .unwrap_or(205.0),
+                        .unwrap_or(205.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-lfd_nr"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: true,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2217,19 +2220,19 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag"))
                         .map(|m| m.min_x)
-                        .unwrap_or(215.0),
+                        .unwrap_or(215.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag"))
                         .map(|m| m.max_x)
-                        .unwrap_or(305.0),
+                        .unwrap_or(305.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-betrag"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2239,35 +2242,24 @@ impl SeitenTyp {
                     min_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-text"))
                         .map(|m| m.min_x)
-                        .unwrap_or(310.0),
+                        .unwrap_or(310.0 / scale_factor),
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-text"))
                         .map(|m| m.max_x)
-                        .unwrap_or(570.0),
+                        .unwrap_or(570.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-text"))
                         .map(|m| m.min_y)
-                        .unwrap_or(150.0),
+                        .unwrap_or(150.0 / scale_factor),
                     max_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("abt3_vert_loeschungen-text"))
                         .map(|m| m.max_y)
-                        .unwrap_or(810.0),
+                        .unwrap_or(810.0 / scale_factor),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
             ],
         }
-    }
-}
-
-// Seitenzahlen sind
-pub fn formatiere_seitenzahl(zahl: u32, max_seiten: u32) -> String {
-    if max_seiten < 10 {
-        format!("{}", zahl)
-    } else if max_seiten < 100 {
-        format!("{:02}", zahl)
-    } else {
-        format!("{:03}", zahl)
     }
 }
 
@@ -2829,6 +2821,18 @@ pub struct Grundbuch {
     #[serde(default)]
     #[serde(skip_serializing_if = "Abteilung3::is_empty")]
     pub abt3: Abteilung3,
+}
+
+impl Grundbuch {
+    pub fn new(titelblatt: Titelblatt) -> Self {
+        Self {
+            titelblatt,
+            bestandsverzeichnis: Bestandsverzeichnis::default(),
+            abt1: Abteilung1::default(),
+            abt2: Abteilung2::default(),
+            abt3: Abteilung3::default(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]

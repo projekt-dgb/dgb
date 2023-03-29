@@ -74,7 +74,7 @@ let rpc = {
     });
   },
 
-  check_for_pdf_loaded: function(arg, arg2) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2 }); },
+  check_for_pdf_loaded: function(arg, arg2, arg3) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2, pdf_path: arg3 }); },
   edit_text: function(arg, arg2) { rpc.invoke({ cmd : 'edit_text', path: arg, new_value: arg2 }); },
   eintrag_neu: function(arg) { rpc.invoke({ cmd : 'eintrag_neu', path: arg }); },
   eintrag_loeschen: function(arg) { rpc.invoke({ cmd : 'eintrag_loeschen', path: arg }); },
@@ -173,12 +173,12 @@ let files_to_check = {};
 
 setInterval(function(){
     for (const [key, value] of Object.entries(files_to_check)) {
-        rpc.check_for_pdf_loaded(key, value);
+        rpc.check_for_pdf_loaded(key, value[0], value[1]);
     }
 }, 1000);
 
-function startCheckingForPageLoaded(filepath, filename) {
-    files_to_check[filepath] = filename;
+function startCheckingForPageLoaded(filepath, filename, pdf_file_name) {
+    files_to_check[filepath] = [filename, pdf_file_name];
 }
 
 function stopCheckingForPageLoaded(filename) {

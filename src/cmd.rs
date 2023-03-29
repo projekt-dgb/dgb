@@ -150,16 +150,10 @@ pub enum Cmd {
     // Check whether a "{file_name}".json with analyzed texts exists
     #[serde(rename = "check_for_pdf_loaded")]
     CheckForPdfLoaded {
+        pdf_path: String,
         file_path: String,
         file_name: String,
     },
-    // Check whether a "{file_name}".json with analyzed texts exists
-    #[serde(rename = "check_for_image_loaded")]
-    CheckForImageLoaded {
-        file_path: String,
-        file_name: String,
-    },
-
     #[serde(rename = "edit_text")]
     EditText { path: String, new_value: String },
     #[serde(rename = "eintrag_neu")]
