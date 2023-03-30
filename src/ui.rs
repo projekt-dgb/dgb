@@ -985,11 +985,17 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             <div class='kontextmenü-eintrag' data-seite-neu='bv-vert-zu-und-abschreibungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Bestandsverzeichnis Zu- und Abschreibungen (Hochformat)
                             </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='bv-vert-zu-und-abschreibungen-alt' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Bestandsverzeichnis Zu- und Abschreibungen Variante 2(Hochformat)
+                            </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt1-horz' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 1 (Querformat)
                             </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt1-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 1 (Hochformat)
+                            </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='abt1-vert-typ2' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Abteilung 1 Typ 2 (Hochformat)
                             </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt2-horz-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 2 Veränderungen (Querformat)
@@ -997,11 +1003,15 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             <div class='kontextmenü-eintrag' data-seite-neu='abt2-horz' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 2 (Querformat)
                             </div>
-                            <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
-                                Abteilung 2 Veränderungen (Hochformat)
-                            </div>
+
                             <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 2 (Hochformat)
+                            </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert-typ2' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Abteilung 2 Variante 2 (Hochformat)
+                            </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Abteilung 2 Veränderungen (Hochformat)
                             </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt3-horz-veraenderungen-loeschungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 3 Veränderungen / Löschungen (Querformat)
@@ -1523,6 +1533,25 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         ")
     };
 
+    static RELOAD_PNG: &[u8] = include_bytes!("../src/img/icons8-synchronize-48.png");
+    let icon_reload = base64::encode(&RELOAD_PNG);
+
+    let neu_laden = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='reloadGrundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_reload}'>
+                </div>
+                <div>
+                    <p>Grundbuch</p>
+                    <p>neu laden</p>
+                </div>
+            </label>
+        </div>   
+        ")
+    };
+
     let aenderungen_uebernehmen = {
         format!("
         <div class='__application-ribbon-section-content'>
@@ -1617,6 +1646,12 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
                     </div>
                 </div>
                 
+                <div class='__application-ribbon-section 5'>
+                    <div style='display:flex;flex-direction:row;'>
+                        {neu_laden}
+                    </div>
+                </div>
+
                 <div class='__application-ribbon-section 5'>
                     <div style='display:flex;flex-direction:row;'>
                         {aenderungen_uebernehmen}
@@ -1840,17 +1875,20 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
             | SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen
             | SeitenTyp::BestandsverzeichnisVert
             | SeitenTyp::BestandsverzeichnisVertTyp2
-            | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => {
+            | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen 
+            | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt => {
                 "rgb(167,224,255)" // blau
             },
               SeitenTyp::Abt1Horz
-            | SeitenTyp::Abt1Vert => {
+            | SeitenTyp::Abt1Vert 
+            | SeitenTyp::Abt1VertTyp2 => {
                 "rgb(167,255,185)" // grün
             },
               SeitenTyp::Abt2HorzVeraenderungen
             | SeitenTyp::Abt2Horz
             | SeitenTyp::Abt2VertVeraenderungen
-            | SeitenTyp::Abt2Vert => {
+            | SeitenTyp::Abt2Vert 
+            | SeitenTyp::Abt2VertTyp2 => {
                 "rgb(255,255,167)" // gelb
             },
               SeitenTyp::Abt3HorzVeraenderungenLoeschungen
@@ -1900,7 +1938,6 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
         None => return String::new(),
     };
 
-    static RELOAD_PNG: &[u8] = include_bytes!("../src/img/icons8-synchronize-48.png");
     static EXPAND_PNG: &[u8] = include_bytes!("../src/img/icons8-double-left-96.png");
     static COLLAPSE_PNG: &[u8] = include_bytes!("../src/img/icons8-double-right-96.png");
 
@@ -1912,15 +1949,12 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             ",
         ))
     } else {
-        let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
-
         normalize_for_js(format!("
                 <div style='display:flex;flex-direction:row;height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
                     <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>Grundbuch</h4>
                             <div style='display:flex;flex-grow:1;'></div>
-                            {reload_grundbuch_button}
                         </div>
                     </div>
                     {lefis_analyse}
@@ -1945,11 +1979,6 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                 </div>
             ",
             max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-            reload_grundbuch_button = if has_no_pdf { String::new() } else { format!("
-                <div style='padding:6px;'>
-                    <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
-                </div>
-            ", reload_icon = reload_str) },
             lefis_analyse = 
             if rpc_data.konfiguration.lefis_analyse_einblenden {
                 let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
@@ -3484,11 +3513,9 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 
                 <img id='__application_page_img_inner' 
                 src='data:image/png;base64,{img_src}'
-                onmousedown='onOcrSelectionDragStart(event);'
-                onmousemove='onOcrSelectionDrag(event);' 
-                onmouseup='onOcrSelectionDragStop(event);' 
-                onmouseout='onOcrSelectionDragStop(event);' 
                 style='
+                    -webkit-user-drag: none;
+                    user-drag: none;
                     user-select:none;
                     width:1200px;
                     height:{img_ui_height}px;
@@ -3501,7 +3528,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 {hocr_lines}
 
                 {spalten}
-                
+            
                 <div id='__application_page_lines' style='
                     height:{img_ui_height}px;
                     position:absolute;
@@ -3517,7 +3544,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 onmouseover='zeilePreviewMove(event);'
                 onmousemove='zeilePreviewMove(event);'
                 onmouseup='zeileNeu(event);'>{zeilen}</div>
-                
+
                 <div id='__application_ocr_selection' style='
                     position:absolute;
                     width:1px;
@@ -3531,6 +3558,22 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                     pointer-events:none;
                 '></div>
                 
+                <div onmouseup='onOcrSelectionDragStart(event);'
+                    onmousemove='onOcrSelectionDrag(event);' 
+                    onmouseout='onOcrSelectionDragStop(event);' 
+                    
+                    style='
+                    position:absolute;
+                    top: 0px;
+                    user-select:none;
+                    -webkit-user-select:none;
+                    width:1200px;
+                    height:{img_ui_height}px;
+                    -webkit-user-select:none;
+                    cursor:crosshair;
+                ' >
+                </div>
+
             </div>
         </div>", 
             file_name = open_file.0,
@@ -3649,7 +3692,6 @@ fn render_pdf_image_textbloecke(
                 height:{height}px;
                 opacity: 0.8;
                 background:none;
-                border: 0.5px solid red;
                 top: 0px;
                 transform-origin: top left;
                 left: 0px;

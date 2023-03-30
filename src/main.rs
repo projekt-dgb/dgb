@@ -19,6 +19,7 @@ use crate::digital::{Abteilung1, Abteilung2, Abteilung3, Bestandsverzeichnis};
 use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt};
 use digital::HocrSeite;
 use digital::ParsedHocr;
+use digital::StringOrLines;
 use serde_derive::{Deserialize, Serialize};
 use tinyfiledialogs::MessageBoxIcon;
 use wry::webview::WebView;
@@ -3796,12 +3797,17 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 "bv-vert" => BestandsverzeichnisVert,
                 "bv-vert-typ2" => BestandsverzeichnisVertTyp2,
                 "bv-vert-zu-und-abschreibungen" => BestandsverzeichnisVertZuUndAbschreibungen,
+                "bv-vert-zu-und-abschreibungen-alt" => {
+                    BestandsverzeichnisVertZuUndAbschreibungenAlt
+                }
                 "abt1-horz" => Abt1Horz,
                 "abt1-vert" => Abt1Vert,
+                "abt1-vert-typ2" => Abt1VertTyp2,
                 "abt2-horz-veraenderungen" => Abt2HorzVeraenderungen,
                 "abt2-horz" => Abt2Horz,
                 "abt2-vert-veraenderungen" => Abt2VertVeraenderungen,
                 "abt2-vert" => Abt2Vert,
+                "abt2-vert-typ2" => Abt2VertTyp2,
                 "abt3-horz-veraenderungen-loeschungen" => Abt3HorzVeraenderungenLoeschungen,
                 "abt3-vert-veraenderungen-loeschungen" => Abt3VertVeraenderungenLoeschungen,
                 "abt3-horz" => Abt3Horz,
@@ -3947,26 +3953,33 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             if file.datei.as_ref().is_none() {
+                let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
                 return;
             }
 
             if !file.ist_geladen() {
+                let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
                 return;
             }
 
             let hocr_page = match file.hocr.seiten.get(&format!("{page}")) {
                 Some(s) => s,
-                None => return,
+                None => {
+                    let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
+                    return;
+                }
             };
 
-            let text = hocr_page
-                .get_words_within_bounds(&Rect {
-                    min_x: *min_x,
-                    min_y: *min_y,
-                    max_x: *max_x,
-                    max_y: *max_y,
-                })
-                .join("\r\n");
+            let rect = Rect {
+                min_x: *min_x / page_width * hocr_page.breite_mm,
+                min_y: *min_y / page_height * hocr_page.hoehe_mm,
+                max_x: *max_x / page_width * hocr_page.breite_mm,
+                max_y: *max_y / page_height * hocr_page.hoehe_mm,
+            };
+
+            println!("select ocr rect {rect:#?}");
+
+            let text = hocr_page.get_words_within_bounds(&rect).join("\r\n");
 
             let text = if data.konfiguration.zeilenumbrueche_in_ocr_text {
                 text
@@ -3980,6 +3993,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
             let _ = webview.evaluate_script(&format!("copyTextToClipboard(`{}`)", text));
+            let _ = webview.evaluate_script(&format!("resetOcrSelection()"));
         }
         Cmd::ReloadGrundbuch => {
             use tinyfiledialogs::YesNo;
@@ -4855,17 +4869,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 "replaceAbt3Loeschungen(`{}`);",
                 ui::render_abt_3_loeschungen(open_file)
             ));
-            let _ = webview.evaluate_script(&format!(
-                "replaceAnalyseGrundbuch(`{}`);",
-                ui::render_analyse_grundbuch(
-                    data.vm.clone(),
-                    &open_file,
-                    &data.loaded_nb,
-                    &data.konfiguration,
-                    false,
-                    false
-                )
-            ));
+
             let _ = webview.evaluate_script(&format!(
                 "replaceFileList(`{}`);",
                 ui::render_file_list(&data)
@@ -5359,7 +5363,58 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
         abt3,
     };
 
-    Some(gb)
+    Some(clean_grundbuch(gb))
+}
+
+fn clean_grundbuch(mut grundbuch: Grundbuch) -> Grundbuch {
+    // BV-Nr: "." ->
+    for zuschreibungen in grundbuch.bestandsverzeichnis.zuschreibungen.iter_mut() {
+        zuschreibungen.bv_nr = clean_bv(&zuschreibungen.bv_nr);
+    }
+    for abschreibung in grundbuch.bestandsverzeichnis.abschreibungen.iter_mut() {
+        abschreibung.bv_nr = clean_bv(&abschreibung.bv_nr);
+    }
+
+    for a in grundbuch.abt1.grundlagen_eintragungen.iter_mut() {
+        a.bv_nr = clean_bv(&a.bv_nr);
+    }
+    for a in grundbuch.abt1.veraenderungen.iter_mut() {
+        a.lfd_nr = clean_bv(&a.lfd_nr);
+    }
+    for a in grundbuch.abt1.loeschungen.iter_mut() {
+        a.lfd_nr = clean_bv(&a.lfd_nr);
+    }
+
+    for a in grundbuch.abt2.eintraege.iter_mut() {
+        a.bv_nr = clean_bv(&a.bv_nr);
+    }
+    for a in grundbuch.abt2.veraenderungen.iter_mut() {
+        a.lfd_nr = clean_bv(&a.lfd_nr);
+    }
+    for a in grundbuch.abt2.loeschungen.iter_mut() {
+        a.lfd_nr = clean_bv(&a.lfd_nr);
+    }
+
+    for a in grundbuch.abt3.eintraege.iter_mut() {
+        a.bv_nr = clean_bv(&a.bv_nr);
+    }
+    for a in grundbuch.abt3.veraenderungen.iter_mut() {
+        a.lfd_nr = clean_bv(&a.lfd_nr);
+    }
+    for a in grundbuch.abt3.loeschungen.iter_mut() {
+        a.lfd_nr = clean_bv(&a.lfd_nr);
+    }
+
+    grundbuch
+}
+
+fn clean_bv(s: &StringOrLines) -> StringOrLines {
+    match s {
+        StringOrLines::MultiLine(s) => {
+            StringOrLines::MultiLine(s.iter().map(|s| s.replace(".", ",")).collect())
+        }
+        StringOrLines::SingleLine(s) => StringOrLines::SingleLine(s.replace(".", ",")),
+    }
 }
 
 lazy_static::lazy_static! {

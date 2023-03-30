@@ -171,6 +171,16 @@ pub struct HocrSeite {
     pub breite_mm: f32,
     pub hoehe_mm: f32,
     pub parsed: ParsedHocr,
+    #[serde(default)]
+    pub rote_linien: Vec<Linie>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Linie {
+    pub start_x: f32,
+    pub start_y: f32,
+    pub end_x: f32,
+    pub end_y: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,10 +227,12 @@ impl HocrSeite {
         ];
         let transform_map = map.iter().copied().collect::<BTreeMap<_, _>>();
 
-        let allowed_chars = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.'];
+        let allowed_chars = &[
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '-', ' ',
+        ];
         let allowed_chars = allowed_chars.iter().copied().collect::<BTreeSet<_>>();
 
-        let texte = spalten
+        let mut texte: Vec<Vec<Textblock>> = spalten
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
@@ -250,6 +262,9 @@ impl HocrSeite {
                             .to_string()
                             .trim_end_matches('|')
                             .trim_start_matches('|')
+                            .replace(" | ", " ")
+                            .replace("[ ", " ")
+                            .replace("] ", " ")
                             .trim()
                             .to_string();
 
@@ -284,6 +299,54 @@ impl HocrSeite {
             })
             .collect();
 
+        // Leere Zeilen ignorieren
+        let zellen_leer =
+            texte
+                .iter()
+                .flat_map(|sp| {
+                    sp.iter().enumerate().filter_map(|(zeile, zelle)| {
+                        if zelle.ist_leer() {
+                            Some(zeile)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .collect::<BTreeSet<_>>();
+
+        let zeilen_leer = zellen_leer
+            .iter()
+            .filter_map(|z| {
+                if texte.iter().all(|spalte| {
+                    spalte
+                        .get(*z)
+                        .map(|zelle| zelle.ist_leer())
+                        .unwrap_or(false)
+                }) {
+                    Some(z)
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeSet<_>>();
+
+        println!("texte auf seite {seite}: {texte:#?} - zellen leer in zeilen {zellen_leer:?}, zeilen leer {zeilen_leer:?}");
+
+        for spalte in texte.iter_mut() {
+            *spalte = spalte
+                .clone()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, s)| {
+                    if zeilen_leer.contains(&i) {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                })
+                .collect();
+        }
+
         SeiteParsed {
             typ: seiten_typ,
             texte,
@@ -312,6 +375,10 @@ impl HocrSeite {
                 })
             })
         })
+    }
+
+    pub fn ist_eintrag_geroetet(&self, rect: &Rect) -> bool {
+        false // TODO
     }
 
     pub fn get_words_within_bounds(&self, rect: &Rect) -> Vec<String> {
@@ -486,11 +553,15 @@ pub enum SeitenTyp {
     BestandsverzeichnisVertTyp2,
     #[serde(rename = "bv-vert-zu-und-abschreibungen")]
     BestandsverzeichnisVertZuUndAbschreibungen,
+    #[serde(rename = "bv-vert-zu-und-abschreibungen-alt")]
+    BestandsverzeichnisVertZuUndAbschreibungenAlt,
 
     #[serde(rename = "abt1-horz")]
     Abt1Horz,
     #[serde(rename = "abt1-vert")]
     Abt1Vert,
+    #[serde(rename = "abt1-vert-typ2")]
+    Abt1VertTyp2,
 
     #[serde(rename = "abt2-horz-veraenderungen")]
     Abt2HorzVeraenderungen,
@@ -500,6 +571,8 @@ pub enum SeitenTyp {
     Abt2VertVeraenderungen,
     #[serde(rename = "abt2-vert")]
     Abt2Vert,
+    #[serde(rename = "abt2-vert-typ2")]
+    Abt2VertTyp2,
 
     #[serde(rename = "abt3-horz-veraenderungen-loeschungen")]
     Abt3HorzVeraenderungenLoeschungen,
@@ -554,6 +627,7 @@ pub fn insert_zeilen_automatisch(file: &mut PdfFile) {
 
         let mut has_hit_element = false;
         let mut min_y_mm = min_y_mm;
+
         let step = 1;
 
         while min_y_mm < max_y_mm {
@@ -1041,7 +1115,7 @@ impl SeitenTyp {
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-groesse_m2"))
                         .map(|m| m.max_x)
-                        .unwrap_or(567.0 / scale_factor),
+                        .unwrap_or(572.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert-groesse_m2"))
                         .map(|m| m.min_y)
@@ -1153,7 +1227,7 @@ impl SeitenTyp {
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2"))
                         .map(|m| m.max_x)
-                        .unwrap_or(555.0 / scale_factor),
+                        .unwrap_or(198.90),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_typ2-groesse_m2"))
                         .map(|m| m.min_y)
@@ -1280,6 +1354,120 @@ impl SeitenTyp {
                     line_break_after_px: 10.0, // 10.0,
                 },
             ],
+            SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt => vec![
+                // "Zur lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_vert_zu_abschreibung-lfd_nr_zuschreibungen",
+                    min_x: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
+                        })
+                        .map(|m| m.min_x)
+                        .unwrap_or(13.248323),
+                    max_x: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
+                        })
+                        .map(|m| m.max_x)
+                        .unwrap_or(26.849936),
+                    min_y: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
+                        })
+                        .map(|m| m.min_y)
+                        .unwrap_or(45.038353),
+                    max_y: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_zuschreibungen")
+                        })
+                        .map(|m| m.max_y)
+                        .unwrap_or(275.8744),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "Bestand und Zuschreibungen"
+                Column {
+                    id: "bv_vert_zu_abschreibung-zuschreibungen",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(29.146313),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(118.17505),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(45.038353),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-zuschreibungen"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(275.8744),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "Zur lfd. Nr. der Grundstücke"
+                Column {
+                    id: "bv_vert_zu_abschreibung-lfd_nr_abschreibungen",
+                    min_x: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
+                        })
+                        .map(|m| m.min_x)
+                        .unwrap_or(121.00135),
+                    max_x: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
+                        })
+                        .map(|m| m.max_x)
+                        .unwrap_or(134.7796),
+                    min_y: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
+                        })
+                        .map(|m| m.min_y)
+                        .unwrap_or(45.038353),
+                    max_y: anpassungen_seite
+                        .and_then(|s| {
+                            s.spalten
+                                .get("bv_vert_zu_abschreibung-lfd_nr_abschreibungen")
+                        })
+                        .map(|m| m.max_y)
+                        .unwrap_or(275.8744),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "Abschreibungen"
+                Column {
+                    id: "bv_vert_zu_abschreibung-abschreibungen",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(136.89934),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(198.37157),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(45.038353),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(275.8744),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
             SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => vec![
                 // "Zur lfd. Nr. der Grundstücke"
                 Column {
@@ -1381,7 +1569,7 @@ impl SeitenTyp {
                     max_x: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
                         .map(|m| m.max_x)
-                        .unwrap_or(520.0 / scale_factor),
+                        .unwrap_or(573.0 / scale_factor),
                     min_y: anpassungen_seite
                         .and_then(|s| s.spalten.get("bv_vert_zu_abschreibung-abschreibungen"))
                         .map(|m| m.min_y)
@@ -1575,7 +1763,96 @@ impl SeitenTyp {
                     line_break_after_px: 10.0, // 10.0,
                 },
             ],
-
+            SeitenTyp::Abt1VertTyp2 => vec![
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt1_vert-lfd_nr",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(12.365102),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(23.140406),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.0506),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "Eigentümer"
+                Column {
+                    id: "abt1_vert-eigentuemer",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(24.55356),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(99.627396),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-eigentuemer"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.0506),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "lfd. Nr. der Grundstücke im BV"
+                Column {
+                    id: "abt1_vert-lfd_nr_bv",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(101.57048),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(119.41155),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-lfd_nr_bv"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.0506),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "Grundlage der Eintragung"
+                Column {
+                    id: "abt1_vert-grundlage_der_eintragung",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(121.70793),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(198.01828),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt1_vert-grundlage_der_eintragung"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.0506),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
             SeitenTyp::Abt2Horz => vec![
                 // "lfd. Nr. der Eintragungen"
                 Column {
@@ -1798,6 +2075,74 @@ impl SeitenTyp {
                         .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
                         .map(|m| m.max_y)
                         .unwrap_or(810.0 / scale_factor),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+            ],
+            SeitenTyp::Abt2VertTyp2 => vec![
+                // "lfd. Nr. der Eintragungen"
+                Column {
+                    id: "abt2_vert-lfd_nr",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(12.71839),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(22.96376),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.2268),
+                    is_number_column: true,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "lfd. Nr der betroffenen Grundstücke"
+                Column {
+                    id: "abt2_vert-lfd_nr_bv",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(24.906849),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(46.457455),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lfd_nr_bv"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.2268),
+                    is_number_column: false,
+                    line_break_after_px: 10.0, // 10.0,
+                },
+                // "Lasten und Beschränkungen"
+                Column {
+                    id: "abt2_vert-lasten_und_beschraenkungen",
+                    min_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
+                        .map(|m| m.min_x)
+                        .unwrap_or(49.10712),
+                    max_x: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
+                        .map(|m| m.max_x)
+                        .unwrap_or(198.19492),
+                    min_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
+                        .map(|m| m.min_y)
+                        .unwrap_or(44.685932),
+                    max_y: anpassungen_seite
+                        .and_then(|s| s.spalten.get("abt2_vert-lasten_und_beschraenkungen"))
+                        .map(|m| m.max_y)
+                        .unwrap_or(276.2268),
                     is_number_column: false,
                     line_break_after_px: 10.0, // 10.0,
                 },
@@ -2489,6 +2834,12 @@ pub struct Textblock {
     pub end_y: f32,
     pub start_x: f32,
     pub end_x: f32,
+}
+
+impl Textblock {
+    pub fn ist_leer(&self) -> bool {
+        self.text.trim().is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -5111,7 +5462,11 @@ pub fn analysiere_abt1(
 
     let abt1_eintraege = seiten
         .iter()
-        .filter(|(num, s)| s.typ == SeitenTyp::Abt1Vert || s.typ == SeitenTyp::Abt1Horz)
+        .filter(|(num, s)| {
+            s.typ == SeitenTyp::Abt1Vert
+                || s.typ == SeitenTyp::Abt1VertTyp2
+                || s.typ == SeitenTyp::Abt1Horz
+        })
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
@@ -5219,7 +5574,11 @@ pub fn analysiere_abt1(
 
     let abt1_grundlagen_eintragungen = seiten
         .iter()
-        .filter(|(num, s)| s.typ == SeitenTyp::Abt1Vert || s.typ == SeitenTyp::Abt1Horz)
+        .filter(|(num, s)| {
+            s.typ == SeitenTyp::Abt1Vert
+                || s.typ == SeitenTyp::Abt1VertTyp2
+                || s.typ == SeitenTyp::Abt1Horz
+        })
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
@@ -5816,7 +6175,11 @@ pub fn analysiere_abt2(
 
     let abt2_eintraege = seiten
         .iter()
-        .filter(|(num, s)| s.typ == SeitenTyp::Abt2Vert || s.typ == SeitenTyp::Abt2Vert)
+        .filter(|(num, s)| {
+            s.typ == SeitenTyp::Abt2Vert
+                || s.typ == SeitenTyp::Abt2VertTyp2
+                || s.typ == SeitenTyp::Abt2Vert
+        })
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))

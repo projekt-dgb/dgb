@@ -278,7 +278,11 @@ function stopCheckingForImageLoaded(filename) {
 let ocr_selection_rect = null;
 
 function onOcrSelectionDragStart(event) {
-        
+    
+    if (ocr_selection_rect) {
+        return onOcrSelectionDragStop(event);
+    }
+
     let selection_rect = document.getElementById("__application_ocr_selection");
     if (!selection_rect)
         return;
@@ -319,7 +323,10 @@ function onOcrSelectionDragStart(event) {
 }
 
 function onOcrSelectionDrag(event) {
-        
+    
+    if (!ocr_selection_rect)
+        return;
+
     let selection_rect = document.getElementById("__application_ocr_selection");
     if (!selection_rect)
         return;
