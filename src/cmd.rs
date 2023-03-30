@@ -197,7 +197,7 @@ pub enum Cmd {
     ZeileLoeschen {
         file: String,
         page: usize,
-        zeilen_id: usize,
+        zeilen_id: u32,
     },
     #[serde(rename = "bv_eintrag_typ_aendern")]
     BvEintragTypAendern { path: String, value: String },
@@ -207,6 +207,10 @@ pub enum Cmd {
     // UI stuff
     #[serde(rename = "set_active_ribbon_tab")]
     SetActiveRibbonTab { new_tab: usize },
+    #[serde(rename = "toggle_dateiliste")]
+    ToggleDateiliste { toggle: bool },
+    #[serde(rename = "select_tab")]
+    SelectTab { tab: usize },
     #[serde(rename = "set_open_file")]
     SetOpenFile { new_file: String },
     #[serde(rename = "set_open_page")]

@@ -1,13 +1,12 @@
+use crate::{python::PyVm, AnpassungSeite, Konfiguration, PdfFile, Rect};
 use chrono::{DateTime, Utc};
-use std::collections::BTreeMap;
-use std::io::Error as IoError;
-use std::{fmt, fs, process::Command};
-
-use crate::{python::PyVm, AnpassungSeite, Konfiguration, Rect};
 use image::ImageError;
 use lopdf::Error as LoPdfError;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::io::Error as IoError;
+use std::{fmt, fs};
 use wry::webview::WebView;
 
 /// Alle Fehler, die im Programm passieren können
@@ -181,20 +180,6 @@ pub struct SeiteParsed {
 }
 
 impl HocrSeite {
-    pub fn get_default_zeilen(&self) -> Vec<f32> {
-        let im_height = self.parsed.bounds.max_y;
-        let pdf_height = self.hoehe_mm;
-        self.parsed
-            .careas
-            .iter()
-            .flat_map(|ca| {
-                ca.paragraphs.iter().map(
-                    |pa| (pdf_height / im_height * pa.bounds.max_y) + 1.0, /* mm */
-                )
-            })
-            .collect()
-    }
-
     pub fn get_textbloecke(
         &self,
         seite: &str,
@@ -204,8 +189,8 @@ impl HocrSeite {
         let spalten = seiten_typ.get_columns(anpassungen_seite.get(seite));
         let zeilen = anpassungen_seite
             .get(seite)
-            .map(|ap| ap.zeilen.clone())
-            .unwrap_or(self.get_default_zeilen());
+            .map(|ap| ap.get_zeilen())
+            .unwrap_or_default();
 
         let map = &[
             ('⁰', '0'),
@@ -239,8 +224,9 @@ impl HocrSeite {
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                let mut zeilen = zeilen.clone();
+                let mut zeilen = zeilen.values().copied().collect::<Vec<_>>();
                 zeilen.push(col.max_y);
+                zeilen.sort_by(|a, b| a.partial_cmp(&b).unwrap_or(core::cmp::Ordering::Equal));
                 zeilen
                     .iter()
                     .enumerate()
@@ -302,6 +288,30 @@ impl HocrSeite {
             typ: seiten_typ,
             texte,
         }
+    }
+
+    pub fn overlaps_any_word(&self, rect: &Rect) -> bool {
+        let self_width_mm = self.breite_mm;
+        let self_height_mm = self.hoehe_mm;
+        let self_width_px = self.parsed.bounds.max_x;
+        let self_height_px = self.parsed.bounds.max_y;
+
+        let rect_projected_into_px = Rect {
+            min_x: rect.min_x / self_width_mm * self_width_px,
+            min_y: rect.min_y / self_height_mm * self_height_px,
+            max_x: rect.max_x / self_width_mm * self_width_px,
+            max_y: rect.max_y / self_height_mm * self_height_px,
+        };
+
+        self.parsed.careas.iter().any(|ca| {
+            ca.paragraphs.iter().any(|pa| {
+                pa.lines.iter().any(|li| {
+                    li.words
+                        .iter()
+                        .any(|wo| wo.bounds.overlaps(&rect_projected_into_px))
+                })
+            })
+        })
     }
 
     pub fn get_words_within_bounds(&self, rect: &Rect) -> Vec<String> {
@@ -432,11 +442,6 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     titelblatt: &Titelblatt,
     geroetet: bool,
 ) -> Result<(), Fehler> {
-    println!(
-        "konvertiere_pdf_seite_zu_png_prioritaet {:#?} {}",
-        titelblatt, seite
-    );
-
     let temp_ordner = std::env::temp_dir()
         .join(&titelblatt.grundbuch_von)
         .join(&titelblatt.blatt.to_string());
@@ -453,6 +458,10 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let mut pdf_bytes = pdf_bytes.to_vec();
     if !geroetet {
         pdf_bytes = clean_pdf_bytes(&pdf_bytes)?;
+    }
+
+    if temp_ordner.join(&pdftoppm_output_path).exists() {
+        return Ok(());
     }
 
     let pdf_base64 = base64::encode(pdf_bytes);
@@ -506,8 +515,93 @@ pub enum SeitenTyp {
     Abt3Vert,
 }
 
+pub fn insert_zeilen_automatisch(file: &mut PdfFile) {
+    for aps in file.anpassungen_seite.values_mut() {
+        aps.zeilen_auto.clear();
+    }
+
+    for (seiten_id, seite) in file.hocr.seiten.iter() {
+        let seite_height_mm = seite.hoehe_mm.ceil() as usize;
+        let seite_breite_mm = seite.breite_mm.ceil() as usize;
+
+        let seitentyp = match file.get_seiten_typ(seiten_id) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        let columns = seitentyp.get_columns(file.anpassungen_seite.get(seiten_id));
+
+        let min_y_mm = columns
+            .iter()
+            .map(|col| col.min_y.floor() as usize)
+            .min()
+            .unwrap_or(0);
+        let max_y_mm = columns
+            .iter()
+            .map(|col| col.max_y.ceil() as usize)
+            .max()
+            .unwrap_or(seite_height_mm);
+        let min_x_mm = columns
+            .iter()
+            .map(|col| col.min_x.floor() as usize)
+            .min()
+            .unwrap_or(0);
+        let max_x_mm = columns
+            .iter()
+            .map(|col| col.max_x.ceil() as usize)
+            .max()
+            .unwrap_or(seite_breite_mm);
+
+        let mut has_hit_element = false;
+        let mut min_y_mm = min_y_mm;
+        let step = 1;
+
+        while min_y_mm < max_y_mm {
+            let rect = Rect {
+                min_y: min_y_mm as f32,
+                max_y: (min_y_mm + step) as f32,
+                min_x: min_x_mm as f32,
+                max_x: max_x_mm as f32,
+            };
+
+            let rect2 = Rect {
+                min_y: (min_y_mm + step) as f32,
+                max_y: (min_y_mm + step + step) as f32,
+                min_x: min_x_mm as f32,
+                max_x: max_x_mm as f32,
+            };
+
+            let no_words_in_rect =
+                !seite.overlaps_any_word(&rect) && !seite.overlaps_any_word(&rect2);
+
+            if !has_hit_element && !no_words_in_rect {
+                has_hit_element = true;
+            } else if has_hit_element && no_words_in_rect {
+                let mut entry = file
+                    .anpassungen_seite
+                    .entry(seiten_id.clone())
+                    .or_insert_with(|| AnpassungSeite::default());
+
+                entry
+                    .zeilen_auto
+                    .insert(rand::random(), (min_y_mm + step) as f32);
+                has_hit_element = false;
+            }
+
+            min_y_mm += step;
+        }
+    }
+}
+
 // Bestimmt den Seitentyp anhand des OCR-Textes der gesamten Seite
-pub fn klassifiziere_seitentyp(ocr_text: &str, querformat: bool) -> Result<SeitenTyp, Fehler> {
+pub fn klassifiziere_seitentyp(hocr: &HocrSeite, querformat: bool) -> Result<SeitenTyp, Fehler> {
+    let ocr_text = hocr.parsed.get_zeilen().join("\r\n");
+    let rect = Rect {
+        min_x: (50.0 / 1194.0 * 210.0),
+        max_x: (350.0 / 1194.0 * 210.0),
+        min_y: (200.0 / 1689.0 * 297.0),
+        max_y: (300.0 / 1689.0 * 297.0),
+    };
     if ocr_text.contains("Dritte Abteilung")
         || ocr_text.contains("Dritte Abteilu ng")
         || ocr_text.contains("Abteilung 3")
@@ -530,6 +624,17 @@ pub fn klassifiziere_seitentyp(ocr_text: &str, querformat: bool) -> Result<Seite
                 Ok(SeitenTyp::Abt3VertVeraenderungen)
             } else if ocr_text.contains("Löschungen") {
                 Ok(SeitenTyp::Abt3VertLoeschungen)
+            } else if ocr_text.contains("Spalte 1") {
+                if hocr
+                    .get_words_within_bounds(&rect)
+                    .join(" ")
+                    .trim()
+                    .is_empty()
+                {
+                    Ok(SeitenTyp::Abt3VertLoeschungen)
+                } else {
+                    Ok(SeitenTyp::Abt3VertVeraenderungen)
+                }
             } else {
                 Ok(SeitenTyp::Abt3Vert)
             }
@@ -541,13 +646,19 @@ pub fn klassifiziere_seitentyp(ocr_text: &str, querformat: bool) -> Result<Seite
         || ocr_text.contains("Abteilung 2")
     {
         if querformat {
-            if ocr_text.contains("Veränderungen") || ocr_text.contains("Löschungen") {
+            if ocr_text.contains("Veränderungen")
+                || ocr_text.contains("Löschungen")
+                || ocr_text.contains("Spalte 1")
+            {
                 Ok(SeitenTyp::Abt2HorzVeraenderungen)
             } else {
                 Ok(SeitenTyp::Abt2Horz)
             }
         } else {
-            if ocr_text.contains("Veränderungen") || ocr_text.contains("Löschungen") {
+            if ocr_text.contains("Veränderungen")
+                || ocr_text.contains("Löschungen")
+                || ocr_text.contains("Spalte 1")
+            {
                 Ok(SeitenTyp::Abt2VertVeraenderungen)
             } else {
                 Ok(SeitenTyp::Abt2Vert)
@@ -569,7 +680,7 @@ pub fn klassifiziere_seitentyp(ocr_text: &str, querformat: bool) -> Result<Seite
         || ocr_text
             .contains("Bezeichnung der Grundstücke und der mit dem Eigentum verbundenen Rechte")
         || ocr_text.contains("Wirtschaftsart und Lage")
-        || ocr_text.contains("Bestand und Zuschreibungen")
+        || ocr_text.contains("Zuschreibunge")
     {
         if querformat {
             if ocr_text.contains("Abschreibungen") {
@@ -578,12 +689,15 @@ pub fn klassifiziere_seitentyp(ocr_text: &str, querformat: bool) -> Result<Seite
                 Ok(SeitenTyp::BestandsverzeichnisHorz)
             }
         } else {
-            if ocr_text.contains("Abschreibungen") {
+            if ocr_text.contains("Abschreibungen")
+                || ocr_text.contains("Zuschreibunge")
+                || (ocr_text.contains("Nr. der") && ocr_text.contains("Grund-"))
+            {
                 Ok(SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen)
-            } else if ocr_text.contains("a/b/c") || ocr_text.contains("alb/c") {
-                Ok(SeitenTyp::BestandsverzeichnisVertTyp2)
-            } else {
+            } else if ocr_text.contains("Gemarkung *") {
                 Ok(SeitenTyp::BestandsverzeichnisVert)
+            } else {
+                Ok(SeitenTyp::BestandsverzeichnisVertTyp2)
             }
         }
     } else {
@@ -3557,7 +3671,7 @@ pub fn analysiere_bv(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if s.typ == SeitenTyp::BestandsverzeichnisHorz {
@@ -4472,9 +4586,9 @@ pub fn analysiere_bv(
         .filter_map(|bv_irr| {
             let vorherige_lfd = bv_eintraege.get(bv_irr - 1)?.get_lfd_nr();
             let naechste_lfd = bv_eintraege.get(bv_irr + 1)?.get_lfd_nr();
-            match naechste_lfd - vorherige_lfd {
-                2 => Some((bv_irr, vorherige_lfd + 1)),
-                1 => {
+            match naechste_lfd.checked_sub(vorherige_lfd) {
+                Some(2) => Some((bv_irr, vorherige_lfd + 1)),
+                Some(1) => {
                     if bv_eintraege[bv_irr].get_bisherige_lfd_nr() == Some(vorherige_lfd) {
                         Some((bv_irr, naechste_lfd))
                     } else {
@@ -4502,7 +4616,7 @@ pub fn analysiere_bv(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -4577,7 +4691,7 @@ pub fn analysiere_bv(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -5001,7 +5115,7 @@ pub fn analysiere_abt1(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -5109,7 +5223,7 @@ pub fn analysiere_abt1(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -5706,7 +5820,7 @@ pub fn analysiere_abt2(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -5822,7 +5936,7 @@ pub fn analysiere_abt2(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -6056,7 +6170,7 @@ pub fn analysiere_abt3(
         .flat_map(|(seitenzahl, s)| {
             let zeilen_auf_seite = anpassungen_seite
                 .get(&format!("{}", seitenzahl))
-                .map(|aps| aps.zeilen.clone())
+                .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
             if !zeilen_auf_seite.is_empty() {
@@ -6199,7 +6313,7 @@ pub fn analysiere_abt3(
             if s.typ == SeitenTyp::Abt3VertVeraenderungen {
                 let zeilen_auf_seite = anpassungen_seite
                     .get(&format!("{}", seitenzahl))
-                    .map(|aps| aps.zeilen.clone())
+                    .map(|aps| aps.get_zeilen())
                     .unwrap_or_default();
 
                 if !zeilen_auf_seite.is_empty() {
@@ -6316,7 +6430,7 @@ pub fn analysiere_abt3(
 
                 let zeilen_auf_seite = anpassungen_seite
                     .get(&format!("{}", seitenzahl))
-                    .map(|aps| aps.zeilen.clone())
+                    .map(|aps| aps.get_zeilen())
                     .unwrap_or_default();
 
                 if !zeilen_auf_seite.is_empty() {

@@ -13,7 +13,9 @@ pub fn render_entire_screen(rpc_data: &mut RpcData) -> String {
     normalize_for_js(format!(
         "
             {popover}
-            {ribbon_ui}
+            <div id='__application-ribbon'>
+                {ribbon_ui}
+            </div>
             <div id='__application-main' style='overflow:hidden;'>
                 {main}
             </div>
@@ -1345,226 +1347,354 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
         ")
     };
 
-    let ribbon_body = format!("
-        <div class='__application-ribbon-body'>
-            <div class='__application-ribbon-section 1'>
-                <div style='display:flex;flex-direction:row;'>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.load_new_pdf(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_open_base64}'>
-                            </div>
-                            <div>
-                                <p>Grundbuch</p>
-                                <p>laden</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.create_new_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_neu_base64}'>
-                            </div>
-                            <div>
-                                <p>Neues</p>
-                                <p>Grundbuch</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.search_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_search_base64}'>
-                            </div>
-                            <div>
-                                <p>Grundbuch</p>
-                                <p>suchen</p>
-                            </div>
-                        </label>
-                    </div>
+    let grundbuch_oeffnen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.load_new_pdf(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_open_base64}'>
                 </div>
-            </div>
-            
-            <div class='__application-ribbon-section 2'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.undo(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_back_base64}'>
-                            </div>
-                            <div>
-                                <p>Zurück</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.redo(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_forward_base64}'>
-                            </div>
-                            <div>
-                                <p>Vorwärts</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>
+                <div>
+                    <p>Grundbuch</p>
+                    <p>laden</p>
                 </div>
-            </div>
-            
-            {nebenbet}
-            
-            <div class='__application-ribbon-section 4'>
-                <div style='display:flex;flex-direction:row;'>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_rechte_speichern}'>
-                            </div>
-                            <div>
-                                <p>Alle Rechte</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_fehler(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_fehler_speichern}'>
-                            </div>
-                            <div>
-                                <p>Alle Fehler</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_teilbelastungen(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_teilbelastungen}'>
-                            </div>
-                            <div>
-                                <p>Alle Teilbelast.</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_abt1(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_abt1}'>
-                            </div>
-                            <div>
-                                <p>Alle Abt. 1</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_hvm(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_hvm}'>
-                            </div>
-                            <div>
-                                <p>Alle HVM</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                </div>
-            </div>            
-            
-            <div class='__application-ribbon-section 5'>
-                <div style='display:flex;flex-direction:row;'>
-
-                    {export_lefis}
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_export_pdf(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
-                            </div>
-                            <div>
-                                <p>Export</p>
-                                <p>als PDF</p>
-                            </div>
-                        </label>
-                    </div>   
-                </div>
-            </div>
-            
-            <div class='__application-ribbon-section 6'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.upload_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_upload_lefis}'>
-                            </div>
-                            <div>
-                                <p>Änderungen</p>
-                                <p>übernehmen</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class='__application-ribbon-section 7'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_configuration(event);' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_settings_base64}'>
-                            </div>
-                            <div>
-                                <p>Einstellungen</p>
-                                <p>bearbeiten</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div style='display:flex;flex-grow:1;'></div>
-            ´
-            <div class='__application-ribbon-section 6'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_help(event);' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_help_base64}'>
-                            </div>
-                            <div>
-                                <p>Hilfe</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_info(event);' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_info_base64}'>
-                            </div>
-                            <div>
-                                <p>Info</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
+            </label>
         </div>
-        ");
+        ")
+    };
+
+    let neues_grundbuch = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+                <label onmouseup='tab_functions.create_new_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                    <div class='icon-wrapper'>
+                        <img class='icon' src='data:image/png;base64,{icon_neu_base64}'>
+                    </div>
+                    <div>
+                        <p>Neues</p>
+                        <p>Grundbuch</p>
+                    </div>
+                </label>
+            </div>
+        ")
+    };
+
+    let grundbuch_suchen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.search_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_search_base64}'>
+                </div>
+                <div>
+                    <p>Grundbuch</p>
+                    <p>suchen</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let zurueck = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.undo(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_back_base64}'>
+                </div>
+                <div>
+                    <p>Zurück</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let vorwaerts = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.redo(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_forward_base64}'>
+                </div>
+                <div>
+                    <p>Vorwärts</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let alle_rechte_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_rechte_speichern}'>
+                </div>
+                <div>
+                    <p>Alle Rechte</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_fehler_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_fehler(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_fehler_speichern}'>
+                </div>
+                <div>
+                    <p>Alle Fehler</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_teibelast_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_teilbelastungen(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_export_teilbelastungen}'>
+                </div>
+                <div>
+                    <p>Alle Teilbelast.</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_abt1_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_abt1(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_export_abt1}'>
+                </div>
+                <div>
+                    <p>Alle Abt. 1</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_hvm_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_hvm(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_hvm}'>
+                </div>
+                <div>
+                    <p>Alle HVM</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let export_pdf = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_export_pdf(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
+                </div>
+                <div>
+                    <p>Export</p>
+                    <p>als PDF</p>
+                </div>
+            </label>
+        </div>   
+        ")
+    };
+
+    let aenderungen_uebernehmen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.upload_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_upload_lefis}'>
+                </div>
+                <div>
+                    <p>Änderungen</p>
+                    <p>übernehmen</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let einstellungen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_configuration(event);' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_settings_base64}'>
+                </div>
+                <div>
+                    <p>Einstellungen</p>
+                    <p>bearbeiten</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let hilfe = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_help(event);' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_help_base64}'>
+                </div>
+                <div>
+                    <p>Hilfe</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>    
+        ")
+    };
+
+    let info = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_info(event);' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_info_base64}'>
+                </div>
+                <div>
+                    <p>Info</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let ribbon_body = match rpc_data.konfiguration.tab {
+        0 => {
+            format!(
+                "
+            <div class='__application-ribbon-header'>
+                <p onmouseup='selectTab(0);' class='active'>START</p>
+                <p onmouseup='selectTab(1);'>ÜBERPRÜFUNG</p>
+                <p onmouseup='selectTab(2);'>LEFIS</p>
+            </div>
+            <div class='__application-ribbon-body'>
+                <div class='__application-ribbon-section 1'>
+                    <div style='display:flex;flex-direction:row;'>
+                        
+                        {grundbuch_oeffnen}
+
+                        {neues_grundbuch}
+                        
+                        {grundbuch_suchen}
+                    </div>
+                </div>
+            
+                <div class='__application-ribbon-section 2'>
+                    <div style='display:flex;flex-direction:row;'>
+
+                        {zurueck}
+                        
+                        {vorwaerts}
+                    </div>
+                </div>
+                
+                <div class='__application-ribbon-section 5'>
+                    <div style='display:flex;flex-direction:row;'>
+                        {aenderungen_uebernehmen}
+
+                        {export_pdf}
+                    </div>
+                </div>
+
+                <div style='display:flex;flex-grow:1;'></div>
+                
+                <div class='__application-ribbon-section 6'>
+                    <div style='display:flex;flex-direction:row;'>
+
+                        {einstellungen}
+
+                        {hilfe}
+
+                        {info}
+
+                    </div>
+                </div>
+            </div>
+            "
+            )
+        }
+        1 => {
+            format!(
+                "
+            <div class='__application-ribbon-header'>
+                <p onmouseup='selectTab(0);'>START</p>
+                <p onmouseup='selectTab(1);' class='active'>ÜBERPRÜFUNG</p>
+                <p onmouseup='selectTab(2);'>LEFIS</p>
+            </div>
+            <div class='__application-ribbon-body'>
+                <div class='__application-ribbon-section 4'>
+                    <div style='display:flex;flex-direction:row;'>
+                        
+                        {alle_rechte_speichern}
+                        
+                        {alle_fehler_speichern}
+                        
+                        {alle_teibelast_speichern}
+
+                        {alle_abt1_speichern}
+                        
+                        {alle_hvm_speichern}
+                        
+                    </div>
+                </div>            
+            </div>
+            "
+            )
+        }
+        _ => {
+            format!(
+                "
+            <div class='__application-ribbon-header'>
+                <p onmouseup='selectTab(0);'>START</p>
+                <p onmouseup='selectTab(1);'>ÜBERPRÜFUNG</p>
+                <p onmouseup='selectTab(2);' class='active'>LEFIS</p>
+            </div>
+            <div class='__application-ribbon-body'>
+
+
+                {nebenbet}
+
+                <div style='display:flex;flex-grow:1;'></div>
+
+                <div class='__application-ribbon-section 5'>
+                    <div style='display:flex;flex-direction:row;'>
+                        {export_lefis}
+                    </div>
+                </div>
+            </div>
+        "
+            )
+        }
+    };
 
     normalize_for_js(ribbon_body)
 }
@@ -1575,8 +1705,8 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
     }
 
     normalize_for_js(format!("
-        <div id='__application-file-list'>{file_list}</div>
-        <div id='__application-main-no-files' style='display:flex;width:100%;height:100%;flex-direction:row;'>
+        <div id='__application-file-list' style='position:relative'>{file_list}</div>
+        <div id='__application-main-no-files' style='display:flex;width:100%;height:100%;flex-direction:row;position:relative;'>
             {main_no_files}
         </div>
     ",
@@ -1643,7 +1773,7 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
             }
         };
         
-        Some(format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
+        Some(format!("<div title='{filename}' class='__application-data-file-div {file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
             {check}
             <p style='flex-grow:0;user-select:none;' data-fileName='{filename}' >{filename}</p>
             <div style='display:flex;flex-grow:1;' data-fileName='{filename}' ></div>
@@ -1678,6 +1808,24 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
     if open_file.datei.is_none() {
         return String::new();
     }
+
+    let toggle_file_list = if rpc_data.konfiguration.dateiliste_ausblenden {
+        format!(
+            "
+        <div class='__application-toggle-file-list' onclick='toggleDateiliste(false);'>
+            <p>Dateien einblenden</p>
+        </div>
+    "
+        )
+    } else {
+        format!(
+            "
+            <div class='__application-toggle-file-list' onclick='toggleDateiliste(true);'>
+                <p>Dateien ausblenden</p>
+            </div>
+        "
+        )
+    };
 
     let pages_div = open_file.get_seitenzahlen().iter().map(|page_num| {
     
@@ -1725,8 +1873,11 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
     }).collect::<Vec<_>>().join("\r\n");
 
     normalize_for_js(format!("
-        <div><h5>Seite</h5></div>
-        <div style='margin:10px;'>
+
+        {toggle_file_list}
+
+        <div style='margin-left:25px;'><h5>Seite</h5></div>
+        <div style='margin:10px;margin-left:35px;'>
             <div><div style='display:inline-block;width:10px;height:10px;border-radius:50%;background:rgb(167,224,255);'></div><p style='display:inline-block;'>&nbsp;Bestandsverz.</p></div>
             <div><div style='display:inline-block;width:10px;height:10px;border-radius:50%;background:rgb(167,255,185);'></div><p style='display:inline-block;'>&nbsp;Abt. 1</p></div>
             <div><div style='display:inline-block;width:10px;height:10px;border-radius:50%;background:rgb(255,255,167);'></div><p style='display:inline-block;'>&nbsp;Abt. 2</p></div>
@@ -3191,21 +3342,20 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
     let aspect_ratio = im_height / im_width;
     let img_ui_height = img_ui_width * aspect_ratio;
 
-    let seitentyp = file
+    let (columns, textbloecke) = file
         .get_seiten_typ(&open_file.1.to_string())
-        .unwrap_or(crate::SeitenTyp::BestandsverzeichnisVert);
+        .map(|seitentyp| {
+            let columns = seitentyp
+                .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
+                .into_iter()
+                .map(|col| {
+                    let x = col.min_x / page_width * img_ui_width;
+                    let y = col.min_y / page_height * img_ui_height;
+                    let width = (col.max_x - col.min_x) / page_width * img_ui_width;
+                    let height = (col.max_y - col.min_y) / page_height * img_ui_height;
 
-    let columns = seitentyp
-        .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
-        .into_iter()
-        .map(|col| {
-            let x = col.min_x / page_width * img_ui_width;
-            let y = col.min_y / page_height * img_ui_height;
-            let width = (col.max_x - col.min_x) / page_width * img_ui_width;
-            let height = (col.max_y - col.min_y) / page_height * img_ui_height;
-
-            format!(
-                "
+                    format!(
+                        "
         <div class='__application_spalte' id='__application_spalte_{id}' style='
             position:absolute;
             width:{width}px;
@@ -3293,30 +3443,40 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
             ></div>
         </div>
     ",
-                id = col.id,
-                x = x,
-                y = y,
-                width = width.abs(),
-                height = height.abs(),
-            )
+                        id = col.id,
+                        x = x,
+                        y = y,
+                        width = width.abs(),
+                        height = height.abs(),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\r\n");
+
+            let textbloecke =
+                hocr.get_textbloecke(&open_file.1.to_string(), seitentyp, &file.anpassungen_seite);
+
+            let textbloecke =
+                render_pdf_image_textbloecke(img_ui_width, img_ui_height, &hocr, &textbloecke);
+
+            (columns, textbloecke)
         })
-        .collect::<Vec<_>>()
-        .join("\r\n");
+        .unwrap_or((String::new(), String::new()));
 
     let zeilen = file
         .anpassungen_seite
         .get(&format!("{}", open_file.1))
-        .map(|ap| ap.zeilen.clone())
+        .map(|ap| {
+            ap.get_zeilen()
+                .iter()
+                .map(|(a, b)| (*a, *b))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
 
     let zeilen = render_pdf_image_zeilen(&zeilen, page_height, img_ui_height);
 
     let hocr_lines = render_pdf_image_hocr(img_ui_width, img_ui_height, &hocr);
-
-    let textbloecke =
-        hocr.get_textbloecke(&open_file.1.to_string(), seitentyp, &file.anpassungen_seite);
-    let textbloecke =
-        render_pdf_image_textbloecke(img_ui_width, img_ui_height, &hocr, &textbloecke);
 
     normalize_for_js(format!("
         <div style='padding:20px;user-select:none;-webkit-user-select:none;'>
@@ -3503,8 +3663,12 @@ fn render_pdf_image_textbloecke(
         .join("\r\n")
 }
 
-pub fn render_pdf_image_zeilen(zeilen: &[f32], page_height: f32, img_ui_height: f32) -> String {
-    let mut z1 = zeilen.iter().enumerate().map(|(zeile_id, y)| format!("
+pub fn render_pdf_image_zeilen(
+    zeilen: &[(u32, f32)],
+    page_height: f32,
+    img_ui_height: f32,
+) -> String {
+    let mut z1 = zeilen.iter().map(|(zeile_id, y)| format!("
         <div class='__application_zeile' id='__application_zeile_{id}' style='
             position:absolute;
             width:50px;

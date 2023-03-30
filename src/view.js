@@ -44,6 +44,8 @@ let rpc = {
   export_alle_teilbelastungen: function() { rpc.invoke({ cmd : 'export_alle_teilbelastungen' }); },
   check_pdf_image_sichtbar: function() { rpc.invoke({ cmd : 'check_pdf_image_sichtbar' }); },
   toggle_lefis_analyse: function() { rpc.invoke({ cmd : 'toggle_lefis_analyse' }); },
+  toggle_dateiliste: function(arg) { rpc.invoke({ cmd : 'toggle_dateiliste', toggle: arg }) },
+  select_tab: function(arg) { rpc.invoke({ cmd: 'select_tab', tab: arg }) },
   check_pdf_for_errors: function() { rpc.invoke({ cmd : 'check_pdf_for_errors' }); },
 
   open_grundbuch_suchen_dialog: function()  { rpc.invoke({ cmd : 'open_grundbuch_suchen_dialog' }); },
@@ -261,6 +263,10 @@ function startCheckingForImageLoaded(filepath, filename) {
 
 function switchAenderungView(i) {
     rpc.switch_aenderung_view(i);
+}
+
+function selectTab(i) {
+    rpc.select_tab(i);
 }
 
 function stopCheckingForImageLoaded(filename) {
@@ -1330,6 +1336,17 @@ function toggleCheckbox(event) {
     rpc.toggle_checkbox(checkbox_id);
 }
 
+function toggleDateiliste(n) {
+    if (n) {
+        document.getElementById("__application-file-list").style.minWidth = "0px";
+        document.getElementById("__application-file-list").style.maxWidth = "0px";
+    } else {
+        document.getElementById("__application-file-list").style.minWidth = "200px";
+        document.getElementById("__application-file-list").style.maxWidth = "200px";
+    }
+    rpc.toggle_dateiliste(n);
+}
+
 function reloadGrundbuch(event) {
     rpc.reload_grundbuch();
 }
@@ -1340,7 +1357,11 @@ function zeileNeu(event) {
         return;
     }
     
-    if (event.which !== 1) {
+    var event_ok = event.which === 1 && !event.metaKey;
+
+    console.log("zeileNeu " + event_ok);
+    
+    if (!event_ok) {
         return;
     }
     
@@ -1372,7 +1393,11 @@ function zeileLoeschen(event) {
     
     event.stopPropagation();
     
-    if (event.which !== 3) {
+    console.log("zeileLoeschen");
+    console.log(event);
+
+    let event_ok = event.which === 3 || event.which === 2 || event.metaKey;
+    if (!event_ok) {
         return;
     }
     
@@ -1399,6 +1424,7 @@ function zeileLoeschen(event) {
         zeileId = Number(zeileIdString);
     }
     
+    console.log("zeile loeschen " + zeileId);
     rpc.zeile_loeschen(file, page, zeileId);
 }
 

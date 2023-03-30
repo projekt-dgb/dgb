@@ -437,6 +437,8 @@ impl PdfFileIcon {
     }
 }
 
+pub type ZeilenId = u32;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AnpassungSeite {
     #[serde(default)]
@@ -446,8 +448,29 @@ pub struct AnpassungSeite {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub spalten: BTreeMap<String, Rect>,
     #[serde(default)]
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub zeilen: Vec<f32>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    zeilen: BTreeMap<ZeilenId, f32>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    zeilen_auto: BTreeMap<ZeilenId, f32>,
+}
+
+impl AnpassungSeite {
+    pub fn get_zeilen(&self) -> BTreeMap<u32, f32> {
+        let mut z = self.zeilen.clone();
+        z.append(&mut self.zeilen_auto.clone());
+        z
+    }
+
+    pub fn insert_zeile_manuell(&mut self, zeile: f32) {
+        let random_id = rand::random::<u32>();
+        self.zeilen.insert(random_id, zeile);
+    }
+
+    pub fn delete_zeile_manuell(&mut self, zeile: ZeilenId) {
+        let _ = self.zeilen.remove(&zeile);
+        let _ = self.zeilen_auto.remove(&zeile);
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -504,11 +527,7 @@ impl PdfFile {
         let hocr_seite = self.hocr.seiten.get(seite)?;
         let querformat = hocr_seite.breite_mm > hocr_seite.hoehe_mm;
 
-        crate::digital::klassifiziere_seitentyp(
-            &hocr_seite.parsed.get_zeilen().join("\r\n"),
-            querformat,
-        )
-        .ok()
+        crate::digital::klassifiziere_seitentyp(&hocr_seite, querformat).ok()
     }
 
     pub fn clear_personal_info(&mut self) {
@@ -669,6 +688,10 @@ impl PdfFile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Konfiguration {
+    #[serde(skip, default)]
+    pub tab: usize,
+    #[serde(skip, default)]
+    pub dateiliste_ausblenden: bool,
     #[serde(default)]
     pub spalten_ausblenden: bool,
     #[serde(default)]
@@ -1056,72 +1079,56 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             image_data_base64,
             image_filename,
         } => {
-            println!("SignalPdfPageRendered geroetet = {geroetet:?}!");
-
             let pdf_grundbuch_von = pdf_grundbuch_von.clone();
             let pdf_blatt = pdf_blatt.clone();
             let image_data_base64 = image_data_base64.clone();
             let image_filename = image_filename.clone();
             let seite = seite.clone();
             let geroetet = geroetet.clone();
+
             std::thread::spawn(move || {
                 use image::io::Reader as ImageReader;
                 use std::io::Cursor;
                 const DATA_START: &str = "data:image/png;base64,";
                 if !image_data_base64.starts_with(DATA_START) {
-                    println!("wrong start bytes");
                     return;
                 }
-
-                println!("{seite} ok 1");
 
                 let output_image = match base64::decode(&image_data_base64[DATA_START.len()..]) {
                     Ok(o) => o,
                     Err(_) => {
-                        println!("wrong start bytes");
                         return;
                     }
                 };
-
-                println!("{seite} ok 2");
 
                 let reader = match ImageReader::new(Cursor::new(output_image)).with_guessed_format()
                 {
                     Ok(o) => o,
                     Err(_) => {
-                        println!("reader not ok");
                         return;
                     }
                 };
-
-                println!("{seite} ok 3");
 
                 let decoded = match reader.decode() {
                     Ok(o) => o,
                     Err(_) => {
-                        println!("reader decode not ok");
                         return;
                     }
                 };
-
-                println!("{seite} ok 4");
 
                 let flipped = decoded.flipv();
                 let mut bytes: Vec<u8> = Vec::new();
                 let _ =
                     flipped.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
 
-                println!("{seite} ok 5");
                 let tempdir = std::env::temp_dir()
                     .join(&pdf_grundbuch_von)
                     .join(&pdf_blatt);
                 let _ = std::fs::create_dir_all(&tempdir);
                 let _ = std::fs::write(tempdir.join(&image_filename), &bytes);
-                println!("wrote {} - geroetet = {:?}", image_filename, geroetet);
 
                 let target_path = tempdir.join(format!("{seite}.hocr.json"));
                 if !geroetet {
-                    println!("starting encoding grayscale...");
                     let grayscale = flipped.grayscale();
                     let mut pnm_bytes: Vec<u8> = Vec::new();
                     let _ = grayscale.write_to(
@@ -1130,14 +1137,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     );
                     let _ =
                         std::fs::write(tempdir.join(&format!("{image_filename}.bmp")), &pnm_bytes);
-                    println!("grayscale done...");
 
                     if pnm_bytes.is_empty() {
-                        println!("PNM BYTES EMPTY");
                         return;
                     }
-
-                    println!("writing to {} {image_filename}.bmp", tempdir.display());
 
                     if !target_path.exists() {
                         let hocr = match tesseract_get_hocr(&pnm_bytes) {
@@ -1151,8 +1154,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                                 return;
                             }
                         };
-
-                        println!("writing hocr to {}", target_path.display());
 
                         let _ = std::fs::write(
                             &target_path,
@@ -1207,11 +1208,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     .ok()
                     .and_then(|s| serde_json::from_str::<PdfFile>(&s).ok())
                 {
-                    println!(
-                        "ok existing grundbuch json parsed!\r\n{:#?}",
-                        grundbuch_json_parsed
-                    );
-
                     let file_name = format!(
                         "{}_{}",
                         grundbuch_json_parsed.analysiert.titelblatt.grundbuch_von,
@@ -1288,13 +1284,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         next_state: None,
                     };
 
-                    println!("cache output path {}", cache_output_path.display());
-
                     if let Some(cached_pdf) = std::fs::read_to_string(&cache_output_path)
                         .ok()
                         .and_then(|s| serde_json::from_str(&s).ok())
                     {
-                        println!("cached file {} exists", cache_output_path.display());
                         pdf_parsed = cached_pdf;
                     }
 
@@ -1339,8 +1332,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             }
 
-            println!("data loaded: {:#?}, rendering screen...", pdf_zu_laden);
-
             let html_inner = ui::render_entire_screen(data);
             let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", html_inner));
             let _ = webview.evaluate_script("startCheckingForPdfErrors()");
@@ -1362,8 +1353,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     pdf_parsed.datei.clone().unwrap_or_default()
                 ));
             }
-
-            println!("render pdf seiten...");
 
             render_pdf_seiten(webview, &mut pdf_zu_laden);
         }
@@ -1900,20 +1889,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            /*
-            if let Some(pdf) = file.datei.as_ref() {
-                if let Ok(o) = std::fs::read(&pdf) {
-                    let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
-                        webview,
-                        &o,
-                        open_file.1,
-                        &file.analysiert.titelblatt,
-                        !data.konfiguration.vorschau_ohne_geroetet,
-                    );
-                }
-            }
-            */
-
             let _ = webview.evaluate_script(&format!(
                 "replacePdfImage(`{}`)",
                 ui::render_pdf_image(data)
@@ -1934,11 +1909,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 .clone()
                 .join(&format!("{}.cache.gbx", file_name));
 
-            println!(
-                "{arg:#?} checking if {} exists",
-                cache_output_path.display()
-            );
-
             let mut pdf_parsed: PdfFile = match std::fs::read_to_string(&cache_output_path)
                 .ok()
                 .and_then(|s| serde_json::from_str(&s).ok())
@@ -1951,9 +1921,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            println!("reload_hocr_files...");
             pdf_parsed = reload_hocr_files(&pdf_parsed);
-            println!("hocr {:#?}", pdf_parsed.hocr);
+            if !pdf_parsed.ist_geladen() {
+                crate::digital::insert_zeilen_automatisch(&mut pdf_parsed);
+            }
 
             let _ = std::fs::write(
                 &cache_output_path,
@@ -3378,6 +3349,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ui::render_main_container(data)
             ));
         }
+        Cmd::SelectTab { tab } => {
+            data.konfiguration.tab = *tab;
+            let _ =
+                webview.evaluate_script(&format!("replaceRibbon(`{}`);", ui::render_ribbon(&data)));
+        }
+        Cmd::ToggleDateiliste { toggle } => {
+            data.konfiguration.dateiliste_ausblenden = *toggle;
+            let _ = webview.evaluate_script(&format!(
+                "replacePageList(`{}`);",
+                ui::render_page_list(&data)
+            ));
+        }
         Cmd::EditTextKuerzenAbt2Script { script } => {
             data.konfiguration.text_kuerzen_abt2_script =
                 script.lines().map(|l| l.replace("\u{00a0}", " ")).collect();
@@ -4025,6 +4008,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             }
 
             *open_file = reload_hocr_files(&open_file);
+            crate::digital::insert_zeilen_automatisch(open_file);
 
             let file_name = format!(
                 "{}_{}",
@@ -4094,14 +4078,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 return;
             }
 
-            ap.zeilen.push(y / img_ui_height * page_height);
-            ap.zeilen
-                .sort_by(|a, b| ((a * 1000.0) as usize).cmp(&((b * 1000.0) as usize)));
-            ap.zeilen.dedup();
+            ap.insert_zeile_manuell(y / img_ui_height * page_height);
 
             let _ = webview.evaluate_script(&format!(
                 "replacePdfImageZeilen(`{}`)",
-                crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)
+                crate::ui::render_pdf_image_zeilen(
+                    &ap.get_zeilen()
+                        .iter()
+                        .map(|(a, b)| (*a, *b))
+                        .collect::<Vec<_>>(),
+                    page_height,
+                    img_ui_height
+                )
             ));
 
             // speichern
@@ -4138,13 +4126,18 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let img_ui_height = img_ui_width * aspect_ratio;
 
             if let Some(ap) = open_file.anpassungen_seite.get_mut(&format!("{}", page)) {
-                if *zeilen_id < ap.zeilen.len() {
-                    let _ = ap.zeilen.remove(*zeilen_id);
-                    let _ = webview.evaluate_script(&format!(
-                        "replacePdfImageZeilen(`{}`)",
-                        crate::ui::render_pdf_image_zeilen(&ap.zeilen, page_height, img_ui_height)
-                    ));
-                }
+                ap.delete_zeile_manuell(*zeilen_id);
+                let _ = webview.evaluate_script(&format!(
+                    "replacePdfImageZeilen(`{}`)",
+                    crate::ui::render_pdf_image_zeilen(
+                        &ap.get_zeilen()
+                            .iter()
+                            .map(|(a, b)| (*a, *b))
+                            .collect::<Vec<_>>(),
+                        page_height,
+                        img_ui_height
+                    )
+                ));
             }
 
             // speichern
@@ -5249,8 +5242,6 @@ fn render_pdf_seiten(webview: &WebView, pdfs: &mut Vec<PdfFile>) {
         .map(|pdf_bytes| digital::lese_seitenzahlen(&pdf_bytes).ok())
         .unwrap_or_default();
 
-        println!("seitenzahlen {:#?}", seitenzahlen);
-
         for seite in pdf.get_seitenzahlen().iter() {
             let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
                 webview,
@@ -5287,13 +5278,10 @@ fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
         .iter()
         .filter_map(|s| {
             let p = tempdir.join(format!("{s}.hocr.json"));
-            println!("reading {}", p.display());
             let hocr = std::fs::read_to_string(&p).ok()?;
-            println!("got hocr for {}", p.display());
             let json: ParsedHocr = match serde_json::from_str(&hocr) {
                 Ok(o) => o,
                 Err(e) => {
-                    println!("{e}");
                     return None;
                 }
             };
@@ -5304,7 +5292,6 @@ fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
                 hoehe_mm: *hoehe,
                 parsed: json,
             };
-            println!("ok hocr loaded!");
             Some((format!("{s}"), seite))
         })
         .collect::<BTreeMap<_, _>>();
