@@ -1347,9 +1347,11 @@ function toggleDateiliste(n) {
     if (n) {
         document.getElementById("__application-file-list").style.minWidth = "0px";
         document.getElementById("__application-file-list").style.maxWidth = "0px";
+        document.getElementById("__application-file-list").style.width = "0px";
     } else {
         document.getElementById("__application-file-list").style.minWidth = "200px";
         document.getElementById("__application-file-list").style.maxWidth = "200px";
+        document.getElementById("__application-file-list").style.width = "200px";
     }
     rpc.toggle_dateiliste(n);
 }

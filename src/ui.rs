@@ -1739,9 +1739,9 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
         return String::new();
     }
 
-    normalize_for_js(format!("
+    normalize_for_js(format!(
+        "
         <div id='__application-file-list' style='position:relative'>{file_list}</div>
-        <div id='__application-main-no-files' style='display:flex;width:100%;height:100%;flex-direction:row;position:relative;'>
             {main_no_files}
         </div>
     ",
@@ -1754,7 +1754,7 @@ pub fn render_application_main_no_files(rpc_data: &mut RpcData) -> String {
     format!(
         "
         {page_list}
-        <div style='display:flex;flex-direction:column;flex-grow:1;'>
+        <div id='__application-page-list-after'>
             <div id='__application-main-container' style='{height}'>{main_container}</div>
             {pdf_image}
         </div>

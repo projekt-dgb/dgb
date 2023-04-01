@@ -1604,12 +1604,21 @@ slot {
   flex-grow:1;
   flex-direction: column;
   min-width: 200px;
+  max-width: 200px;
+  width: 200px;
   position: relative;
   background: #efefef;
   overflow-y: auto;
   box-shadow: 0px 0px 3px black;
   user-select: none;
   -webkit-user-select: none;
+}
+
+#__application-page-list-after {
+    width: calc(100vw - 360px);
+    display:flex;
+    flex-direction:column;
+    flex-grow:1;
 }
 
 img {
@@ -1689,11 +1698,12 @@ img {
 }
 
 #__application-main #__application-page-list {
+  display: flex;
+  flex-direction: column;
   width: 160px;
   min-width: 160px;
   max-width: 160px;
   max-height:1000px;
-  display: block;
   background: white;
   overflow-y: auto;
   user-select: none;
@@ -1813,7 +1823,8 @@ img {
   background: #444;
   display:flex;
   flex-grow:1;
-  overflow: scroll;
+  overflow-y: scroll;
+  overflow-x: hidden;
   max-height:400px;
   user-select: none;
   -webkit-user-select: none;
@@ -90953,9 +90964,11 @@ function toggleDateiliste(n) {
     if (n) {
         document.getElementById("__application-file-list").style.minWidth = "0px";
         document.getElementById("__application-file-list").style.maxWidth = "0px";
+        document.getElementById("__application-file-list").style.width = "0px";
     } else {
         document.getElementById("__application-file-list").style.minWidth = "200px";
         document.getElementById("__application-file-list").style.maxWidth = "200px";
+        document.getElementById("__application-file-list").style.width = "200px";
     }
     rpc.toggle_dateiliste(n);
 }

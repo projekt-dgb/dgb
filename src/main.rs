@@ -5266,6 +5266,13 @@ fn render_pdf_seiten(webview: &WebView, pdfs: &mut Vec<PdfFile>) {
 }
 
 fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
+    let linien = pdf_parsed
+        .datei
+        .as_ref()
+        .and_then(|d| fs::read(d).ok())
+        .and_then(|bytes| crate::digital::get_rote_linien(&bytes).ok())
+        .unwrap_or_default();
+
     let tempdir = std::env::temp_dir()
         .join(&pdf_parsed.analysiert.titelblatt.grundbuch_von)
         .join(&pdf_parsed.analysiert.titelblatt.blatt.to_string());
@@ -5281,6 +5288,7 @@ fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
         .get_seitenzahlen()
         .iter()
         .filter_map(|s| {
+            let rot = linien.get(&s.to_string()).cloned().unwrap_or_default();
             let p = tempdir.join(format!("{s}.hocr.json"));
             let hocr = std::fs::read_to_string(&p).ok()?;
             let json: ParsedHocr = match serde_json::from_str(&hocr) {
@@ -5295,6 +5303,7 @@ fn reload_hocr_files(pdf_parsed: &PdfFile) -> PdfFile {
                 breite_mm: *breite,
                 hoehe_mm: *hoehe,
                 parsed: json,
+                rote_linien: rot,
             };
             Some((format!("{s}"), seite))
         })

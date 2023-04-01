@@ -1,6 +1,7 @@
 use crate::{python::PyVm, AnpassungSeite, Konfiguration, PdfFile, Rect};
 use chrono::{DateTime, Utc};
 use image::ImageError;
+use lopdf::content::Operation;
 use lopdf::Error as LoPdfError;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -154,6 +155,7 @@ impl HocrLayout {
                                 },
                                 careas: Vec::new(),
                             },
+                            rote_linien: Vec::new(),
                         },
                     )
                 })
@@ -177,10 +179,13 @@ pub struct HocrSeite {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Linie {
-    pub start_x: f32,
-    pub start_y: f32,
-    pub end_x: f32,
-    pub end_y: f32,
+    pub punkte: Vec<Punkt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Punkt {
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -330,8 +335,6 @@ impl HocrSeite {
             })
             .collect::<BTreeSet<_>>();
 
-        println!("texte auf seite {seite}: {texte:#?} - zellen leer in zeilen {zellen_leer:?}, zeilen leer {zeilen_leer:?}");
-
         for spalte in texte.iter_mut() {
             *spalte = spalte
                 .clone()
@@ -426,6 +429,90 @@ impl HocrSeite {
 
         zeilen
     }
+}
+
+pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>, Fehler> {
+    println!("get_rote_linien_start");
+    let pdf = lopdf::Document::load_mem(pdf_bytes)?;
+
+    let result = Ok(pdf
+        .get_pages()
+        .into_iter()
+        .filter_map(|(page_num, page_obj)| {
+            let content = pdf.get_and_decode_page_content(page_obj).ok()?;
+
+            let line_end_operation_indexes = content
+                .operations
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, op)| {
+                    if op.operator == OP_PATH_PAINT_STROKE {
+                        Some(idx)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let mut operations_reverse = content.operations.clone();
+            operations_reverse.reverse();
+
+            let linien = line_end_operation_indexes
+                .iter()
+                .filter_map(|end_idx| {
+                    let last_m_operator_idx_reverse = operations_reverse
+                        .iter()
+                        .enumerate()
+                        .skip(operations_reverse.len().saturating_sub(*end_idx))
+                        .find_map(|(op_reverse_idx, op)| {
+                            if op.operator == "m" {
+                                Some(op_reverse_idx)
+                            } else {
+                                None
+                            }
+                        })?;
+                    let points = content.operations[(content.operations.len()
+                        - last_m_operator_idx_reverse)
+                        .saturating_sub(1)
+                        ..*end_idx]
+                        .iter()
+                        .filter_map(|op| match op.operator.as_str() {
+                            "m" => Some((op.operands.get(0)?, op.operands.get(1)?)),
+                            "l" => Some((op.operands.get(0)?, op.operands.get(1)?)),
+                            _ => None,
+                        })
+                        .filter_map(|(x, y)| {
+                            // pt to mm
+                            let x = (x
+                                .as_f64()
+                                .ok()
+                                .or_else(|| x.as_i64().ok().map(|r| r as f64))?
+                                * 0.3527777778_f64) as f32;
+                            let y = (y
+                                .as_f64()
+                                .ok()
+                                .or_else(|| y.as_i64().ok().map(|r| r as f64))?
+                                * 0.3527777778_f64) as f32;
+                            Some((x, y))
+                        })
+                        .map(|(x, y)| Punkt { x, y })
+                        .collect::<Vec<_>>();
+
+                    if points.is_empty() {
+                        None
+                    } else {
+                        Some(Linie { punkte: points })
+                    }
+                })
+                .collect::<Vec<_>>();
+            println!("seite {page_num} - line {:#?}", linien);
+            Some((page_num.to_string(), linien))
+        })
+        .collect());
+
+    println!("get_rote_linien_end");
+
+    result
 }
 
 // Funktion, die das Titelblatt ausliest
