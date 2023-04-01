@@ -822,7 +822,17 @@ pub fn klassifiziere_seitentyp(hocr: &HocrSeite, querformat: bool) -> Result<Sei
             {
                 Ok(SeitenTyp::Abt2VertVeraenderungen)
             } else {
-                Ok(SeitenTyp::Abt2Vert)
+                let rect = Rect {
+                    min_x: 11.48188,
+                    min_y: 1.8667322,
+                    max_x: 67.83141,
+                    max_y: 7.681686,
+                };
+                if hocr.overlaps_any_word(&rect) {
+                    Ok(SeitenTyp::Abt2VertTyp2)
+                } else {
+                    Ok(SeitenTyp::Abt2Vert)
+                }
             }
         }
     } else if ocr_text.contains("Erste Abteilung")
@@ -834,7 +844,17 @@ pub fn klassifiziere_seitentyp(hocr: &HocrSeite, querformat: bool) -> Result<Sei
         if querformat {
             Ok(SeitenTyp::Abt1Horz)
         } else {
-            Ok(SeitenTyp::Abt1Vert)
+            let rect = Rect {
+                min_x: 11.305236,
+                min_y: 2.3953643,
+                max_x: 68.89128,
+                max_y: 7.329264,
+            };
+            if hocr.overlaps_any_word(&rect) {
+                Ok(SeitenTyp::Abt1VertTyp2)
+            } else {
+                Ok(SeitenTyp::Abt1Vert)
+            }
         }
     } else if ocr_text.contains("Bestandsverzeichnis")
         || ocr_text.contains("Besiandsverzeichnis")
@@ -854,7 +874,17 @@ pub fn klassifiziere_seitentyp(hocr: &HocrSeite, querformat: bool) -> Result<Sei
                 || ocr_text.contains("Zuschreibunge")
                 || (ocr_text.contains("Nr. der") && ocr_text.contains("Grund-"))
             {
-                Ok(SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen)
+                let rect = Rect {
+                    min_x: 18.547653,
+                    min_y: 2.2191536,
+                    max_x: 75.42712,
+                    max_y: 7.681686,
+                };
+                if hocr.overlaps_any_word(&rect) {
+                    Ok(SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt)
+                } else {
+                    Ok(SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen)
+                }
             } else if ocr_text.contains("Gemarkung *") {
                 Ok(SeitenTyp::BestandsverzeichnisVert)
             } else {
