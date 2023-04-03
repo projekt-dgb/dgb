@@ -10,6 +10,10 @@ use std::io::Error as IoError;
 use std::{fmt, fs};
 use wry::webview::WebView;
 
+pub struct PdfSpace;
+pub type PdfPoint = euclid::Point2D<f32, PdfSpace>;
+pub type PdfMatrix = euclid::Transform2D<f32, PdfSpace, PdfSpace>;
+
 /// Alle Fehler, die im Programm passieren können
 #[derive(Debug)]
 pub enum Fehler {
@@ -175,6 +179,33 @@ pub struct HocrSeite {
     pub parsed: ParsedHocr,
     #[serde(default)]
     pub rote_linien: Vec<Linie>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedLinie {
+    pub punkte_point: Vec<Punkt>,
+    pub ctm_transforms: Vec<PdfMatrix>,
+    pub page_height_mm: f32,
+}
+
+impl ParsedLinie {
+    pub fn get_linie(&self) -> Linie {
+        let punkte = self
+            .punkte_point
+            .iter()
+            .map(|p| {
+                let mut p = PdfPoint::new(p.x, p.y);
+                for c in self.ctm_transforms.iter() {
+                    p = c.transform_point(p);
+                }
+                Punkt {
+                    x: p.x / 2.835,
+                    y: self.page_height_mm - (p.y / 2.835),
+                }
+            })
+            .collect();
+        Linie { punkte }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -433,13 +464,16 @@ impl HocrSeite {
 
 pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>, Fehler> {
     println!("get_rote_linien_start");
+    let seiten_dimensionen = get_seiten_dimensionen(pdf_bytes)?;
     let pdf = lopdf::Document::load_mem(pdf_bytes)?;
-
     let result = Ok(pdf
         .get_pages()
         .into_iter()
         .filter_map(|(page_num, page_obj)| {
+            let (_breite_mm, hoehe_mm) = seiten_dimensionen.get(&page_num)?;
             let content = pdf.get_and_decode_page_content(page_obj).ok()?;
+            let mut operations_reverse = content.operations.clone();
+            operations_reverse.reverse();
 
             let line_end_operation_indexes = content
                 .operations
@@ -454,12 +488,89 @@ pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>,
                 })
                 .collect::<Vec<_>>();
 
-            let mut operations_reverse = content.operations.clone();
-            operations_reverse.reverse();
+            let cm_operations = line_end_operation_indexes
+                .iter()
+                .enumerate()
+                .filter_map(|(line_idx, end_idx)| {
+                    let last_q_operator_idx_reverse = operations_reverse
+                        .iter()
+                        .enumerate()
+                        .skip(operations_reverse.len().saturating_sub(*end_idx))
+                        .find_map(|(op_reverse_idx, op)| {
+                            if op.operator == "Q" {
+                                Some(op_reverse_idx)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(content.operations.len());
+
+                    let cm_operations = content.operations[(content.operations.len()
+                        - last_q_operator_idx_reverse)
+                        .saturating_sub(1)
+                        ..*end_idx]
+                        .iter()
+                        .filter_map(|op| match op.operator.as_str() {
+                            "cm" => Some((
+                                op.operands.get(0)?,
+                                op.operands.get(1)?,
+                                op.operands.get(2)?,
+                                op.operands.get(3)?,
+                                op.operands.get(4)?,
+                                op.operands.get(5)?,
+                            )),
+                            _ => None,
+                        })
+                        .filter_map(|(cm0, cm1, cm2, cm3, cm4, cm5)| {
+                            let cm0 = (cm0
+                                .as_f64()
+                                .ok()
+                                .or_else(|| cm0.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            let cm1 = (cm1
+                                .as_f64()
+                                .ok()
+                                .or_else(|| cm1.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            let cm2 = (cm2
+                                .as_f64()
+                                .ok()
+                                .or_else(|| cm2.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            let cm3 = (cm3
+                                .as_f64()
+                                .ok()
+                                .or_else(|| cm3.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            let cm4 = (cm4
+                                .as_f64()
+                                .ok()
+                                .or_else(|| cm4.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            let cm5 = (cm5
+                                .as_f64()
+                                .ok()
+                                .or_else(|| cm5.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            Some((cm0, cm1, cm2, cm3, cm4, cm5))
+                        })
+                        .map(|(cm0, cm1, cm2, cm3, cm4, cm5)| {
+                            PdfMatrix::new(cm0, cm1, cm2, cm3, cm4, cm5)
+                        })
+                        .collect::<Vec<_>>();
+
+                    if cm_operations.is_empty() {
+                        None
+                    } else {
+                        Some((line_idx, cm_operations))
+                    }
+                })
+                .collect::<BTreeMap<_, _>>();
 
             let linien = line_end_operation_indexes
                 .iter()
-                .filter_map(|end_idx| {
+                .enumerate()
+                .filter_map(|(line_idx, end_idx)| {
                     let last_m_operator_idx_reverse = operations_reverse
                         .iter()
                         .enumerate()
@@ -486,26 +597,36 @@ pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>,
                             let x = (x
                                 .as_f64()
                                 .ok()
-                                .or_else(|| x.as_i64().ok().map(|r| r as f64))?
-                                * 0.3527777778_f64) as f32;
+                                .or_else(|| x.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
                             let y = (y
                                 .as_f64()
                                 .ok()
-                                .or_else(|| y.as_i64().ok().map(|r| r as f64))?
-                                * 0.3527777778_f64) as f32;
-                            Some((x, y))
+                                .or_else(|| y.as_i64().ok().map(|r| r as f64))?)
+                                as f32;
+                            Some(Punkt { x, y })
                         })
-                        .map(|(x, y)| Punkt { x, y })
                         .collect::<Vec<_>>();
 
                     if points.is_empty() {
                         None
                     } else {
-                        Some(Linie { punkte: points })
+                        Some(
+                            ParsedLinie {
+                                punkte_point: points,
+                                ctm_transforms: cm_operations
+                                    .get(&line_idx)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                page_height_mm: *hoehe_mm,
+                            }
+                            .get_linie(),
+                        )
                     }
                 })
                 .collect::<Vec<_>>();
             println!("seite {page_num} - line {:#?}", linien);
+
             Some((page_num.to_string(), linien))
         })
         .collect());

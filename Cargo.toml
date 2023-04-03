@@ -41,6 +41,7 @@ flate2 = "1.0.24"
 tar = "0.4.38"
 sha2 = "0.10.6"
 tesseract-static = "0.1.0"
+euclid = "0.22.9"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"
