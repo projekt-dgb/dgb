@@ -3507,6 +3507,8 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
 
     let hocr_lines = render_pdf_image_hocr(img_ui_width, img_ui_height, &hocr);
 
+    let rote_linien = render_pdf_rote_linien(img_ui_width, img_ui_height, &hocr);
+
     normalize_for_js(format!("
         <div style='padding:20px;user-select:none;-webkit-user-select:none;'>
             <div data-fileName='{file_name}' data-pageNumber='{page_number}' style='position:relative;user-select:none;-webkit-user-select:none;margin:0 auto;'>
@@ -3523,12 +3525,10 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                     cursor:crosshair;
                 ' />            
             
-                {textbloecke}
-
-                {hocr_lines}
+                {rote_linien}
 
                 {spalten}
-            
+
                 <div id='__application_page_lines' style='
                     height:{img_ui_height}px;
                     position:absolute;
@@ -3617,6 +3617,57 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 String::new()
             }
         ))
+}
+
+fn render_pdf_rote_linien(img_ui_width: f32, img_ui_height: f32, hocr: &HocrSeite) -> String {
+    use crate::digital::{Linie, Punkt};
+
+    let page_width_mm = hocr.breite_mm;
+    let page_height_mm = hocr.hoehe_mm;
+
+    let paths = hocr
+        .rote_linien
+        .iter()
+        .filter_map(|l| {
+            let startx = l.punkte.get(0)?.x / page_width_mm * img_ui_width;
+            let starty = l.punkte.get(0)?.y / page_height_mm * img_ui_height;
+            let punkte = l
+                .punkte
+                .iter()
+                .skip(1)
+                .map(|p| {
+                    format!(
+                        "L{},{}",
+                        p.x / page_width_mm * img_ui_width,
+                        p.y / page_height_mm * img_ui_height
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            Some(format!(
+                "<path stroke='#f00' stroke-width='3' d='M{startx},{starty} {punkte} Z'></path>"
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n");
+
+    format!(
+        "<div style='
+    -webkit-user-drag: none;
+    user-drag: none;
+    position:absolute;
+    top:0px;
+    user-select:none;
+    width:1200px;
+    height:{img_ui_height}px;
+    -webkit-user-select:none;
+    '>
+    <svg width='1200px' height='{img_ui_height}px'
+        {paths}
+    </svg>
+    </div>
+    "
+    )
 }
 
 fn render_pdf_image_hocr(img_ui_width: f32, img_ui_height: f32, hocr: &HocrSeite) -> String {
