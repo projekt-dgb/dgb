@@ -5313,6 +5313,7 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
         vm.clone(),
         &pdf.analysiert.titelblatt,
         &seiten,
+        &pdf.hocr,
         &pdf.anpassungen_seite,
         konfguration,
     )
@@ -5320,6 +5321,7 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     let mut abt1 = digital::analysiere_abt1(
         vm.clone(),
         &seiten,
+        &pdf.hocr,
         &pdf.anpassungen_seite,
         &bestandsverzeichnis,
         konfguration,
@@ -5328,6 +5330,7 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     let abt2 = digital::analysiere_abt2(
         vm.clone(),
         &seiten,
+        &pdf.hocr,
         &pdf.anpassungen_seite,
         &bestandsverzeichnis,
         konfguration,
@@ -5336,6 +5339,7 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
     let abt3 = digital::analysiere_abt3(
         vm.clone(),
         &seiten,
+        &pdf.hocr,
         &pdf.anpassungen_seite,
         &bestandsverzeichnis,
         konfguration,

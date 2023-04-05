@@ -214,6 +214,41 @@ pub struct Linie {
     pub punkte: Vec<Punkt>,
 }
 
+impl Linie {
+    pub fn get_rect(&self) -> Rect {
+        let min_x = self
+            .punkte
+            .iter()
+            .map(|p| p.x.round() as isize)
+            .min()
+            .unwrap_or(0) as f32;
+        let max_x = self
+            .punkte
+            .iter()
+            .map(|p| p.x.round() as isize)
+            .max()
+            .unwrap_or(0) as f32;
+        let min_y = self
+            .punkte
+            .iter()
+            .map(|p| p.y.round() as isize)
+            .min()
+            .unwrap_or(0) as f32;
+        let max_y = self
+            .punkte
+            .iter()
+            .map(|p| p.y.round() as isize)
+            .max()
+            .unwrap_or(0) as f32;
+        Rect {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Punkt {
     pub x: f32,
@@ -413,7 +448,7 @@ impl HocrSeite {
     }
 
     pub fn ist_eintrag_geroetet(&self, rect: &Rect) -> bool {
-        false // TODO
+        self.rote_linien.iter().any(|l| l.get_rect().overlaps(rect))
     }
 
     pub fn get_words_within_bounds(&self, rect: &Rect) -> Vec<String> {
@@ -3562,11 +3597,38 @@ impl Grundbuch {
 
 #[derive(Debug, Default, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct PositionInPdf {
-    pub seite: u32,
+    pub seite: String,
     #[serde(default)]
     pub rect: OptRect,
 }
 
+impl PositionInPdf {
+    pub fn ist_geroetet(&self, hocr: &HocrLayout) -> bool {
+        let seite = match hocr.seiten.get(&self.seite) {
+            Some(s) => s,
+            None => return false,
+        };
+        let rect = Rect {
+            min_x: match self.rect.min_x {
+                Some(s) => s,
+                None => return false,
+            },
+            max_x: match self.rect.max_x {
+                Some(s) => s,
+                None => return false,
+            },
+            min_y: match self.rect.min_y {
+                Some(s) => s,
+                None => return false,
+            },
+            max_y: match self.rect.max_y {
+                Some(s) => s,
+                None => return false,
+            },
+        };
+        seite.ist_eintrag_geroetet(&rect)
+    }
+}
 #[derive(Debug, Default, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct OptRect {
     pub min_x: Option<f32>,
@@ -4233,6 +4295,7 @@ pub fn analysiere_bv(
     vm: PyVm,
     titelblatt: &Titelblatt,
     seiten: &BTreeMap<String, SeiteParsed>,
+    hocr: &HocrLayout,
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     konfiguration: &Konfiguration,
 ) -> Result<Bestandsverzeichnis, Fehler> {
@@ -4244,7 +4307,6 @@ pub fn analysiere_bv(
 
     let max_seitenzahl = seitenzahlen.iter().copied().max().unwrap_or(0);
 
-    let default_texte = Vec::new();
     let mut last_lfd_nr = 1;
 
     let mut bv_eintraege = seiten
@@ -4262,507 +4324,187 @@ pub fn analysiere_bv(
                 .unwrap_or_default();
 
             if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                if !zeilen_auf_seite.is_empty() {
-                    (0..(zeilen_auf_seite.len() + 1))
-                        .map(|i| {
-                            let mut position_in_pdf = PositionInPdf {
-                                seite: seitenzahl,
-                                rect: OptRect::zero(),
-                            };
+                (0..(zeilen_auf_seite.len() + 1))
+                    .map(|i| {
+                        let mut position = PositionInPdf {
+                            seite: seitenzahl.to_string(),
+                            rect: OptRect::zero(),
+                        };
 
-                            let lfd_nr = s
-                                .texte
-                                .get(0)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                })
-                                .unwrap_or(0);
-
-                            let bisherige_lfd_nr = s
-                                .texte
-                                .get(1)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                });
-
-                            let gemarkung = s
-                                .texte
-                                .get(2)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string()
-                                })
-                                .unwrap_or_default();
-
-                            let gemarkung = if gemarkung.is_empty() {
-                                None
-                            } else {
-                                Some(gemarkung)
-                            };
-
-                            let flur = s
-                                .texte
-                                .get(3)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                })
-                                .unwrap_or_default();
-
-                            let flurstueck = s
-                                .texte
-                                .get(4)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric() || *c == '/'),
-                                    );
-                                    Some(numeric_chars)
-                                })
-                                .unwrap_or_default();
-
-                            let bezeichnung = s
-                                .texte
-                                .get(5)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string()
-                                })
-                                .unwrap_or_default();
-
-                            let bezeichnung = if bezeichnung.is_empty() {
-                                None
-                            } else {
-                                crate::python::text_saubern(
-                                    vm.clone(),
-                                    bezeichnung.trim(),
-                                    konfiguration,
-                                )
-                                .ok()
-                                .map(|o| o.into())
-                            };
-
-                            let ha =
-                                s.texte
-                                    .get(6)
-                                    .and_then(|zeilen| zeilen.get(i))
-                                    .and_then(|t| {
-                                        position_in_pdf.expand(&t);
-                                        let numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_numeric()),
-                                        );
-                                        numeric_chars.parse::<u64>().ok()
-                                    });
-
-                            let a = s
-                                .texte
-                                .get(7)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<u64>().ok()
-                                });
-
-                            let m2 =
-                                s.texte
-                                    .get(8)
-                                    .and_then(|zeilen| zeilen.get(i))
-                                    .and_then(|t| {
-                                        position_in_pdf.expand(&t);
-                                        let numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_numeric()),
-                                        );
-                                        numeric_chars.parse::<u64>().ok()
-                                    });
-
-                            let groesse = FlurstueckGroesse::Hektar { ha, a, m2 };
-
-                            BvEintrag::Flurstueck(BvEintragFlurstueck {
-                                lfd_nr,
-                                bisherige_lfd_nr,
-                                flur,
-                                flurstueck,
-                                gemarkung,
-                                bezeichnung,
-                                groesse,
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: Some(position_in_pdf),
+                        let lfd_nr = s
+                            .texte
+                            .get(0)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
                             })
-                        })
-                        .collect::<Vec<_>>()
-                } else {
-                    s.texte
-                        .get(4)
-                        .unwrap_or(&default_texte)
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(lfd_num, flurstueck_text)| {
-                            let mut position_in_pdf = PositionInPdf {
-                                seite: seitenzahl,
-                                rect: OptRect::zero(),
-                            };
+                            .unwrap_or(0);
 
-                            position_in_pdf.expand(&flurstueck_text);
-
-                            // TODO: auch texte "1-3"
-                            let flurstueck = flurstueck_text.text.trim().to_string();
-                            let flurstueck_start_y = flurstueck_text.start_y;
-                            let flurstueck_end_y = flurstueck_text.end_y;
-
-                            let lfd_nr = match get_erster_text_bei_ca(
-                                &s.texte.get(0).unwrap_or(&default_texte),
-                                lfd_num,
-                                flurstueck_start_y,
-                                flurstueck_end_y,
-                            )
+                        let bisherige_lfd_nr = s
+                            .texte
+                            .get(1)
+                            .and_then(|zeilen| zeilen.get(i))
                             .and_then(|t| {
-                                position_in_pdf.expand(&t);
-                                t.text.parse::<usize>().ok()
-                            }) {
-                                Some(s) => s,
-                                None => last_lfd_nr,
-                            };
-
-                            last_lfd_nr = lfd_nr;
-
-                            let bisherige_lfd_nr = get_erster_text_bei_ca(
-                                &s.texte.get(1).unwrap_or(&default_texte),
-                                lfd_num,
-                                flurstueck_start_y,
-                                flurstueck_end_y,
-                            )
-                            .and_then(|t| {
-                                position_in_pdf.expand(&t);
-                                t.text.parse::<usize>().ok()
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
                             });
 
-                            let mut gemarkung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                                get_erster_text_bei_ca(
-                                    &s.texte.get(2).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string()
-                                })
-                            } else {
-                                None
-                            };
+                        let gemarkung = s
+                            .texte
+                            .get(2)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(&t);
+                                t.text.trim().to_string()
+                            })
+                            .unwrap_or_default();
 
-                            let flur = {
-                                if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                                    get_erster_text_bei_ca(
-                                        &s.texte.get(3).unwrap_or(&default_texte),
-                                        lfd_num,
-                                        flurstueck_start_y,
-                                        flurstueck_end_y,
-                                    )
-                                    .and_then(|t| {
-                                        position_in_pdf.expand(&t);
-                                        let numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_numeric()),
-                                        );
-                                        numeric_chars.parse::<usize>().ok()
-                                    })?
-                                } else {
-                                    get_erster_text_bei_ca(
-                                        &s.texte.get(2).unwrap_or(&default_texte),
-                                        lfd_num,
-                                        flurstueck_start_y,
-                                        flurstueck_end_y,
-                                    )
-                                    .and_then(|t| {
-                                        position_in_pdf.expand(&t);
-                                        // ignoriere Zusatzbemerkungen zu Gemarkung
-                                        let numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_numeric()),
-                                        );
-                                        let non_numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_alphabetic()),
-                                        );
+                        let gemarkung = if gemarkung.is_empty() {
+                            None
+                        } else {
+                            Some(gemarkung)
+                        };
 
-                                        if !non_numeric_chars.is_empty() {
-                                            gemarkung = Some(non_numeric_chars.trim().to_string());
-                                        }
+                        let flur = s
+                            .texte
+                            .get(3)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
+                            })
+                            .unwrap_or_default();
 
-                                        numeric_chars.parse::<usize>().ok()
-                                    })?
-                                }
-                            };
+                        let flurstueck = s
+                            .texte
+                            .get(4)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars = String::from_iter(
+                                    t.text.chars().filter(|c| c.is_numeric() || *c == '/'),
+                                );
+                                Some(numeric_chars)
+                            })
+                            .unwrap_or_default();
 
-                            let bezeichnung = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                                get_erster_text_bei_ca(
-                                    &s.texte.get(5).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string().into()
-                                })
-                            } else {
-                                get_erster_text_bei_ca(
-                                    &s.texte.get(4).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string().into()
-                                })
-                            };
+                        let bezeichnung = s
+                            .texte
+                            .get(5)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(&t);
+                                t.text.trim().to_string()
+                            })
+                            .unwrap_or_default();
 
-                            let groesse = if s.typ == SeitenTyp::BestandsverzeichnisHorz {
-                                let ha = get_erster_text_bei_ca(
-                                    &s.texte.get(6).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.parse::<u64>().ok()
-                                });
-                                let a = get_erster_text_bei_ca(
-                                    &s.texte.get(7).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.parse::<u64>().ok()
-                                });
-                                let m2 = get_erster_text_bei_ca(
-                                    &s.texte.get(8).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.parse::<u64>().ok()
-                                });
+                        let bezeichnung = if bezeichnung.is_empty() {
+                            None
+                        } else {
+                            crate::python::text_saubern(
+                                vm.clone(),
+                                bezeichnung.trim(),
+                                konfiguration,
+                            )
+                            .ok()
+                            .map(|o| o.into())
+                        };
 
-                                FlurstueckGroesse::Hektar { ha, a, m2 }
-                            } else {
-                                let m2 = get_erster_text_bei_ca(
-                                    &s.texte.get(5).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    flurstueck_start_y,
-                                    flurstueck_end_y,
-                                )
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.parse::<u64>().ok()
-                                });
-                                FlurstueckGroesse::Metrisch { m2 }
-                            };
+                        let ha = s
+                            .texte
+                            .get(6)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<u64>().ok()
+                            });
 
-                            Some(BvEintrag::Flurstueck(BvEintragFlurstueck {
-                                lfd_nr,
-                                bisherige_lfd_nr,
-                                flur,
-                                flurstueck,
-                                gemarkung,
-                                bezeichnung,
-                                groesse,
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: Some(position_in_pdf),
-                            }))
+                        let a = s
+                            .texte
+                            .get(7)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<u64>().ok()
+                            });
+
+                        let m2 = s
+                            .texte
+                            .get(8)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<u64>().ok()
+                            });
+
+                        let groesse = FlurstueckGroesse::Hektar { ha, a, m2 };
+
+                        BvEintrag::Flurstueck(BvEintragFlurstueck {
+                            lfd_nr,
+                            bisherige_lfd_nr,
+                            flur,
+                            flurstueck,
+                            gemarkung,
+                            bezeichnung,
+                            groesse,
+                            automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                            manuell_geroetet: None,
+                            position_in_pdf: Some(position),
                         })
-                        .collect::<Vec<_>>()
-                }
+                    })
+                    .collect::<Vec<_>>()
             } else if s.typ == SeitenTyp::BestandsverzeichnisVert {
-                if !zeilen_auf_seite.is_empty() {
-                    (0..(zeilen_auf_seite.len() + 1))
-                        .map(|i| {
-                            let mut position_in_pdf = PositionInPdf {
-                                seite: seitenzahl,
-                                rect: OptRect::zero(),
-                            };
+                (0..(zeilen_auf_seite.len() + 1))
+                    .map(|i| {
+                        let mut position = PositionInPdf {
+                            seite: seitenzahl.to_string(),
+                            rect: OptRect::zero(),
+                        };
 
-                            let lfd_nr = s
-                                .texte
-                                .get(0)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                })
-                                .unwrap_or(0);
-
-                            let bisherige_lfd_nr = s
-                                .texte
-                                .get(1)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                });
-
-                            let mut gemarkung = None;
-
-                            let flur = s
-                                .texte
-                                .get(2)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    // ignoriere Zusatzbemerkungen zu Gemarkung
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    let non_numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_alphabetic()),
-                                    );
-
-                                    if !non_numeric_chars.is_empty() {
-                                        let gemarkung_str = non_numeric_chars.trim().to_string();
-                                        gemarkung = if gemarkung_str.is_empty() {
-                                            None
-                                        } else {
-                                            Some(gemarkung_str)
-                                        };
-                                    }
-
-                                    numeric_chars.parse::<usize>().ok()
-                                })
-                                .unwrap_or_default();
-
-                            let flurstueck = s
-                                .texte
-                                .get(3)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric() || *c == '/'),
-                                    );
-                                    Some(numeric_chars)
-                                })
-                                .unwrap_or_default();
-
-                            let bezeichnung = s
-                                .texte
-                                .get(4)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string()
-                                })
-                                .unwrap_or_default();
-
-                            let bezeichnung = if bezeichnung.is_empty() {
-                                None
-                            } else {
-                                Some(bezeichnung.into())
-                            };
-
-                            let m2 =
-                                s.texte
-                                    .get(5)
-                                    .and_then(|zeilen| zeilen.get(i))
-                                    .and_then(|t| {
-                                        position_in_pdf.expand(&t);
-                                        let numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_numeric()),
-                                        );
-                                        numeric_chars.parse::<u64>().ok()
-                                    });
-
-                            let groesse = FlurstueckGroesse::Metrisch { m2 };
-
-                            BvEintrag::Flurstueck(BvEintragFlurstueck {
-                                lfd_nr,
-                                bisherige_lfd_nr,
-                                flur,
-                                flurstueck,
-                                gemarkung,
-                                bezeichnung,
-                                groesse,
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: Some(position_in_pdf),
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                } else {
-                    s.texte
-                        .get(0)
-                        .unwrap_or(&default_texte)
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(lfd_num, ldf_nr_text)| {
-                            let mut position_in_pdf = PositionInPdf {
-                                seite: seitenzahl,
-                                rect: OptRect::zero(),
-                            };
-
-                            position_in_pdf.expand(&ldf_nr_text);
-
-                            // TODO: auch texte "1-3"
-                            let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
-
-                            let lfd_nr_start_y = ldf_nr_text.start_y;
-                            let lfd_nr_end_y = ldf_nr_text.end_y;
-
-                            last_lfd_nr = lfd_nr;
-
-                            let bisherige_lfd_nr = get_erster_text_bei_ca(
-                                &s.texte.get(1).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            )
+                        let lfd_nr = s
+                            .texte
+                            .get(0)
+                            .and_then(|zeilen| zeilen.get(i))
                             .and_then(|t| {
-                                position_in_pdf.expand(&t);
-                                t.text.parse::<usize>().ok()
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
+                            })
+                            .unwrap_or(0);
+
+                        let bisherige_lfd_nr = s
+                            .texte
+                            .get(1)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
                             });
 
-                            let mut gemarkung = None;
+                        let mut gemarkung = None;
 
-                            let flur = get_erster_text_bei_ca(
-                                &s.texte.get(2).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            )
+                        let flur = s
+                            .texte
+                            .get(2)
+                            .and_then(|zeilen| zeilen.get(i))
                             .and_then(|t| {
-                                position_in_pdf.expand(&t);
-
+                                position.expand(&t);
                                 // ignoriere Zusatzbemerkungen zu Gemarkung
                                 let numeric_chars =
                                     String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
@@ -4770,280 +4512,183 @@ pub fn analysiere_bv(
                                     String::from_iter(t.text.chars().filter(|c| c.is_alphabetic()));
 
                                 if !non_numeric_chars.is_empty() {
-                                    gemarkung = Some(non_numeric_chars.trim().to_string());
+                                    let gemarkung_str = non_numeric_chars.trim().to_string();
+                                    gemarkung = if gemarkung_str.is_empty() {
+                                        None
+                                    } else {
+                                        Some(gemarkung_str)
+                                    };
                                 }
 
                                 numeric_chars.parse::<usize>().ok()
-                            })?;
+                            })
+                            .unwrap_or_default();
 
-                            let flurstueck = get_erster_text_bei_ca(
-                                &s.texte.get(3).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            )
+                        let flurstueck = s
+                            .texte
+                            .get(3)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars = String::from_iter(
+                                    t.text.chars().filter(|c| c.is_numeric() || *c == '/'),
+                                );
+                                Some(numeric_chars)
+                            })
+                            .unwrap_or_default();
+
+                        let bezeichnung = s
+                            .texte
+                            .get(4)
+                            .and_then(|zeilen| zeilen.get(i))
                             .map(|t| {
-                                position_in_pdf.expand(&t);
+                                position.expand(&t);
                                 t.text.trim().to_string()
-                            })?;
+                            })
+                            .unwrap_or_default();
 
-                            let bezeichnung = get_erster_text_bei_ca(
-                                &s.texte.get(4).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            )
-                            .map(|t| {
-                                position_in_pdf.expand(&t);
-                                t.text.trim().to_string().into()
+                        let bezeichnung = if bezeichnung.is_empty() {
+                            None
+                        } else {
+                            Some(bezeichnung.into())
+                        };
+
+                        let m2 = s
+                            .texte
+                            .get(5)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<u64>().ok()
                             });
 
-                            let groesse = {
-                                let m2 = get_erster_text_bei_ca(
-                                    &s.texte.get(5).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    lfd_nr_start_y,
-                                    lfd_nr_end_y,
-                                )
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.parse::<u64>().ok()
-                                });
-                                FlurstueckGroesse::Metrisch { m2 }
-                            };
+                        let groesse = FlurstueckGroesse::Metrisch { m2 };
 
-                            Some(BvEintrag::Flurstueck(BvEintragFlurstueck {
-                                lfd_nr,
-                                bisherige_lfd_nr,
-                                flur,
-                                flurstueck,
-                                gemarkung,
-                                bezeichnung,
-                                groesse,
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: Some(position_in_pdf),
-                            }))
+                        BvEintrag::Flurstueck(BvEintragFlurstueck {
+                            lfd_nr,
+                            bisherige_lfd_nr,
+                            flur,
+                            flurstueck,
+                            gemarkung,
+                            bezeichnung,
+                            groesse,
+                            automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                            manuell_geroetet: None,
+                            position_in_pdf: Some(position),
                         })
-                        .collect::<Vec<_>>()
-                }
+                    })
+                    .collect::<Vec<_>>()
             } else if s.typ == SeitenTyp::BestandsverzeichnisVertTyp2 {
-                if !zeilen_auf_seite.is_empty() {
-                    (0..(zeilen_auf_seite.len() + 1))
-                        .map(|i| {
-                            let mut position_in_pdf = PositionInPdf {
-                                seite: seitenzahl,
-                                rect: OptRect::zero(),
-                            };
+                (0..(zeilen_auf_seite.len() + 1))
+                    .map(|i| {
+                        let mut position = PositionInPdf {
+                            seite: seitenzahl.to_string(),
+                            rect: OptRect::zero(),
+                        };
 
-                            let lfd_nr = s
-                                .texte
-                                .get(0)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                })
-                                .unwrap_or(0);
+                        let lfd_nr = s
+                            .texte
+                            .get(0)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
+                            })
+                            .unwrap_or(0);
 
-                            let bisherige_lfd_nr = s
-                                .texte
-                                .get(1)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .and_then(|t| {
-                                    position_in_pdf.expand(&t);
-                                    let numeric_chars = String::from_iter(
-                                        t.text.chars().filter(|c| c.is_numeric()),
-                                    );
-                                    numeric_chars.parse::<usize>().ok()
-                                });
+                        let bisherige_lfd_nr = s
+                            .texte
+                            .get(1)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<usize>().ok()
+                            });
 
-                            let mut gemarkung = None;
-                            let mut flurstueck = String::new();
-                            let mut flur = 0;
+                        let mut gemarkung = None;
+                        let mut flurstueck = String::new();
+                        let mut flur = 0;
 
-                            if let Some(s) = s.texte.get(2).and_then(|zeilen| zeilen.get(i)) {
-                                let mut split_whitespace = s.text.trim().split_whitespace().rev();
-                                position_in_pdf.expand(&s);
-                                flurstueck = split_whitespace
-                                    .next()
-                                    .map(|s| {
-                                        String::from_iter(
-                                            s.chars().filter(|c| c.is_numeric() || *c == '/'),
-                                        )
-                                    })
-                                    .unwrap_or_default();
-                                flur = split_whitespace
-                                    .next()
-                                    .and_then(|s| {
-                                        let numeric_chars =
-                                            String::from_iter(s.chars().filter(|c| c.is_numeric()));
-                                        numeric_chars.parse::<usize>().ok()
-                                    })
-                                    .unwrap_or_default();
-                                let gemarkung_str = split_whitespace
-                                    .into_iter()
-                                    .map(|s| s.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(" ");
-                                gemarkung = if gemarkung_str.is_empty() {
-                                    None
-                                } else {
-                                    Some(gemarkung_str)
-                                };
-                            }
-
-                            let bezeichnung = s
-                                .texte
-                                .get(3)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| {
-                                    position_in_pdf.expand(&t);
-                                    t.text.trim().to_string()
+                        if let Some(s) = s.texte.get(2).and_then(|zeilen| zeilen.get(i)) {
+                            let mut split_whitespace = s.text.trim().split_whitespace().rev();
+                            position.expand(&s);
+                            flurstueck = split_whitespace
+                                .next()
+                                .map(|s| {
+                                    String::from_iter(
+                                        s.chars().filter(|c| c.is_numeric() || *c == '/'),
+                                    )
                                 })
                                 .unwrap_or_default();
-
-                            let bezeichnung = if bezeichnung.is_empty() {
+                            flur = split_whitespace
+                                .next()
+                                .and_then(|s| {
+                                    let numeric_chars =
+                                        String::from_iter(s.chars().filter(|c| c.is_numeric()));
+                                    numeric_chars.parse::<usize>().ok()
+                                })
+                                .unwrap_or_default();
+                            let gemarkung_str = split_whitespace
+                                .into_iter()
+                                .map(|s| s.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            gemarkung = if gemarkung_str.is_empty() {
                                 None
                             } else {
-                                Some(bezeichnung.into())
+                                Some(gemarkung_str)
                             };
+                        }
 
-                            let m2 =
-                                s.texte
-                                    .get(4)
-                                    .and_then(|zeilen| zeilen.get(i))
-                                    .and_then(|t| {
-                                        position_in_pdf.expand(&t);
-                                        let numeric_chars = String::from_iter(
-                                            t.text.chars().filter(|c| c.is_numeric()),
-                                        );
-                                        numeric_chars.parse::<u64>().ok()
-                                    });
-
-                            let groesse = FlurstueckGroesse::Metrisch { m2 };
-
-                            BvEintrag::Flurstueck(BvEintragFlurstueck {
-                                lfd_nr,
-                                bisherige_lfd_nr,
-                                flur,
-                                flurstueck,
-                                gemarkung,
-                                bezeichnung,
-                                groesse,
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: Some(position_in_pdf),
+                        let bezeichnung = s
+                            .texte
+                            .get(3)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(&t);
+                                t.text.trim().to_string()
                             })
+                            .unwrap_or_default();
+
+                        let bezeichnung = if bezeichnung.is_empty() {
+                            None
+                        } else {
+                            Some(bezeichnung.into())
+                        };
+
+                        let m2 = s
+                            .texte
+                            .get(4)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .and_then(|t| {
+                                position.expand(&t);
+                                let numeric_chars =
+                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                                numeric_chars.parse::<u64>().ok()
+                            });
+
+                        let groesse = FlurstueckGroesse::Metrisch { m2 };
+
+                        BvEintrag::Flurstueck(BvEintragFlurstueck {
+                            lfd_nr,
+                            bisherige_lfd_nr,
+                            flur,
+                            flurstueck,
+                            gemarkung,
+                            bezeichnung,
+                            groesse,
+                            automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                            manuell_geroetet: None,
+                            position_in_pdf: Some(position),
                         })
-                        .collect::<Vec<_>>()
-                } else {
-                    s.texte
-                        .get(0)
-                        .unwrap_or(&default_texte)
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(lfd_num, ldf_nr_text)| {
-                            let mut position_in_pdf = PositionInPdf {
-                                seite: seitenzahl,
-                                rect: OptRect::zero(),
-                            };
-
-                            position_in_pdf.expand(&ldf_nr_text);
-
-                            // TODO: auch texte "1-3"
-                            let lfd_nr = ldf_nr_text.text.parse::<usize>().ok()?;
-
-                            let lfd_nr_start_y = ldf_nr_text.start_y;
-                            let lfd_nr_end_y = ldf_nr_text.end_y;
-
-                            last_lfd_nr = lfd_nr;
-
-                            let bisherige_lfd_nr = get_erster_text_bei_ca(
-                                &s.texte.get(1).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            )
-                            .and_then(|t| t.text.parse::<usize>().ok());
-
-                            let mut gemarkung = None;
-                            let mut flurstueck = String::new();
-                            let mut flur = 0;
-
-                            if let Some(s) = get_erster_text_bei_ca(
-                                &s.texte.get(2).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            ) {
-                                let mut split_whitespace = s.text.trim().split_whitespace().rev();
-
-                                flurstueck = split_whitespace
-                                    .next()
-                                    .map(|s| {
-                                        String::from_iter(
-                                            s.chars().filter(|c| c.is_numeric() || *c == '/'),
-                                        )
-                                    })
-                                    .unwrap_or_default();
-                                flur = split_whitespace
-                                    .next()
-                                    .and_then(|s| {
-                                        let numeric_chars =
-                                            String::from_iter(s.chars().filter(|c| c.is_numeric()));
-                                        numeric_chars.parse::<usize>().ok()
-                                    })
-                                    .unwrap_or_default();
-                                let gemarkung_str = split_whitespace
-                                    .into_iter()
-                                    .map(|s| s.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(" ");
-                                gemarkung = if gemarkung_str.is_empty() {
-                                    None
-                                } else {
-                                    Some(gemarkung_str)
-                                };
-                            }
-
-                            let bezeichnung = get_erster_text_bei_ca(
-                                &s.texte.get(3).unwrap_or(&default_texte),
-                                lfd_num,
-                                lfd_nr_start_y,
-                                lfd_nr_end_y,
-                            )
-                            .map(|t| t.text.trim().to_string().into());
-
-                            let groesse = {
-                                let m2 = get_erster_text_bei_ca(
-                                    &s.texte.get(4).unwrap_or(&default_texte),
-                                    lfd_num,
-                                    lfd_nr_start_y,
-                                    lfd_nr_end_y,
-                                )
-                                .and_then(|t| t.text.parse::<u64>().ok());
-                                FlurstueckGroesse::Metrisch { m2 }
-                            };
-
-                            Some(BvEintrag::Flurstueck(BvEintragFlurstueck {
-                                lfd_nr,
-                                bisherige_lfd_nr,
-                                flur,
-                                flurstueck,
-                                gemarkung,
-                                bezeichnung,
-                                groesse,
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: Some(position_in_pdf),
-                            }))
-                        })
-                        .collect::<Vec<_>>()
-                }
+                    })
+                    .collect::<Vec<_>>()
             } else {
                 Vec::new()
             }
@@ -5206,64 +4851,43 @@ pub fn analysiere_bv(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .map(|i| {
-                        let zur_lfd_nr = s
-                            .texte
-                            .get(0)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+            (0..(zeilen_auf_seite.len() + 1))
+                .map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.to_string(),
+                        rect: OptRect::zero(),
+                    };
 
-                        let bestand_und_zuschreibungen = s
-                            .texte
-                            .get(1)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        BvZuschreibung {
-                            bv_nr: zur_lfd_nr.into(),
-                            text: bestand_und_zuschreibungen.into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                s.texte
-                    .get(0)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(lfd_num, lfd_nr_text)| {
-                        // TODO: auch texte "1-3"
-                        let zur_lfd_nr = lfd_nr_text.text.trim().to_string();
-
-                        let lfd_nr_text_start_y = lfd_nr_text.start_y;
-                        let lfd_nr_text_end_y = lfd_nr_text.start_y;
-
-                        let bestand_und_zuschreibungen = get_erster_text_bei_ca(
-                            &s.texte.get(1).unwrap_or(&default_texte),
-                            lfd_num,
-                            lfd_nr_text_start_y,
-                            lfd_nr_text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
-
-                        Some(BvZuschreibung {
-                            bv_nr: zur_lfd_nr.into(),
-                            text: bestand_und_zuschreibungen.into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
+                    let zur_lfd_nr = s
+                        .texte
+                        .get(0)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
                         })
-                    })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                        .unwrap_or_default();
+
+                    let bestand_und_zuschreibungen = s
+                        .texte
+                        .get(1)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
+
+                    BvZuschreibung {
+                        bv_nr: zur_lfd_nr.into(),
+                        text: bestand_und_zuschreibungen.into(),
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .filter(|bvz| !bvz.ist_leer())
         .collect();
@@ -5281,64 +4905,42 @@ pub fn analysiere_bv(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .map(|i| {
-                        let zur_lfd_nr = s
-                            .texte
-                            .get(2)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        let abschreibungen = s
-                            .texte
-                            .get(3)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        BvAbschreibung {
-                            bv_nr: zur_lfd_nr.into(),
-                            text: abschreibungen.into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                s.texte
-                    .get(2)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(lfd_num, lfd_nr_text)| {
-                        // TODO: auch texte "1-3"
-                        let zur_lfd_nr = lfd_nr_text.text.trim().to_string();
-
-                        let lfd_nr_text_start_y = lfd_nr_text.start_y;
-                        let lfd_nr_text_end_y = lfd_nr_text.end_y;
-
-                        let abschreibungen = get_erster_text_bei_ca(
-                            &s.texte.get(3).unwrap_or(&default_texte),
-                            lfd_num,
-                            lfd_nr_text_start_y,
-                            lfd_nr_text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
-
-                        Some(BvAbschreibung {
-                            bv_nr: zur_lfd_nr.into(),
-                            text: abschreibungen.into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
+            (0..(zeilen_auf_seite.len() + 1))
+                .map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.to_string(),
+                        rect: OptRect::zero(),
+                    };
+                    let zur_lfd_nr = s
+                        .texte
+                        .get(2)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
                         })
-                    })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                        .unwrap_or_default();
+
+                    let abschreibungen = s
+                        .texte
+                        .get(3)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
+
+                    BvAbschreibung {
+                        bv_nr: zur_lfd_nr.into(),
+                        text: abschreibungen.into(),
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .filter(|bva| !bva.ist_leer())
         .collect();
@@ -5355,84 +4957,6 @@ pub fn bv_eintraege_roetungen_loeschen(bv_eintraege: &mut [BvEintrag]) {
         bv.unset_automatisch_geroetet();
     }
 }
-
-pub fn bv_eintraege_roeten_2(
-    bv_eintraege: &mut [BvEintrag],
-    titelblatt: &Titelblatt,
-    max_seitenzahl: u32,
-    hocr_layout: &HocrLayout,
-) {
-}
-/*
-pub fn bv_eintraege_roeten(
-    bv_eintraege: &mut [BvEintrag],
-    titelblatt: &Titelblatt,
-    max_seitenzahl: u32,
-) {
-    // Automatisch BV Einträge röten
-    bv_eintraege.par_iter_mut().for_each(|bv| {
-        // Cache nutzen !!!
-        if bv.get_automatisch_geroetet().is_some() {
-            return;
-        }
-
-        let ist_geroetet = {
-            if let Some(position_in_pdf) = bv.get_position_in_pdf() {
-                use image::GenericImageView;
-                use image::Pixel;
-
-                let bv_rect = position_in_pdf.get_rect();
-
-                let temp_ordner = std::env::temp_dir().join(&format!(
-                    "{gemarkung}/{blatt}",
-                    gemarkung = titelblatt.grundbuch_von,
-                    blatt = titelblatt.blatt
-                ));
-
-                let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-                let pdftoppm_output_path = temp_ordner.clone().join(format!(
-                    "page-{}.png",
-                    crate::digital::formatiere_seitenzahl(position_in_pdf.seite, max_seitenzahl)
-                ));
-
-                match image::open(&pdftoppm_output_path).ok().and_then(|o| {
-                    let (im_width, im_height) = o.dimensions();
-                    let (page_width, page_height) = pdftotext_layout
-                        .seiten
-                        .get(&format!("{}", position_in_pdf.seite))
-                        .map(|o| (o.breite_mm, o.hoehe_mm))?;
-
-                    let im_width = im_width as f32;
-                    let im_height = im_height as f32;
-
-                    Some(
-                        o.crop_imm(
-                            (bv_rect.min_x / page_width * im_width).round() as u32,
-                            (bv_rect.min_y / page_height * im_height).round() as u32,
-                            ((bv_rect.max_x - bv_rect.min_x).abs() / page_width * im_width).round()
-                                as u32,
-                            ((bv_rect.max_y - bv_rect.min_y).abs() / page_height * im_height)
-                                .round() as u32,
-                        )
-                        .to_rgb8(),
-                    )
-                }) {
-                    Some(cropped) => cropped.pixels().any(|px| {
-                        px.channels().get(0).copied().unwrap_or(0) > 200
-                            && px.channels().get(1).copied().unwrap_or(0) < 120
-                            && px.channels().get(2).copied().unwrap_or(0) < 120
-                    }),
-                    None => false,
-                }
-            } else {
-                false
-            }
-        };
-
-        bv.set_automatisch_geroetet(ist_geroetet);
-    });
-}
-*/
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Abteilung1 {
@@ -5469,8 +4993,8 @@ impl Abteilung1 {
                     let eintragung_neu = Abt1GrundEintragung {
                         bv_nr: v1.bv_nr,
                         text: v1.grundlage_der_eintragung,
-                        automatisch_geroetet: None,
-                        manuell_geroetet: None,
+                        automatisch_geroetet: v1.automatisch_geroetet,
+                        manuell_geroetet: v1.manuell_geroetet,
                         position_in_pdf: v1.position_in_pdf.clone(),
                     };
 
@@ -5690,12 +5214,11 @@ impl Abt1Eintrag {
 pub fn analysiere_abt1(
     vm: PyVm,
     seiten: &BTreeMap<String, SeiteParsed>,
+    hocr: &HocrLayout,
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
     konfiguration: &Konfiguration,
 ) -> Result<Abteilung1, Fehler> {
-    let default_texte = Vec::new();
-
     let abt1_eintraege = seiten
         .iter()
         .filter(|(num, s)| {
@@ -5709,102 +5232,52 @@ pub fn analysiere_abt1(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .filter_map(|i| {
-                        let lfd_nr = s
-                            .texte
-                            .get(0)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .and_then(|t| {
-                                let numeric_chars =
-                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
-                                numeric_chars.parse::<usize>().ok()
-                            })
-                            .unwrap_or(0);
+            (0..(zeilen_auf_seite.len() + 1))
+                .filter_map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.clone(),
+                        rect: OptRect::zero(),
+                    };
 
-                        let eigentuemer = s
-                            .texte
-                            .get(1)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        Some(Abt1Eintrag::V2(Abt1EintragV2 {
-                            lfd_nr,
-                            eigentuemer: crate::python::text_saubern(
-                                vm.clone(),
-                                eigentuemer.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            version: 2,
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        }))
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                let mut texte = s.texte.clone();
-                if let Some(t) = texte.get_mut(1) {
-                    t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                }
-
-                texte
-                    .get(1)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(text_num, text)| {
-                        let text_start_y = text.start_y;
-                        let text_end_y = text.end_y;
-
-                        // TODO: bv-nr korrigieren!
-
-                        // TODO: auch texte "1-3"
-                        let lfd_nr = get_erster_text_bei_ca(
-                            &texte.get(0).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .and_then(|s| s.text.trim().parse::<usize>().ok())
+                    let lfd_nr = s
+                        .texte
+                        .get(0)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .and_then(|t| {
+                            position.expand(t);
+                            let numeric_chars =
+                                String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                            numeric_chars.parse::<usize>().ok()
+                        })
                         .unwrap_or(0);
 
-                        let eigentuemer = get_erster_text_bei_ca(
-                            &texte.get(1).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|s| s.text.trim().to_string())
+                    let eigentuemer = s
+                        .texte
+                        .get(1)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
                         .unwrap_or_default();
 
-                        // versehentlich Fußzeile erwischt
-                        if eigentuemer.contains("JVA Branden") {
-                            return None;
-                        }
-
-                        Some(Abt1Eintrag::V2(Abt1EintragV2 {
-                            lfd_nr,
-                            eigentuemer: crate::python::text_saubern(
-                                vm.clone(),
-                                eigentuemer.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            version: 2,
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        }))
-                    })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                    Some(Abt1Eintrag::V2(Abt1EintragV2 {
+                        lfd_nr,
+                        eigentuemer: crate::python::text_saubern(
+                            vm.clone(),
+                            eigentuemer.trim(),
+                            konfiguration,
+                        )
+                        .ok()?
+                        .into(),
+                        version: 2,
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
+                    }))
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .collect();
 
@@ -5821,86 +5294,49 @@ pub fn analysiere_abt1(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .filter_map(|i| {
-                        let bv_nr = s
-                            .texte
-                            .get(2)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+            (0..(zeilen_auf_seite.len() + 1))
+                .filter_map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.clone(),
+                        rect: OptRect::zero(),
+                    };
 
-                        let grundlage_der_eintragung = s
-                            .texte
-                            .get(3)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        Some(Abt1GrundEintragung {
-                            bv_nr: bv_nr.into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                grundlage_der_eintragung.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
+                    let bv_nr = s
+                        .texte
+                        .get(2)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
                         })
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                let mut texte = s.texte.clone();
-                if let Some(t) = texte.get_mut(3) {
-                    t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                }
+                        .unwrap_or_default();
 
-                texte
-                    .get(3)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(text_num, text)| {
-                        let text_start_y = text.start_y;
-                        let text_end_y = text.end_y;
-
-                        let bv_nr = get_erster_text_bei_ca(
-                            &texte.get(2).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
-
-                        let grundlage_der_eintragung = get_erster_text_bei_ca(
-                            &texte.get(3).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
-
-                        Some(Abt1GrundEintragung {
-                            bv_nr: bv_nr.into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                grundlage_der_eintragung.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
+                    let grundlage_der_eintragung = s
+                        .texte
+                        .get(3)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
                         })
+                        .unwrap_or_default();
+
+                    Some(Abt1GrundEintragung {
+                        bv_nr: bv_nr.into(),
+                        text: crate::python::text_saubern(
+                            vm.clone(),
+                            grundlage_der_eintragung.trim(),
+                            konfiguration,
+                        )
+                        .ok()?
+                        .into(),
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
                     })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .collect();
 
@@ -6403,12 +5839,11 @@ impl Abt2Loeschung {
 pub fn analysiere_abt2(
     vm: PyVm,
     seiten: &BTreeMap<String, SeiteParsed>,
+    hocr: &HocrLayout,
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
     konfiguration: &Konfiguration,
 ) -> Result<Abteilung2, Fehler> {
-    let default_texte = Vec::new();
-
     let abt2_eintraege = seiten
         .iter()
         .filter(|(num, s)| {
@@ -6422,108 +5857,58 @@ pub fn analysiere_abt2(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .filter_map(|i| {
-                        let lfd_nr = s
-                            .texte
-                            .get(0)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .and_then(|t| {
-                                let numeric_chars =
-                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
-                                numeric_chars.parse::<usize>().ok()
-                            })
-                            .unwrap_or(0);
+            (0..(zeilen_auf_seite.len() + 1))
+                .filter_map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.clone(),
+                        rect: OptRect::zero(),
+                    };
 
-                        let bv_nr = s
-                            .texte
-                            .get(1)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        let text = s
-                            .texte
-                            .get(2)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
-
-                        Some(Abt2Eintrag {
-                            lfd_nr,
-                            bv_nr: bv_nr.into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                text.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
+                    let lfd_nr = s
+                        .texte
+                        .get(0)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .and_then(|t| {
+                            position.expand(t);
+                            let numeric_chars =
+                                String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                            numeric_chars.parse::<usize>().ok()
                         })
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                let mut texte = s.texte.clone();
-                if let Some(t) = texte.get_mut(2) {
-                    t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                }
-
-                texte
-                    .get(2)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(text_num, text)| {
-                        let text_start_y = text.start_y;
-                        let text_end_y = text.end_y;
-
-                        // TODO: bv-nr korrigieren!
-
-                        // TODO: auch texte "1-3"
-                        let lfd_nr = get_erster_text_bei_ca(
-                            &texte.get(0).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .and_then(|s| s.text.trim().parse::<usize>().ok())
                         .unwrap_or(0);
 
-                        let bv_nr = get_erster_text_bei_ca(
-                            &texte.get(1).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
+                    let bv_nr = s
+                        .texte
+                        .get(1)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
 
-                        // versehentlich Fußzeile erwischt
-                        if bv_nr.contains("JVA Branden") {
-                            return None;
-                        }
+                    let text = s
+                        .texte
+                        .get(2)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
 
-                        Some(Abt2Eintrag {
-                            lfd_nr,
-                            bv_nr: bv_nr.to_string().into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                text.text.trim(),
-                                konfiguration,
-                            )
+                    Some(Abt2Eintrag {
+                        lfd_nr,
+                        bv_nr: bv_nr.into(),
+                        text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration)
                             .ok()?
                             .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        })
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
                     })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .collect();
 
@@ -6538,83 +5923,45 @@ pub fn analysiere_abt2(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .filter_map(|i| {
-                        let lfd_nr = s
-                            .texte
-                            .get(0)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+            (0..(zeilen_auf_seite.len() + 1))
+                .filter_map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.clone(),
+                        rect: OptRect::zero(),
+                    };
 
-                        let text = s
-                            .texte
-                            .get(1)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+                    let lfd_nr = s
+                        .texte
+                        .get(0)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
 
-                        Some(Abt2Veraenderung {
-                            lfd_nr: lfd_nr.into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                text.trim(),
-                                konfiguration,
-                            )
+                    let text = s
+                        .texte
+                        .get(1)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
+
+                    Some(Abt2Veraenderung {
+                        lfd_nr: lfd_nr.into(),
+                        text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration)
                             .ok()?
                             .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        })
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
                     })
-                    .collect::<Vec<_>>()
-            } else {
-                let mut texte = s.texte.clone();
-                if let Some(t) = texte.get_mut(1) {
-                    t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                }
-
-                texte
-                    .get(1)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(text_num, text)| {
-                        let text_start_y = text.start_y;
-                        let text_end_y = text.end_y;
-
-                        // TODO: bv-nr korrigieren!
-
-                        // TODO: auch texte "1-3"
-                        let lfd_nr = get_erster_text_bei_ca(
-                            &texte.get(0).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|s| s.text.trim().to_string())?;
-
-                        // TODO: recht analysieren!
-
-                        Some(Abt2Veraenderung {
-                            lfd_nr: lfd_nr.into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                text.text.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .collect();
 
@@ -6752,6 +6099,7 @@ impl Abt3Loeschung {
 pub fn analysiere_abt3(
     vm: PyVm,
     seiten: &BTreeMap<String, SeiteParsed>,
+    hocr: &HocrLayout,
     anpassungen_seite: &BTreeMap<String, AnpassungSeite>,
     bestandsverzeichnis: &Bestandsverzeichnis,
     konfiguration: &Konfiguration,
@@ -6760,8 +6108,6 @@ pub fn analysiere_abt3(
     use crate::SeitenTyp::Abt3VertVeraenderungenLoeschungen;
 
     let mut last_lfd_nr = 1;
-
-    let default_texte = Vec::new();
 
     let abt3_eintraege = seiten
         .iter()
@@ -6772,132 +6118,69 @@ pub fn analysiere_abt3(
                 .map(|aps| aps.get_zeilen())
                 .unwrap_or_default();
 
-            if !zeilen_auf_seite.is_empty() {
-                (0..(zeilen_auf_seite.len() + 1))
-                    .filter_map(|i| {
-                        let lfd_nr = s
-                            .texte
-                            .get(0)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .and_then(|t| {
-                                let numeric_chars =
-                                    String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
-                                numeric_chars.parse::<usize>().ok()
-                            })
-                            .unwrap_or(0);
+            (0..(zeilen_auf_seite.len() + 1))
+                .filter_map(|i| {
+                    let mut position = PositionInPdf {
+                        seite: seitenzahl.clone(),
+                        rect: OptRect::zero(),
+                    };
 
-                        let bv_nr = s
-                            .texte
-                            .get(1)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+                    let lfd_nr = s
+                        .texte
+                        .get(0)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .and_then(|t| {
+                            position.expand(t);
+                            let numeric_chars =
+                                String::from_iter(t.text.chars().filter(|c| c.is_numeric()));
+                            numeric_chars.parse::<usize>().ok()
+                        })
+                        .unwrap_or(0);
 
-                        let betrag = s
-                            .texte
-                            .get(2)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+                    let bv_nr = s
+                        .texte
+                        .get(1)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
 
-                        let text = s
-                            .texte
-                            .get(3)
-                            .and_then(|zeilen| zeilen.get(i))
-                            .map(|t| t.text.trim().to_string())
-                            .unwrap_or_default();
+                    let betrag = s
+                        .texte
+                        .get(2)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
 
-                        Some(Abt3Eintrag {
-                            lfd_nr: lfd_nr.into(),
-                            bv_nr: bv_nr.to_string().into(),
-                            betrag: betrag.trim().to_string().into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                text.trim(),
-                                konfiguration,
-                            )
+                    let text = s
+                        .texte
+                        .get(3)
+                        .and_then(|zeilen| zeilen.get(i))
+                        .map(|t| {
+                            position.expand(t);
+                            t.text.trim().to_string()
+                        })
+                        .unwrap_or_default();
+
+                    Some(Abt3Eintrag {
+                        lfd_nr: lfd_nr.into(),
+                        bv_nr: bv_nr.to_string().into(),
+                        betrag: betrag.trim().to_string().into(),
+                        text: crate::python::text_saubern(vm.clone(), text.trim(), konfiguration)
                             .ok()?
                             .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        })
+                        automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                        manuell_geroetet: None,
+                        position_in_pdf: Some(position),
                     })
-                    .collect::<Vec<_>>()
-            } else {
-                let mut texte = s.texte.clone();
-                if let Some(t) = texte.get_mut(2) {
-                    t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                }
-
-                texte
-                    .get(3)
-                    .unwrap_or(&default_texte)
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(text_num, text)| {
-                        let text_start_y = text.start_y;
-                        let text_end_y = text.end_y;
-
-                        // TODO: bv-nr korrigieren!
-
-                        // TODO: auch texte "1-3"
-                        let lfd_nr = match get_erster_text_bei_ca(
-                            &texte.get(0).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .and_then(|t| t.text.parse::<usize>().ok())
-                        {
-                            Some(s) => s,
-                            None => last_lfd_nr,
-                        };
-
-                        last_lfd_nr = lfd_nr + 1;
-
-                        let bv_nr = get_erster_text_bei_ca(
-                            &texte.get(1).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
-
-                        let betrag = get_erster_text_bei_ca(
-                            &texte.get(2).unwrap_or(&default_texte),
-                            text_num,
-                            text_start_y,
-                            text_end_y,
-                        )
-                        .map(|t| t.text.trim().to_string())?;
-
-                        // TODO: recht analysieren!
-
-                        // versehentlich Fußzeile erwischt
-                        if bv_nr.contains("JVA Branden") {
-                            return None;
-                        }
-
-                        Some(Abt3Eintrag {
-                            lfd_nr: lfd_nr.into(),
-                            bv_nr: bv_nr.to_string().into(),
-                            betrag: betrag.trim().to_string().into(),
-                            text: crate::python::text_saubern(
-                                vm.clone(),
-                                text.text.trim(),
-                                konfiguration,
-                            )
-                            .ok()?
-                            .into(),
-                            automatisch_geroetet: None,
-                            manuell_geroetet: None,
-                            position_in_pdf: None,
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            }
-            .into_iter()
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
         })
         .collect();
 
@@ -6915,97 +6198,59 @@ pub fn analysiere_abt3(
                     .map(|aps| aps.get_zeilen())
                     .unwrap_or_default();
 
-                if !zeilen_auf_seite.is_empty() {
-                    (0..(zeilen_auf_seite.len() + 1))
-                        .filter_map(|i| {
-                            let lfd_nr = s
-                                .texte
-                                .get(0)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| t.text.trim().to_string())
-                                .unwrap_or_default();
+                (0..(zeilen_auf_seite.len() + 1))
+                    .filter_map(|i| {
+                        let mut position = PositionInPdf {
+                            seite: seitenzahl.clone(),
+                            rect: OptRect::zero(),
+                        };
 
-                            let betrag = s
-                                .texte
-                                .get(1)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| t.text.trim().to_string())
-                                .unwrap_or_default();
-
-                            let text = s
-                                .texte
-                                .get(2)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| t.text.trim().to_string())
-                                .unwrap_or_default();
-
-                            Some(Abt3Veraenderung {
-                                lfd_nr: lfd_nr.into(),
-                                betrag: betrag.into(),
-                                text: crate::python::text_saubern(
-                                    vm.clone(),
-                                    text.trim(),
-                                    konfiguration,
-                                )
-                                .ok()?
-                                .into(),
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: None,
+                        let lfd_nr = s
+                            .texte
+                            .get(0)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(t);
+                                t.text.trim().to_string()
                             })
-                        })
-                        .collect::<Vec<_>>()
-                } else {
-                    let mut texte = s.texte.clone();
-                    if let Some(t) = texte.get_mut(2) {
-                        t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                    }
-
-                    texte
-                        .get(2)
-                        .unwrap_or(&default_texte)
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(text_num, text)| {
-                            let text_start_y = text.start_y;
-                            let text_end_y = text.end_y;
-
-                            // TODO: auch texte "1-3"
-                            let lfd_nr = get_erster_text_bei_ca(
-                                &texte.get(0).unwrap_or(&default_texte),
-                                text_num,
-                                text_start_y,
-                                text_end_y,
-                            )
-                            .map(|s| s.text.trim().to_string())
                             .unwrap_or_default();
 
-                            let betrag = get_erster_text_bei_ca(
-                                &texte.get(1).unwrap_or(&default_texte),
-                                text_num,
-                                text_start_y,
-                                text_end_y,
-                            )
-                            .map(|s| s.text.trim().to_string())
+                        let betrag = s
+                            .texte
+                            .get(1)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(t);
+                                t.text.trim().to_string()
+                            })
                             .unwrap_or_default();
 
-                            Some(Abt3Veraenderung {
-                                lfd_nr: lfd_nr.into(),
-                                betrag: betrag.into(),
-                                text: crate::python::text_saubern(
-                                    vm.clone(),
-                                    &text.text.trim(),
-                                    konfiguration,
-                                )
-                                .ok()?
-                                .into(),
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: None,
+                        let text = s
+                            .texte
+                            .get(2)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(t);
+                                t.text.trim().to_string()
                             })
+                            .unwrap_or_default();
+
+                        Some(Abt3Veraenderung {
+                            lfd_nr: lfd_nr.into(),
+                            betrag: betrag.into(),
+                            text: crate::python::text_saubern(
+                                vm.clone(),
+                                text.trim(),
+                                konfiguration,
+                            )
+                            .ok()?
+                            .into(),
+                            automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                            manuell_geroetet: None,
+                            position_in_pdf: Some(position),
                         })
-                        .collect::<Vec<_>>()
-                }
+                    })
+                    .collect::<Vec<_>>()
             } else {
                 Vec::new()
             }
@@ -7032,98 +6277,59 @@ pub fn analysiere_abt3(
                     .map(|aps| aps.get_zeilen())
                     .unwrap_or_default();
 
-                if !zeilen_auf_seite.is_empty() {
-                    (0..(zeilen_auf_seite.len() + 1))
-                        .filter_map(|i| {
-                            let lfd_nr = s
-                                .texte
-                                .get(0 + column_shift)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| t.text.trim().to_string())
-                                .unwrap_or_default();
+                (0..(zeilen_auf_seite.len() + 1))
+                    .filter_map(|i| {
+                        let mut position = PositionInPdf {
+                            seite: seitenzahl.clone(),
+                            rect: OptRect::zero(),
+                        };
 
-                            let betrag = s
-                                .texte
-                                .get(1 + column_shift)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| t.text.trim().to_string())
-                                .unwrap_or_default();
-
-                            let text = s
-                                .texte
-                                .get(2 + column_shift)
-                                .and_then(|zeilen| zeilen.get(i))
-                                .map(|t| t.text.trim().to_string())
-                                .unwrap_or_default();
-
-                            Some(Abt3Loeschung {
-                                lfd_nr: lfd_nr.into(),
-                                betrag: betrag.into(),
-                                text: crate::python::text_saubern(
-                                    vm.clone(),
-                                    text.trim(),
-                                    konfiguration,
-                                )
-                                .ok()?
-                                .into(),
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: None,
+                        let lfd_nr = s
+                            .texte
+                            .get(0 + column_shift)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(t);
+                                t.text.trim().to_string()
                             })
-                        })
-                        .collect::<Vec<_>>()
-                } else {
-                    let mut texte = s.texte.clone();
-
-                    if let Some(t) = texte.get_mut(2 + column_shift) {
-                        t.retain(|t| t.text.trim().len() > 12 && t.text.trim().contains(" "));
-                    }
-
-                    texte
-                        .get(2 + column_shift)
-                        .unwrap_or(&default_texte)
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(text_num, text)| {
-                            let text_start_y = text.start_y;
-                            let text_end_y = text.end_y;
-
-                            // TODO: auch texte "1-3"
-                            let lfd_nr = get_erster_text_bei_ca(
-                                &texte.get(0 + column_shift).unwrap_or(&default_texte),
-                                text_num,
-                                text_start_y,
-                                text_end_y,
-                            )
-                            .map(|s| s.text.trim().to_string())
                             .unwrap_or_default();
 
-                            let betrag = get_erster_text_bei_ca(
-                                &texte.get(1 + column_shift).unwrap_or(&default_texte),
-                                text_num,
-                                text_start_y,
-                                text_end_y,
-                            )
-                            .map(|s| s.text.trim().to_string())
+                        let betrag = s
+                            .texte
+                            .get(1 + column_shift)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(t);
+                                t.text.trim().to_string()
+                            })
                             .unwrap_or_default();
 
-                            Some(Abt3Loeschung {
-                                lfd_nr: lfd_nr.into(),
-                                betrag: betrag.into(),
-                                text: crate::python::text_saubern(
-                                    vm.clone(),
-                                    text.text.trim(),
-                                    konfiguration,
-                                )
-                                .ok()?
-                                .into(),
-                                automatisch_geroetet: None,
-                                manuell_geroetet: None,
-                                position_in_pdf: None,
+                        let text = s
+                            .texte
+                            .get(2 + column_shift)
+                            .and_then(|zeilen| zeilen.get(i))
+                            .map(|t| {
+                                position.expand(t);
+                                t.text.trim().to_string()
                             })
+                            .unwrap_or_default();
+
+                        Some(Abt3Loeschung {
+                            lfd_nr: lfd_nr.into(),
+                            betrag: betrag.into(),
+                            text: crate::python::text_saubern(
+                                vm.clone(),
+                                text.trim(),
+                                konfiguration,
+                            )
+                            .ok()?
+                            .into(),
+                            automatisch_geroetet: Some(position.ist_geroetet(hocr)),
+                            manuell_geroetet: None,
+                            position_in_pdf: Some(position),
                         })
-                        .collect::<Vec<_>>()
-                }
+                    })
+                    .collect::<Vec<_>>()
             } else {
                 Vec::new()
             }
