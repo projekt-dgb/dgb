@@ -15,7 +15,7 @@ pub enum Cmd {
         land: String,
         grundbuch_von: String,
         amtsgericht: String,
-        blatt: usize,
+        blatt: String,
     },
     #[serde(rename = "undo")]
     Undo,
@@ -221,8 +221,6 @@ pub enum Cmd {
         pdf_grundbuch_von: String,
         pdf_blatt: String,
         seite: usize,
-        geroetet: bool,
         image_data_base64: String,
-        image_filename: String,
     },
 }

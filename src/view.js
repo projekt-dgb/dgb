@@ -132,9 +132,7 @@ let rpc = {
     pdf_grundbuch_von,
     pdf_blatt,
     seite,
-    geroetet,
     image_data_base64,
-    image_filename,
     ) { 
         rpc.invoke({ 
         cmd : 'signal_pdf_page_rendered', 
@@ -142,9 +140,7 @@ let rpc = {
         pdf_grundbuch_von: pdf_grundbuch_von,
         pdf_blatt: pdf_blatt,
         seite: seite, 
-        geroetet: geroetet,
         image_data_base64: image_data_base64, 
-        image_filename: image_filename,
         }); 
     },
 };
@@ -202,8 +198,6 @@ async function renderPdfPage(
     pdf_grundbuch_von,
     pdf_blatt,
     seite,
-    geroetet,
-    image_filename,
 ) {
   
 console.log("renderPdfPage");
@@ -233,9 +227,7 @@ console.log("renderPdfPage");
                 pdf_grundbuch_von,
                 pdf_blatt,
                 seite,
-                geroetet,
                 dataURL,
-                image_filename,
             )
         });
     });
@@ -1533,7 +1525,7 @@ function grundbuchAnlegen(event) {
     if (!blatt)
         return;
     
-    rpc.grundbuch_anlegen(land.value, grundbuch_von.value, amtsgericht.value, parseInt(blatt.value));
+    rpc.grundbuch_anlegen(land.value, grundbuch_von.value, amtsgericht.value, blatt.value);
     
     return false;
 }

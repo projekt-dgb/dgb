@@ -3340,15 +3340,9 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         .join(&file.analysiert.titelblatt.grundbuch_von)
         .join(file.analysiert.titelblatt.blatt.to_string());
 
-    let pdftoppm_output_path = if rpc_data.konfiguration.vorschau_ohne_geroetet {
-        temp_ordner
-            .clone()
-            .join(format!("page-clean-{}.png", open_file.1))
-    } else {
-        temp_ordner
-            .clone()
-            .join(format!("page-{}.png", open_file.1))
-    };
+    let pdftoppm_output_path = temp_ordner
+        .clone()
+        .join(format!("page-clean-{}.png", open_file.1));
 
     let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
         Ok(o) => o,
@@ -3507,7 +3501,11 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
 
     let hocr_lines = render_pdf_image_hocr(img_ui_width, img_ui_height, &hocr);
 
-    let rote_linien = render_pdf_rote_linien(img_ui_width, img_ui_height, &hocr);
+    let rote_linien = if rpc_data.konfiguration.vorschau_ohne_geroetet {
+        String::new()
+    } else {
+        render_pdf_rote_linien(img_ui_width, img_ui_height, &hocr)
+    };
 
     normalize_for_js(format!("
         <div style='padding:20px;user-select:none;-webkit-user-select:none;'>

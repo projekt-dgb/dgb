@@ -1076,16 +1076,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             pdf_grundbuch_von,
             pdf_blatt,
             seite,
-            geroetet,
             image_data_base64,
-            image_filename,
         } => {
             let pdf_grundbuch_von = pdf_grundbuch_von.clone();
             let pdf_blatt = pdf_blatt.clone();
             let image_data_base64 = image_data_base64.clone();
-            let image_filename = image_filename.clone();
             let seite = seite.clone();
-            let geroetet = geroetet.clone();
+            let image_filename = format!("page-clean-{seite}.png");
 
             std::thread::spawn(move || {
                 use image::io::Reader as ImageReader;
@@ -1118,49 +1115,42 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 };
 
                 let flipped = decoded.flipv();
+                let grayscale = flipped.grayscale();
+
                 let mut bytes: Vec<u8> = Vec::new();
                 let _ =
-                    flipped.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
+                    grayscale.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
 
                 let tempdir = std::env::temp_dir()
                     .join(&pdf_grundbuch_von)
                     .join(&pdf_blatt);
                 let _ = std::fs::create_dir_all(&tempdir);
                 let _ = std::fs::write(tempdir.join(&image_filename), &bytes);
+                let pnm_bytes = match crate::digital::read_png_and_convert_to_bmp(
+                    &tempdir.join(&image_filename),
+                ) {
+                    Some(b) => b,
+                    None => return,
+                };
 
                 let target_path = tempdir.join(format!("{seite}.hocr.json"));
-                if !geroetet {
-                    let grayscale = flipped.grayscale();
-                    let mut pnm_bytes: Vec<u8> = Vec::new();
-                    let _ = grayscale.write_to(
-                        &mut Cursor::new(&mut pnm_bytes),
-                        image::ImageOutputFormat::Bmp,
+                if !target_path.exists() {
+                    let hocr = match tesseract_get_hocr(&pnm_bytes) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            tinyfiledialogs::message_box_ok(
+                                &format!("Fehler beim OCR von {image_filename}"),
+                                &format!("{e}"),
+                                MessageBoxIcon::Error,
+                            );
+                            return;
+                        }
+                    };
+
+                    let _ = std::fs::write(
+                        &target_path,
+                        serde_json::to_string_pretty(&hocr).unwrap_or_default(),
                     );
-                    let _ =
-                        std::fs::write(tempdir.join(&format!("{image_filename}.bmp")), &pnm_bytes);
-
-                    if pnm_bytes.is_empty() {
-                        return;
-                    }
-
-                    if !target_path.exists() {
-                        let hocr = match tesseract_get_hocr(&pnm_bytes) {
-                            Ok(o) => o,
-                            Err(e) => {
-                                tinyfiledialogs::message_box_ok(
-                                    &format!("Fehler beim OCR von {image_filename}"),
-                                    &format!("{e}"),
-                                    MessageBoxIcon::Error,
-                                );
-                                return;
-                            }
-                        };
-
-                        let _ = std::fs::write(
-                            &target_path,
-                            serde_json::to_string_pretty(&hocr).unwrap_or_default(),
-                        );
-                    }
                 }
             });
         }
@@ -1439,7 +1429,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let file_name = format!("{}_{}", grundbuch_von, blatt);
 
-            let mut pdf_parsed = PdfFile {
+            let pdf_parsed = PdfFile {
                 datei: None,
                 gbx_datei_pfad: Some(gbx_folder),
                 icon: None,
@@ -3439,9 +3429,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     bv_nr,
                     &text_sauber,
                     &Titelblatt {
-                        amtsgericht: "Amtsgericht".to_string(),
-                        grundbuch_von: "GrundbuchVon".to_string(),
-                        blatt: 0,
+                        amtsgericht: "XXX".to_string(),
+                        grundbuch_von: "Unbekannt".to_string(),
+                        blatt: "0".to_string(),
                     },
                     open_file
                         .map(|of| &of.analysiert.bestandsverzeichnis.eintraege)
@@ -5250,14 +5240,6 @@ fn render_pdf_seiten(webview: &WebView, pdfs: &mut Vec<PdfFile>) {
                 &pdf_bytes,
                 *seite,
                 &pdf.analysiert.titelblatt,
-                false,
-            );
-            let _ = crate::digital::konvertiere_pdf_seite_zu_png_prioritaet(
-                webview,
-                &pdf_bytes,
-                *seite,
-                &pdf.analysiert.titelblatt,
-                true,
             );
         }
     }

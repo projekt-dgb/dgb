@@ -7,6 +7,7 @@ use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::io::Error as IoError;
+use std::path::Path;
 use std::{fmt, fs};
 use wry::webview::WebView;
 
@@ -112,7 +113,7 @@ pub fn get_seiten_dimensionen(pdf_bytes: &[u8]) -> Result<BTreeMap<u32, (f32, f3
 pub struct Titelblatt {
     pub amtsgericht: String,
     pub grundbuch_von: String,
-    pub blatt: usize,
+    pub blatt: String,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -628,76 +629,48 @@ pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>,
 
 // Funktion, die das Titelblatt ausliest
 pub fn lese_titelblatt(pdf_bytes: &[u8]) -> Result<Titelblatt, Fehler> {
-    return Ok(Titelblatt {
-        amtsgericht: "Oranienburg".to_string(),
-        grundbuch_von: "Vehlefanz".to_string(),
-        blatt: 456,
-    });
-    /*
-    let temp_dir = std::env::temp_dir();
-    let _ = fs::create_dir_all(temp_dir.clone())
-        .map_err(|e| Fehler::Io(format!("{}", temp_dir.clone().display()), e))?;
-
-    let temp_pdf_path = temp_dir.clone().join("temp.pdf");
-    let pdftotxt_output_path = temp_dir.clone().join(format!("pdftotext-01.txt"));
-
-    // Blah.pdf -> /tmp/temp.pdf
-    let _ = fs::remove_file(temp_pdf_path.clone());
-    fs::write(temp_pdf_path.clone(), pdf_bytes)
-        .map_err(|e| Fehler::Io(format!("{}", temp_pdf_path.display()), e))?;
-
-    // pdftotext -q -layout -enc UTF-8 -eol unix -nopgbrk -f 1 -l 1 /tmp/temp.pdf /pdftotxt-1.txt
-    let _ = get_pdftotext_command()
-    .arg("-q")
-    .arg("-layout")
-    .arg("-enc")
-    .arg("UTF-8")
-    .arg("-eol")
-    .arg("unix")
-    .arg("-nopgbrk")
-    .arg("-f")
-    .arg(&format!("1"))
-    .arg("-l")
-    .arg(&format!("1"))
-    .arg(&format!("{}", temp_pdf_path.display()))
-    .arg(&format!("{}", temp_dir.clone().join(format!("pdftotext-01.txt")).display()))
-    .status();
-
-    let text_pdftotext = fs::read_to_string(pdftotxt_output_path.clone())
-    .map_err(|e| Fehler::Io(format!("{}", pdftotxt_output_path.display()), e))?;
-
-    // Remove artifacts
-    let _ = fs::remove_file(pdftotxt_output_path.clone());
-    let _ = fs::remove_file(temp_pdf_path.clone());
-
-    let mut zeilen_erste_seite = text_pdftotext
-        .lines()
-        .map(|s| s.to_string())
+    let doc = lopdf::Document::load_mem(pdf_bytes)?;
+    let first_page_obj = doc
+        .get_pages()
+        .get(&1)
+        .cloned()
+        .ok_or(Fehler::FalscheSeitenZahl(0))?;
+    let content = doc.get_and_decode_page_content(first_page_obj)?;
+    let strings = content
+        .operations
+        .iter()
+        .filter_map(|op| {
+            println!("{:?}", op);
+            match op.operator.as_str() {
+                "TJ" => Some(
+                    String::from_utf8_lossy(
+                        op.operands
+                            .get(0)
+                            .and_then(|o| lopdf::Object::as_array(o).ok())
+                            .and_then(|s| lopdf::Object::as_str(s.get(0)?).ok())?,
+                    )
+                    .to_string(),
+                ),
+                _ => None,
+            }
+        })
         .collect::<Vec<_>>();
 
-    zeilen_erste_seite.retain(|l| !({
-        l.contains("zur Fortführung auf EDV") ||
-        l.contains("dabei an die Stelle des bisherigen") ||
-        l.contains("Blatt enthaltene Rötungen") ||
-        l.contains("Freigegeben am") ||
-        l.contains("Geändert am ") ||
-        l.trim().is_empty()
-    }));
+    let amtsgericht = strings.get(0).cloned().unwrap_or_else(|| "XXX".to_string());
+    let grundbuch_von = strings
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "Unbekannt".to_string());
+    let blatt = strings
+        .get(2)
+        .cloned()
+        .unwrap_or_else(|| "99999".to_string());
 
-    let titelblatt = zeilen_erste_seite.join(" ");
-
-    let mut titelblatt_iter = titelblatt.split_whitespace();
-
-    let amtsgericht = titelblatt_iter.next().ok_or(TitelblattFehler::KeinAmtsgericht)?;
-    let grundbuch_von = titelblatt_iter.next().ok_or(TitelblattFehler::KeinGbBezirk)?;
-    let blatt = titelblatt_iter.next().and_then(|p| p.parse::<usize>().ok()).ok_or(TitelblattFehler::KeinGbBlatt)?;
-
-    Ok(Titelblatt {
-        amtsgericht: amtsgericht.to_string(),
-        grundbuch_von: grundbuch_von.to_string(),
+    return Ok(Titelblatt {
+        amtsgericht,
+        grundbuch_von,
         blatt,
-    })
-    */
+    });
 }
 
 pub fn konvertiere_pdf_seite_zu_png_prioritaet(
@@ -705,7 +678,6 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     pdf_bytes: &[u8],
     seite: u32,
     titelblatt: &Titelblatt,
-    geroetet: bool,
 ) -> Result<(), Fehler> {
     let temp_ordner = std::env::temp_dir()
         .join(&titelblatt.grundbuch_von)
@@ -714,16 +686,30 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
 
-    let mut pdftoppm_output_path = format!("page-{}.png", seite);
+    let mut pdftoppm_output_path = format!("page-clean-{}.png", seite);
 
-    if !geroetet {
-        pdftoppm_output_path = format!("page-clean-{}.png", seite);
+    if temp_ordner.join(&pdftoppm_output_path).exists() {
+        if !temp_ordner.join(&format!("{seite}.hocr.json")).exists() {
+            let bytes = match read_png_and_convert_to_bmp(&temp_ordner.join(&pdftoppm_output_path))
+            {
+                Some(s) => s,
+                None => return Ok(()), // TODO
+            };
+            let hocr = match crate::tesseract_get_hocr(&bytes) {
+                Ok(o) => o,
+                _ => return Ok(()), // TODO
+            };
+            let _ = std::fs::write(
+                &temp_ordner.join(&format!("{seite}.hocr.json")),
+                serde_json::to_string_pretty(&hocr).unwrap_or_default(),
+            );
+        }
+
+        return Ok(());
     }
 
     let mut pdf_bytes = pdf_bytes.to_vec();
-    if !geroetet {
-        pdf_bytes = clean_pdf_bytes(&pdf_bytes)?;
-    }
+    pdf_bytes = clean_pdf_bytes(&pdf_bytes)?;
 
     if temp_ordner.join(&pdftoppm_output_path).exists() {
         return Ok(());
@@ -732,11 +718,33 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let pdf_base64 = base64::encode(pdf_bytes);
     let pdf_amtsgericht = &titelblatt.amtsgericht;
     let pdf_grundbuch_von = &titelblatt.grundbuch_von;
-    let pdf_blatt = titelblatt.blatt;
+    let pdf_blatt = titelblatt.blatt.clone();
 
-    let _ = webview.evaluate_script(&format!("renderPdfPage(`{pdf_base64}`, `{pdf_amtsgericht}`, `{pdf_grundbuch_von}`, `{pdf_blatt}`, {seite}, {geroetet:?}, `{pdftoppm_output_path}`)"));
+    let _ = webview.evaluate_script(&format!("renderPdfPage(`{pdf_base64}`, `{pdf_amtsgericht}`, `{pdf_grundbuch_von}`, `{pdf_blatt}`, {seite})"));
 
     Ok(())
+}
+
+pub(crate) fn read_png_and_convert_to_bmp(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Cursor;
+
+    let mut grayscale_bytes = fs::read(path).ok()?;
+    let mut c = Cursor::new(&mut grayscale_bytes);
+    let grayscale = image::png::PngDecoder::new(&mut c).ok()?;
+    let grayscale = image::DynamicImage::from_decoder(grayscale).ok()?;
+    let mut pnm_bytes: Vec<u8> = Vec::new();
+    let _ = grayscale.write_to(
+        &mut Cursor::new(&mut pnm_bytes),
+        image::ImageOutputFormat::Bmp,
+    );
+    let parent = path.parent()?;
+    let file_name = path
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or("0.png".to_string());
+    let path = parent.join(&format!("{}.bmp", file_name));
+    let _ = std::fs::write(path, &pnm_bytes);
+    Some(pnm_bytes)
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]

@@ -145,7 +145,7 @@ fn export_grundbuch_single_file(
         }
         PdfExportTyp::OffenesGrundbuch(gb) => {
             let grundbuch_von = gb.titelblatt.grundbuch_von.clone();
-            let blatt = gb.titelblatt.blatt;
+            let blatt = gb.titelblatt.blatt.clone();
             let amtsgericht = gb.titelblatt.amtsgericht.clone();
 
             let titel = format!("{grundbuch_von} Blatt {blatt} (Amtsgericht {amtsgericht})");
@@ -234,7 +234,7 @@ fn export_grundbuch_multi_files(
         }
         PdfExportTyp::OffenesGrundbuch(gb) => {
             let grundbuch_von = gb.titelblatt.grundbuch_von.clone();
-            let blatt = gb.titelblatt.blatt;
+            let blatt = gb.titelblatt.blatt.clone();
             let amtsgericht = gb.titelblatt.amtsgericht.clone();
 
             let titel = format!("{grundbuch_von} Blatt {blatt} (Amtsgericht {amtsgericht})");
@@ -262,7 +262,7 @@ fn export_grundbuch_multi_files(
         PdfExportTyp::AlleOffenDigitalisiert(gb) | PdfExportTyp::AlleOffen(gb) => {
             for f in gb {
                 let grundbuch_von = f.titelblatt.grundbuch_von.clone();
-                let blatt = f.titelblatt.blatt;
+                let blatt = f.titelblatt.blatt.clone();
                 let amtsgericht = f.titelblatt.amtsgericht.clone();
                 let titel = format!("{grundbuch_von} Blatt {blatt} (Amtsgericht {amtsgericht})");
 
@@ -300,7 +300,7 @@ fn write_titelblatt(
     titelblatt: &Titelblatt,
 ) {
     let grundbuch_von = titelblatt.grundbuch_von.clone();
-    let blatt = titelblatt.blatt;
+    let blatt = titelblatt.blatt.clone();
     let amtsgericht = titelblatt.amtsgericht.clone();
 
     let gb = format!("Grundbuch von {grundbuch_von}");
@@ -333,7 +333,7 @@ fn write_grundbuch(
     options: &PdfGrundbuchOptions,
 ) {
     let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
-    let blatt = grundbuch.titelblatt.blatt;
+    let blatt = grundbuch.titelblatt.blatt.clone();
     let amtsgericht = grundbuch.titelblatt.amtsgericht.clone();
 
     let gb = format!("Grundbuch von {grundbuch_von}");
