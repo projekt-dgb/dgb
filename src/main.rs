@@ -3977,8 +3977,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 max_y: *max_y / page_height * hocr_page.hoehe_mm,
             };
 
-            println!("select ocr rect {rect:#?}");
-
             let text = hocr_page.get_words_within_bounds(&rect).join("\r\n");
 
             let text = if data.konfiguration.zeilenumbrueche_in_ocr_text {

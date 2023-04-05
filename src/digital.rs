@@ -199,8 +199,8 @@ impl ParsedLinie {
                     p = c.transform_point(p);
                 }
                 Punkt {
-                    x: p.x / 2.835,
-                    y: self.page_height_mm - (p.y / 2.835),
+                    x: p.x * 0.352778,
+                    y: self.page_height_mm - p.y * 0.352778,
                 }
             })
             .collect();
@@ -462,8 +462,13 @@ impl HocrSeite {
     }
 }
 
+#[derive(Default)]
+struct GraphicsState {
+    ctms: Vec<PdfMatrix>,
+    children: Vec<GraphicsState>,
+}
+
 pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>, Fehler> {
-    println!("get_rote_linien_start");
     let seiten_dimensionen = get_seiten_dimensionen(pdf_bytes)?;
     let pdf = lopdf::Document::load_mem(pdf_bytes)?;
     let result = Ok(pdf
@@ -492,78 +497,63 @@ pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>,
                 .iter()
                 .enumerate()
                 .filter_map(|(line_idx, end_idx)| {
-                    let last_q_operator_idx_reverse = operations_reverse
-                        .iter()
-                        .enumerate()
-                        .skip(operations_reverse.len().saturating_sub(*end_idx))
-                        .find_map(|(op_reverse_idx, op)| {
-                            if op.operator == "Q" {
-                                Some(op_reverse_idx)
-                            } else {
-                                None
+                    let mut ctm = PdfMatrix::identity();
+                    let mut graphics_states = Vec::new();
+
+                    for op in &content.operations[..*end_idx] {
+                        match op.operator.as_str() {
+                            "cm" => {
+                                let cm0 = op.operands.get(0)?;
+                                let cm1 = op.operands.get(1)?;
+                                let cm2 = op.operands.get(2)?;
+                                let cm3 = op.operands.get(3)?;
+                                let cm4 = op.operands.get(4)?;
+                                let cm5 = op.operands.get(5)?;
+
+                                let cm0 = (cm0
+                                    .as_f64()
+                                    .ok()
+                                    .or_else(|| cm0.as_i64().ok().map(|r| r as f64))?)
+                                    as f32;
+                                let cm1 = (cm1
+                                    .as_f64()
+                                    .ok()
+                                    .or_else(|| cm1.as_i64().ok().map(|r| r as f64))?)
+                                    as f32;
+                                let cm2 = (cm2
+                                    .as_f64()
+                                    .ok()
+                                    .or_else(|| cm2.as_i64().ok().map(|r| r as f64))?)
+                                    as f32;
+                                let cm3 = (cm3
+                                    .as_f64()
+                                    .ok()
+                                    .or_else(|| cm3.as_i64().ok().map(|r| r as f64))?)
+                                    as f32;
+                                let cm4 = (cm4
+                                    .as_f64()
+                                    .ok()
+                                    .or_else(|| cm4.as_i64().ok().map(|r| r as f64))?)
+                                    as f32;
+                                let cm5 = (cm5
+                                    .as_f64()
+                                    .ok()
+                                    .or_else(|| cm5.as_i64().ok().map(|r| r as f64))?)
+                                    as f32;
+
+                                ctm = PdfMatrix::new(cm0, cm1, cm2, cm3, cm4, cm5).then(&ctm);
                             }
-                        })
-                        .unwrap_or(content.operations.len());
-
-                    let cm_operations = content.operations[(content.operations.len()
-                        - last_q_operator_idx_reverse)
-                        .saturating_sub(1)
-                        ..*end_idx]
-                        .iter()
-                        .filter_map(|op| match op.operator.as_str() {
-                            "cm" => Some((
-                                op.operands.get(0)?,
-                                op.operands.get(1)?,
-                                op.operands.get(2)?,
-                                op.operands.get(3)?,
-                                op.operands.get(4)?,
-                                op.operands.get(5)?,
-                            )),
-                            _ => None,
-                        })
-                        .filter_map(|(cm0, cm1, cm2, cm3, cm4, cm5)| {
-                            let cm0 = (cm0
-                                .as_f64()
-                                .ok()
-                                .or_else(|| cm0.as_i64().ok().map(|r| r as f64))?)
-                                as f32;
-                            let cm1 = (cm1
-                                .as_f64()
-                                .ok()
-                                .or_else(|| cm1.as_i64().ok().map(|r| r as f64))?)
-                                as f32;
-                            let cm2 = (cm2
-                                .as_f64()
-                                .ok()
-                                .or_else(|| cm2.as_i64().ok().map(|r| r as f64))?)
-                                as f32;
-                            let cm3 = (cm3
-                                .as_f64()
-                                .ok()
-                                .or_else(|| cm3.as_i64().ok().map(|r| r as f64))?)
-                                as f32;
-                            let cm4 = (cm4
-                                .as_f64()
-                                .ok()
-                                .or_else(|| cm4.as_i64().ok().map(|r| r as f64))?)
-                                as f32;
-                            let cm5 = (cm5
-                                .as_f64()
-                                .ok()
-                                .or_else(|| cm5.as_i64().ok().map(|r| r as f64))?)
-                                as f32;
-                            Some((cm0, cm1, cm2, cm3, cm4, cm5))
-                        })
-                        .map(|(cm0, cm1, cm2, cm3, cm4, cm5)| {
-                            PdfMatrix::new(cm0, cm1, cm2, cm3, cm4, cm5)
-                        })
-                        .collect::<Vec<_>>();
-
-                    if cm_operations.is_empty() {
-                        None
-                    } else {
-                        Some((line_idx, cm_operations))
+                            "q" => {
+                                graphics_states.push(ctm.clone());
+                            }
+                            "Q" => {
+                                ctm = graphics_states.pop().unwrap_or(PdfMatrix::identity());
+                            }
+                            _ => {}
+                        }
                     }
+
+                    Some((line_idx, vec![ctm]))
                 })
                 .collect::<BTreeMap<_, _>>();
 
@@ -582,6 +572,7 @@ pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>,
                                 None
                             }
                         })?;
+
                     let points = content.operations[(content.operations.len()
                         - last_m_operator_idx_reverse)
                         .saturating_sub(1)
@@ -611,27 +602,26 @@ pub fn get_rote_linien(pdf_bytes: &[u8]) -> Result<BTreeMap<String, Vec<Linie>>,
                     if points.is_empty() {
                         None
                     } else {
-                        Some(
-                            ParsedLinie {
-                                punkte_point: points,
-                                ctm_transforms: cm_operations
-                                    .get(&line_idx)
-                                    .cloned()
-                                    .unwrap_or_default(),
-                                page_height_mm: *hoehe_mm,
-                            }
-                            .get_linie(),
-                        )
+                        Some(ParsedLinie {
+                            punkte_point: points,
+                            ctm_transforms: cm_operations
+                                .get(&line_idx)
+                                .cloned()
+                                .unwrap_or_default(),
+                            page_height_mm: *hoehe_mm,
+                        })
                     }
                 })
                 .collect::<Vec<_>>();
-            println!("seite {page_num} - line {:#?}", linien);
+
+            let linien = linien
+                .into_iter()
+                .map(|l| l.get_linie())
+                .collect::<Vec<_>>();
 
             Some((page_num.to_string(), linien))
         })
         .collect());
-
-    println!("get_rote_linien_end");
 
     result
 }
