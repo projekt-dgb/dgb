@@ -17,6 +17,7 @@ use crate::digital::{
 };
 use crate::digital::{Abteilung1, Abteilung2, Abteilung3, Bestandsverzeichnis};
 use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt};
+use analyse::GrundbuchAnalysiertCache;
 use digital::HocrSeite;
 use digital::ParsedHocr;
 use digital::StringOrLines;
@@ -1071,6 +1072,14 @@ pub struct LefisDateiExport {
 
 fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
     match &arg {
+        Cmd::CheckForGrundbuchLoaded => {
+            for pdf_file in data.loaded_files.values_mut() {
+                if !pdf_file.ist_geladen() {
+                    continue;
+                }
+                if pdf.check_for_grundbuch_analyse_update() {}
+            }
+        }
         Cmd::SignalPdfPageRendered {
             pdf_amtsgericht,
             pdf_grundbuch_von,

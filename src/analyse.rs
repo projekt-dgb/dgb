@@ -47,12 +47,37 @@ pub struct Abt3Analysiert {
     pub fehler: Vec<String>,
 }
 
+pub struct GrundbuchAnalysiertCache {
+    inner: Arc<Mutex<GrundbuchAnalysiertCacheInternal>>,
+}
+
+type Abt2Hash = String;
+type Abt3Hash = String;
+
+struct GrundbuchAnalysiertCacheInternal {
+    bv_verzeichnis_hash: String,
+    abt2: BTreeMap<Abt2Hash, Abt2Analysiert>,
+    abt3: BTreeMap<Abt2Hash, Abt3Analysiert>,
+}
+
+impl GrundbuchAnalysiertCache {
+    pub fn load(titelblatt: &Titelblatt) -> Self {}
+
+    pub fn start_analyzing(&self, grundbuch: &Grundbuch) -> GrundbuchAnalysiert {}
+
+    pub fn start_and_block_until_finished(&self, grundbuch: &Grundbuch) -> GrundbuchAnalysiert {}
+}
+
+/*
 pub fn analysiere_grundbuch(
     vm: PyVm,
     grundbuch: &Grundbuch,
     nb: &[Nebenbeteiligter],
     konfiguration: &Konfiguration,
 ) -> GrundbuchAnalysiert {
+
+    let cache = GrundbuchAnalysiertCache::load(&grundbuch.titelblatt);
+
     let mut abt2_analysiert = Vec::<Abt2Analysiert>::new();
     let mut abt3_analysiert = Vec::new();
 
@@ -339,6 +364,7 @@ pub fn analysiere_grundbuch(
         abt3: abt3_analysiert,
     }
 }
+
 
 pub fn get_belastete_flurstuecke(
     vm: PyVm,
@@ -662,12 +688,12 @@ fn flurstuecke_fortfuehren(
             } else if fortgeführt_als.len() == 2 {
                 // TODO: Zerlegung?
                 // if bv_analyse.contains(geteilt == )
-                fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}", 
+                fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}",
                     bv.get_lfd_nr(),
                     fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
                 ));
             } else {
-                fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}", 
+                fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}",
                     bv.get_lfd_nr(),
                     fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
                 ));
@@ -679,6 +705,7 @@ fn flurstuecke_fortfuehren(
 
     bv_belastet
 }
+*/
 
 fn parse_spalte_1_veraenderung(spalte_1: &str) -> Result<Vec<usize>, String> {
     Ok(Vec::new()) // TODO

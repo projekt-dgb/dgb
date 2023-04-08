@@ -223,4 +223,6 @@ pub enum Cmd {
         seite: usize,
         image_data_base64: String,
     },
+    #[serde(rename = "check_for_grundbuch_loaded")]
+    CheckForGrundbuchLoaded,
 }

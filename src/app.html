@@ -89678,7 +89678,8 @@ let rpc = {
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
   set_configuration_view: function(section_id) { rpc.invoke({ cmd : 'set_configuration_view', section_id: section_id }); },
   save_state: function() { rpc.invoke({ cmd : 'save_state' }); },
-  
+  check_for_grundbuch_loaded: function() { rpc.invoke({ cmd : 'check_for_grundbuch_loaded' }); },
+
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
       cmd : 'select_ocr', 
@@ -89791,6 +89792,11 @@ setInterval(function(){
         rpc.check_for_pdf_loaded(key, value[0], value[1]);
     }
 }, 1000);
+
+
+setInterval(function(){
+    rpc.check_for_grundbuch_loaded();
+}, 100);
 
 function startCheckingForPageLoaded(filepath, filename, pdf_file_name) {
     files_to_check[filepath] = [filename, pdf_file_name];

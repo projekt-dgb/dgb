@@ -5,7 +5,8 @@ use crate::{
         ParsedHocr, SeiteParsed, StringOrLines, TextInputType,
     },
     python::PyVm,
-    GbxAenderungen, GrundbuchSucheResponse, Konfiguration, PdfFile, PopoverState, RpcData,
+    GbxAenderungen, GrundbuchAnalysiert, GrundbuchSucheResponse, Konfiguration, PdfFile,
+    PopoverState, RpcData,
 };
 
 // render entire <body> node depending on the state of the rpc_data
@@ -2029,7 +2030,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     </div>
                 ", 
                     max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-                    analyse = render_analyse_grundbuch(rpc_data.vm.clone(), open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false)
+                    analyse = render_analyse_grundbuch(open_file.get_analyse_grundbuch_nonblocking(rpc_data.vm.clone(), &rpc_data.loaded_nb, &rpc_data.konfiguration), false, false)
                 )
             } else {
                 format!("")
@@ -2039,10 +2040,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_analyse_grundbuch(
-    vm: PyVm,
-    open_file: &PdfFile,
-    nb: &[Nebenbeteiligter],
-    konfiguration: &Konfiguration,
+    gb_analysiert: &GrundbuchAnalysiert,
     fuer_druck: bool,
     nur_fehlerhafte_rechte: bool,
 ) -> String {
@@ -2053,9 +2051,6 @@ pub fn render_analyse_grundbuch(
     let pfeil_str = format!("data:image/png;base64,{}", base64::encode(&PFEIL_PNG));
     let warnung_str = format!("data:image/png;base64,{}", base64::encode(&WARNUNG_PNG));
     let fehler_str = format!("data:image/png;base64,{}", base64::encode(&FEHLER_PNG));
-
-    let gb_analysiert =
-        crate::analyse::analysiere_grundbuch(vm.clone(), &open_file.analysiert, nb, konfiguration);
 
     normalize_for_js(format!("
         <div style='margin:10px;min-width:600px;'>
