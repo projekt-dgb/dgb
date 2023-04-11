@@ -394,8 +394,9 @@ pub struct PdfFile {
     next_state: Option<Box<PdfFile>>,
     #[serde(skip, default)]
     previous_state: Option<Box<PdfFile>>,
-
     analysiert: Grundbuch,
+    #[serde(skip, default)]
+    cache: GrundbuchAnalysiertCache,
 }
 
 impl PdfFile {
@@ -608,8 +609,9 @@ impl PdfFile {
         nb: &[Nebenbeteiligter],
         konfiguration: &Konfiguration,
     ) -> bool {
-        let analysiert =
-            crate::analyse::analysiere_grundbuch(vm, &self.analysiert, nb, konfiguration);
+        let analysiert = self
+            .cache
+            .start_analyzing(&self.analysiert, &vm, nb, konfiguration);
 
         self.ist_geladen()
             && analysiert.abt2.iter().all(|e| e.fehler.is_empty())
@@ -622,8 +624,9 @@ impl PdfFile {
         nb: &[Nebenbeteiligter],
         konfiguration: &Konfiguration,
     ) -> bool {
-        let analysiert =
-            crate::analyse::analysiere_grundbuch(vm, &self.analysiert, nb, konfiguration);
+        let analysiert = self
+            .cache
+            .start_analyzing(&self.analysiert, &vm, nb, konfiguration);
 
         let any_abt2 = analysiert.abt2.iter().any(|e| {
             e.warnungen
@@ -648,7 +651,8 @@ impl PdfFile {
         let mut v = Vec::new();
 
         let analysiert =
-            crate::analyse::analysiere_grundbuch(vm, &self.analysiert, &[], konfiguration);
+            self.cache
+                .start_and_block_until_finished(&self.analysiert, &vm, &[], konfiguration);
 
         for abt2 in &analysiert.abt2 {
             if !abt2.rechtsinhaber.is_empty() {
@@ -685,6 +689,33 @@ impl PdfFile {
         }
 
         v
+    }
+}
+
+impl Konfiguration {
+    pub fn get_hash(&self) -> String {
+        use sha2::Digest;
+
+        let arr = serde_json::to_string(&[
+            serde_json::to_string(&self.regex).unwrap_or_default(),
+            serde_json::to_string(&self.abkuerzungen_script).unwrap_or_default(),
+            serde_json::to_string(&self.text_saubern_script).unwrap_or_default(),
+            serde_json::to_string(&self.flurstuecke_auslesen_script).unwrap_or_default(),
+            serde_json::to_string(&self.text_kuerzen_abt2_script).unwrap_or_default(),
+            serde_json::to_string(&self.text_kuerzen_abt3_script).unwrap_or_default(),
+            serde_json::to_string(&self.betrag_auslesen_script).unwrap_or_default(),
+            serde_json::to_string(&self.rechtsinhaber_auslesen_abt3_script).unwrap_or_default(),
+            serde_json::to_string(&self.rechtsinhaber_auslesen_abt2_script).unwrap_or_default(),
+            serde_json::to_string(&self.rangvermerk_auslesen_abt2_script).unwrap_or_default(),
+            serde_json::to_string(&self.klassifiziere_rechteart).unwrap_or_default(),
+            serde_json::to_string(&self.klassifiziere_schuldenart).unwrap_or_default(),
+        ])
+        .unwrap_or_default();
+
+        let mut hasher = sha2::Sha256::default();
+        hasher.update(arr.as_bytes());
+        let hash = hasher.finalize();
+        hex::encode(hash)
     }
 }
 
@@ -1073,12 +1104,25 @@ pub struct LefisDateiExport {
 fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
     match &arg {
         Cmd::CheckForGrundbuchLoaded => {
-            for pdf_file in data.loaded_files.values_mut() {
-                if !pdf_file.ist_geladen() {
-                    continue;
-                }
-                if pdf.check_for_grundbuch_analyse_update() {}
+            let open_file = match data
+                .open_page
+                .clone()
+                .and_then(|(file, _)| data.loaded_files.get(&file))
+            {
+                Some(s) => s,
+                None => return,
+            };
+
+            if !open_file.ist_geladen() {
+                return;
             }
+
+            let analyse = open_file.cache.start_analyzing(
+                &open_file.analysiert,
+                &data.vm,
+                &data.loaded_nb,
+                &data.konfiguration,
+            );
         }
         Cmd::SignalPdfPageRendered {
             pdf_amtsgericht,
@@ -1279,6 +1323,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         hocr: HocrLayout::init_from_dimensionen(&seiten_dimensionen),
                         anpassungen_seite: BTreeMap::new(),
                         analysiert: Grundbuch::new(titelblatt),
+                        cache: GrundbuchAnalysiertCache::default(),
                         nebenbeteiligte_dateipfade: Vec::new(),
                         previous_state: None,
                         next_state: None,
@@ -1455,6 +1500,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     abt2: Abteilung2::default(),
                     abt3: Abteilung3::default(),
                 },
+                cache: GrundbuchAnalysiertCache::default(),
                 nebenbeteiligte_dateipfade: Vec::new(),
                 anpassungen_seite: BTreeMap::new(),
                 previous_state: None,
@@ -2366,16 +2412,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script("saveState();");
             open_file.icon = None;
             if data.konfiguration.lefis_analyse_einblenden {
+                let analyse = open_file.cache.start_analyzing(
+                    &open_file.analysiert,
+                    &data.vm,
+                    &data.loaded_nb,
+                    &data.konfiguration,
+                );
                 let _ = webview.evaluate_script(&format!(
                     "replaceAnalyseGrundbuch(`{}`);",
-                    ui::render_analyse_grundbuch(
-                        data.vm.clone(),
-                        &open_file,
-                        &data.loaded_nb,
-                        &data.konfiguration,
-                        false,
-                        false
-                    )
+                    ui::render_analyse_grundbuch(&analyse, false, false)
                 ));
             }
         }
@@ -2507,16 +2552,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 "replaceAbt3Loeschungen(`{}`);",
                 ui::render_abt_3_loeschungen(open_file)
             ));
+            let analyse = open_file.cache.start_analyzing(
+                &open_file.analysiert,
+                &data.vm,
+                &data.loaded_nb,
+                &data.konfiguration,
+            );
             let _ = webview.evaluate_script(&format!(
                 "replaceAnalyseGrundbuch(`{}`);",
-                ui::render_analyse_grundbuch(
-                    data.vm.clone(),
-                    &open_file,
-                    &data.loaded_nb,
-                    &data.konfiguration,
-                    false,
-                    false
-                )
+                ui::render_analyse_grundbuch(&analyse, false, false)
             ));
             let _ = webview.evaluate_script(&format!(
                 "replacePageList(`{}`);",
@@ -2703,16 +2747,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 "replaceAbt3Loeschungen(`{}`);",
                 ui::render_abt_3_loeschungen(open_file)
             ));
+            let analyse = open_file.cache.start_analyzing(
+                &open_file.analysiert,
+                &data.vm,
+                &data.loaded_nb,
+                &data.konfiguration,
+            );
             let _ = webview.evaluate_script(&format!(
                 "replaceAnalyseGrundbuch(`{}`);",
-                ui::render_analyse_grundbuch(
-                    data.vm.clone(),
-                    &open_file,
-                    &data.loaded_nb,
-                    &data.konfiguration,
-                    false,
-                    false
-                )
+                ui::render_analyse_grundbuch(&analyse, false, false)
             ));
             let _ = webview.evaluate_script(&format!(
                 "replacePageList(`{}`);",
@@ -3168,16 +3211,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 "replaceAbt3Loeschungen(`{}`);",
                 ui::render_abt_3_loeschungen(open_file)
             ));
+            let analyse = open_file.cache.start_analyzing(
+                &open_file.analysiert,
+                &data.vm,
+                &data.loaded_nb,
+                &data.konfiguration,
+            );
             let _ = webview.evaluate_script(&format!(
                 "replaceAnalyseGrundbuch(`{}`);",
-                ui::render_analyse_grundbuch(
-                    data.vm.clone(),
-                    &open_file,
-                    &data.loaded_nb,
-                    &data.konfiguration,
-                    false,
-                    false
-                )
+                ui::render_analyse_grundbuch(&analyse, false, false)
             ));
             let _ = webview.evaluate_script(&format!(
                 "replacePageList(`{}`);",
@@ -4348,16 +4390,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
 
+            let analyse = open_file.cache.start_analyzing(
+                &open_file.analysiert,
+                &data.vm,
+                &data.loaded_nb,
+                &data.konfiguration,
+            );
             let _ = webview.evaluate_script(&format!(
                 "replaceAnalyseGrundbuch(`{}`);",
-                ui::render_analyse_grundbuch(
-                    data.vm.clone(),
-                    &open_file,
-                    &data.loaded_nb,
-                    &data.konfiguration,
-                    false,
-                    false
-                )
+                ui::render_analyse_grundbuch(&analyse, false, false)
             ));
         }
         Cmd::ExportNebenbeteiligte => {
@@ -4626,9 +4667,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 .loaded_files
                 .values()
                 .map(|file| LefisDateiExport {
-                    rechte: crate::analyse::analysiere_grundbuch(
-                        data.vm.clone(),
+                    rechte: file.cache.start_and_block_until_finished(
                         &file.analysiert,
+                        &data.vm,
                         &data.loaded_nb,
                         &data.konfiguration,
                     ),
@@ -4972,14 +5013,13 @@ fn get_alle_rechte_html(data: &RpcData) -> String {
     let mut entries = Vec::new();
 
     for (f_name, f) in data.loaded_files.iter() {
-        entries.push(crate::ui::render_analyse_grundbuch(
-            data.vm.clone(),
-            f,
+        let analyse = f.cache.start_and_block_until_finished(
+            &f.analysiert,
+            &data.vm,
             &data.loaded_nb,
             &data.konfiguration,
-            true,
-            false,
-        ));
+        );
+        entries.push(crate::ui::render_analyse_grundbuch(&analyse, true, false));
     }
 
     entries.join("\r\n")
@@ -4989,9 +5029,9 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
     let mut entries = String::new();
 
     for (f_name, f) in data.loaded_files.iter() {
-        let gb_analysiert = crate::analyse::analysiere_grundbuch(
-            data.vm.clone(),
+        let gb_analysiert = f.cache.start_and_block_until_finished(
             &f.analysiert,
+            &data.vm,
             &data.loaded_nb,
             &data.konfiguration,
         );
@@ -5121,11 +5161,14 @@ fn get_alle_fehler_html(data: &RpcData) -> String {
     let mut entries = Vec::new();
 
     for (f_name, f) in data.loaded_files.iter() {
-        entries.push(crate::ui::render_analyse_grundbuch(
-            data.vm.clone(),
-            f,
+        let gb_analysiert = f.cache.start_and_block_until_finished(
+            &f.analysiert,
+            &data.vm,
             &data.loaded_nb,
             &data.konfiguration,
+        );
+        entries.push(crate::ui::render_analyse_grundbuch(
+            &gb_analysiert,
             true,
             true,
         ));
@@ -5138,9 +5181,9 @@ fn get_rangvermerke_tsv(data: &RpcData) -> String {
     let mut entries = Vec::new();
 
     for (f_name, f) in data.loaded_files.iter() {
-        let analysiert = crate::analyse::analysiere_grundbuch(
-            data.vm.clone(),
+        let analysiert = f.cache.start_and_block_until_finished(
             &f.analysiert,
+            &data.vm,
             &[],
             &data.konfiguration,
         );

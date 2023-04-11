@@ -109,7 +109,7 @@ pub fn get_seiten_dimensionen(pdf_bytes: &[u8]) -> Result<BTreeMap<u32, (f32, f3
     Ok(pages)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Titelblatt {
     pub amtsgericht: String,
     pub grundbuch_von: String,
@@ -3680,6 +3680,18 @@ impl Bestandsverzeichnis {
             && self.zuschreibungen.is_empty()
             && self.abschreibungen.is_empty()
     }
+
+    pub fn get_eintraege_hash(&self) -> String {
+        use sha2::Digest;
+        let mut hasher = sha2::Sha256::default();
+        hasher.update(
+            serde_json::to_string_pretty(&self.eintraege)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+        let hash = hasher.finalize();
+        hex::encode(hash)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -5422,6 +5434,21 @@ pub struct Nebenbeteiligter {
     pub name: String,
     #[serde(default)]
     pub extra: NebenbeteiligterExtra,
+}
+
+impl Nebenbeteiligter {
+    pub fn get_hash(nb: &[Self]) -> String {
+        let arr = serde_json::to_string(nb).unwrap_or_default();
+        hash_str(&arr)
+    }
+}
+
+pub fn hash_str(s: &str) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::default();
+    hasher.update(s.as_bytes());
+    let hash = hasher.finalize();
+    hex::encode(hash)
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

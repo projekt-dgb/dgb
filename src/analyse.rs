@@ -1,12 +1,15 @@
-use crate::digital::{BvEintrag, Nebenbeteiligter};
+use crate::digital::{self, Abt2Eintrag, BvEintrag, Nebenbeteiligter};
 use crate::get_or_insert_regex;
-use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt, Spalte1Eintrag};
-use crate::{Grundbuch, Konfiguration, NebenbeteiligterExtra, Titelblatt};
+use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt, Spalte1Eintrag, Waehrung};
+use crate::{Abt3Eintrag, Grundbuch, Konfiguration, NebenbeteiligterExtra, Titelblatt};
 use serde_derive::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrundbuchAnalysiert {
+    #[serde(skip, default)]
+    pub titelblatt: Titelblatt,
     pub abt2: Vec<Abt2Analysiert>,
     pub abt3: Vec<Abt3Analysiert>,
 }
@@ -27,6 +30,10 @@ pub struct Abt2Analysiert {
     pub nebenbeteiligter: Nebenbeteiligter,
     pub warnungen: Vec<String>,
     pub fehler: Vec<String>,
+    #[serde(skip, default)]
+    pub geroetet: bool,
+    #[serde(skip, default)]
+    pub fertig_analysiert: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,326 +52,571 @@ pub struct Abt3Analysiert {
     pub nebenbeteiligter: Nebenbeteiligter,
     pub warnungen: Vec<String>,
     pub fehler: Vec<String>,
+    #[serde(skip, default)]
+    pub geroetet: bool,
+    #[serde(skip, default)]
+    pub fertig_analysiert: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct GrundbuchAnalysiertCache {
     inner: Arc<Mutex<GrundbuchAnalysiertCacheInternal>>,
 }
 
-type Abt2Hash = String;
-type Abt3Hash = String;
+impl Default for GrundbuchAnalysiertCache {
+    fn default() -> GrundbuchAnalysiertCache {
+        GrundbuchAnalysiertCache {
+            inner: Arc::new(Mutex::new(GrundbuchAnalysiertCacheInternal::default())),
+        }
+    }
+}
 
-struct GrundbuchAnalysiertCacheInternal {
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
+struct Abt2Hash {
+    abt2_eintrag_hash: String,
     bv_verzeichnis_hash: String,
+    konfiguration_hash: String,
+    nb_hash: String,
+}
+
+impl Abt2Hash {
+    pub fn new(
+        eintrag: &Abt2Eintrag,
+        grundbuch: &Grundbuch,
+        konfiguration: &Konfiguration,
+        nb: &[Nebenbeteiligter],
+    ) -> Self {
+        Self {
+            abt2_eintrag_hash: digital::hash_str(
+                &serde_json::to_string(eintrag).unwrap_or_default(),
+            ),
+            bv_verzeichnis_hash: grundbuch.bestandsverzeichnis.get_eintraege_hash(),
+            konfiguration_hash: konfiguration.get_hash(),
+            nb_hash: Nebenbeteiligter::get_hash(nb),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
+struct Abt3Hash {
+    abt3_eintrag_hash: String,
+    bv_verzeichnis_hash: String,
+    konfiguration_hash: String,
+    nb_hash: String,
+}
+
+impl Abt3Hash {
+    pub fn new(
+        eintrag: &Abt3Eintrag,
+        grundbuch: &Grundbuch,
+        konfiguration: &Konfiguration,
+        nb: &[Nebenbeteiligter],
+    ) -> Self {
+        Self {
+            abt3_eintrag_hash: digital::hash_str(
+                &serde_json::to_string(eintrag).unwrap_or_default(),
+            ),
+            bv_verzeichnis_hash: grundbuch.bestandsverzeichnis.get_eintraege_hash(),
+            konfiguration_hash: konfiguration.get_hash(),
+            nb_hash: Nebenbeteiligter::get_hash(nb),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct GrundbuchAnalysiertCacheInternal {
     abt2: BTreeMap<Abt2Hash, Abt2Analysiert>,
-    abt3: BTreeMap<Abt2Hash, Abt3Analysiert>,
+    abt2_in_progress: BTreeSet<Abt2Hash>,
+    abt3: BTreeMap<Abt3Hash, Abt3Analysiert>,
+    abt3_in_progress: BTreeSet<Abt3Hash>,
 }
 
 impl GrundbuchAnalysiertCache {
-    pub fn load(titelblatt: &Titelblatt) -> Self {}
+    pub fn start_analyzing(
+        &self,
+        grundbuch: &Grundbuch,
+        vm: &PyVm,
+        nb: &[Nebenbeteiligter],
+        konfiguration: &Konfiguration,
+    ) -> GrundbuchAnalysiert {
+        let current_state_cloned = self
+            .inner
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or_default();
 
-    pub fn start_analyzing(&self, grundbuch: &Grundbuch) -> GrundbuchAnalysiert {}
+        let mut abt2_analysiert = Vec::new();
+        let mut abt3_analysiert = Vec::new();
 
-    pub fn start_and_block_until_finished(&self, grundbuch: &Grundbuch) -> GrundbuchAnalysiert {}
-}
+        for eintrag in grundbuch.abt2.eintraege.iter() {
+            let abt2_hash = Abt2Hash::new(eintrag, grundbuch, konfiguration, nb);
+            let default_eintrag = Abt2Analysiert {
+                lfd_nr: eintrag.lfd_nr,
+                text_kurz: eintrag.text.text(),
+                rechteart: RechteArt::SonstigeDabagrechteart,
+                rechtsinhaber: String::new(),
+                rangvermerk: None,
+                spalte_2: String::new(),
+                belastete_flurstuecke: Vec::new(),
+                lastend_an: Vec::new(),
+                text_original: eintrag.text.text(),
+                nebenbeteiligter: Nebenbeteiligter::default(),
+                warnungen: Vec::new(),
+                fehler: vec!["Wird geladen...".to_string()],
+                geroetet: eintrag.ist_geroetet(),
+                fertig_analysiert: false,
+            };
+            let abt2_result = match current_state_cloned.abt2.get(&abt2_hash).cloned() {
+                Some(s) => s,
+                None => {
+                    if !current_state_cloned.abt2_in_progress.contains(&abt2_hash) {
+                        self.inner
+                            .lock()
+                            .unwrap()
+                            .abt2_in_progress
+                            .insert(abt2_hash.clone());
+                        let selfinner_clone = self.inner.clone();
+                        let grundbuch_clone = grundbuch.clone();
+                        let abt2_hash_clone = abt2_hash.clone();
+                        let nb_clone = nb.to_vec();
+                        let vm_clone = vm.clone();
+                        let konfiguration_clone = konfiguration.clone();
+                        let eintrag_clone = eintrag.clone();
+                        rayon::spawn(move || {
+                            let result = rayon_task_analyze_abt2(
+                                &eintrag_clone,
+                                &grundbuch_clone,
+                                &vm_clone,
+                                &nb_clone,
+                                &konfiguration_clone,
+                            );
+                            selfinner_clone
+                                .lock()
+                                .unwrap()
+                                .abt2
+                                .insert(abt2_hash_clone, result);
+                        });
+                    }
 
-/*
-pub fn analysiere_grundbuch(
-    vm: PyVm,
-    grundbuch: &Grundbuch,
-    nb: &[Nebenbeteiligter],
-    konfiguration: &Konfiguration,
-) -> GrundbuchAnalysiert {
-
-    let cache = GrundbuchAnalysiertCache::load(&grundbuch.titelblatt);
-
-    let mut abt2_analysiert = Vec::<Abt2Analysiert>::new();
-    let mut abt3_analysiert = Vec::new();
-
-    for eintrag in grundbuch.abt2.eintraege.iter() {
-        if eintrag.ist_geroetet() {
-            continue;
-        }
-
-        let mut warnungen = Vec::new();
-        let mut fehler = Vec::new();
-
-        let mut eintrag_veraenderungen = Vec::new();
-        let mut eintrag = eintrag.clone();
-
-        for v in grundbuch.abt2.veraenderungen.iter() {
-            let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
-                Ok(s) => s,
-                Err(e) => {
-                    fehler.push(format!(
-                        "Konnte Abt. 2 Veränderung nicht lesen: {}: {}",
-                        v.lfd_nr.text(),
-                        e
-                    ));
-                    Vec::new()
+                    default_eintrag
                 }
             };
-
-            if spalte_1_nummern.contains(&eintrag.lfd_nr) {
-                eintrag_veraenderungen.push(v.text.clone());
-            }
+            abt2_analysiert.push(abt2_result);
         }
 
-        // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
-        if !eintrag_veraenderungen.is_empty() {
-            for v in eintrag_veraenderungen.iter() {
-                warnungen.push(format!("Veränderungsmitteilung beachten:<br/>{}", v.text()));
-                if eintrag.text.contains("Rang") || eintrag.text.contains("Gleichrang") {
-                    eintrag.text.push_str(" ");
-                    eintrag.text.push_str(&v.text());
-                    eintrag.text.push_str("\r\n");
+        for eintrag in grundbuch.abt3.eintraege.iter() {
+            let abt3_hash = Abt3Hash::new(eintrag, grundbuch, konfiguration, nb);
+            let default_eintrag = Abt3Analysiert {
+                lfd_nr: eintrag.lfd_nr,
+                text_kurz: eintrag.text.text(),
+                betrag: Betrag {
+                    wert: 0,
+                    nachkomma: 0,
+                    waehrung: Waehrung::Euro,
+                },
+                schuldenart: SchuldenArt::Grundschuld,
+                rechtsinhaber: String::new(),
+                spalte_2: String::new(),
+                belastete_flurstuecke: Vec::new(),
+                lastend_an: Vec::new(),
+                text_original: eintrag.text.text(),
+                nebenbeteiligter: Nebenbeteiligter::default(),
+                warnungen: Vec::new(),
+                fehler: vec!["Wird geladen...".to_string()],
+                geroetet: eintrag.ist_geroetet(),
+                fertig_analysiert: false,
+            };
+            let abt3_result = match current_state_cloned.abt3.get(&abt3_hash).cloned() {
+                Some(s) => s,
+                None => {
+                    if !current_state_cloned.abt3_in_progress.contains(&abt3_hash) {
+                        self.inner
+                            .lock()
+                            .unwrap()
+                            .abt3_in_progress
+                            .insert(abt3_hash.clone());
+                        let selfinner_clone = self.inner.clone();
+                        let grundbuch_clone = grundbuch.clone();
+                        let abt3_hash_clone = abt3_hash.clone();
+                        let nb_clone = nb.to_vec();
+                        let vm_clone = vm.clone();
+                        let konfiguration_clone = konfiguration.clone();
+                        let eintrag_clone = eintrag.clone();
+                        rayon::spawn(move || {
+                            let result = rayon_task_analyze_abt3(
+                                &eintrag_clone,
+                                &grundbuch_clone,
+                                &vm_clone,
+                                &nb_clone,
+                                &konfiguration_clone,
+                            );
+                            selfinner_clone
+                                .lock()
+                                .unwrap()
+                                .abt3
+                                .insert(abt3_hash_clone, result);
+                        });
+                    }
+
+                    default_eintrag
                 }
-            }
+            };
+            abt3_analysiert.push(abt3_result);
         }
 
-        let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
-        let blatt = grundbuch.titelblatt.blatt.clone();
-        let lfd_nr = eintrag.lfd_nr;
-        let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
+        GrundbuchAnalysiert {
+            titelblatt: grundbuch.titelblatt.clone(),
+            abt2: abt2_analysiert,
+            abt3: abt3_analysiert,
+        }
+    }
 
-        let kt = crate::kurztext::text_kuerzen_abt2(
-            vm.clone(),
-            &recht_id,
-            &eintrag.text.text(),
-            &mut fehler,
-            konfiguration,
-        );
-        let mut lastend_an = Vec::new();
-        let mut debug_log = String::new();
-        let belastete_flurstuecke = match get_belastete_flurstuecke(
-            vm.clone(),
-            &eintrag.bv_nr.text(),
-            &kt.text_sauber,
-            &grundbuch.titelblatt,
-            &grundbuch.bestandsverzeichnis.eintraege,
-            konfiguration,
-            &mut debug_log,
-            &mut lastend_an,
-            &mut warnungen,
-            &mut fehler,
-        ) {
-            Ok(o) => o,
+    pub fn start_and_block_until_finished(
+        &self,
+        grundbuch: &Grundbuch,
+        vm: &PyVm,
+        nb: &[Nebenbeteiligter],
+        konfiguration: &Konfiguration,
+    ) -> GrundbuchAnalysiert {
+        let current_state_cloned = self
+            .inner
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or_default();
+
+        let mut abt2_analysiert = Vec::new();
+        let mut abt3_analysiert = Vec::new();
+
+        for eintrag in grundbuch.abt2.eintraege.iter() {
+            let abt2_hash = Abt2Hash::new(eintrag, grundbuch, konfiguration, nb);
+            abt2_analysiert.push(match current_state_cloned.abt2.get(&abt2_hash).cloned() {
+                Some(s) => s,
+                None => rayon_task_analyze_abt2(eintrag, &grundbuch, vm, nb, konfiguration),
+            });
+        }
+
+        for eintrag in grundbuch.abt3.eintraege.iter() {
+            let abt3_hash = Abt3Hash::new(eintrag, grundbuch, konfiguration, nb);
+            abt3_analysiert.push(match current_state_cloned.abt3.get(&abt3_hash).cloned() {
+                Some(s) => s,
+                None => rayon_task_analyze_abt3(eintrag, &grundbuch, vm, nb, konfiguration),
+            });
+        }
+
+        GrundbuchAnalysiert {
+            titelblatt: grundbuch.titelblatt.clone(),
+            abt2: abt2_analysiert,
+            abt3: abt3_analysiert,
+        }
+    }
+}
+
+fn rayon_task_analyze_abt2(
+    eintrag: &Abt2Eintrag,
+    grundbuch: &Grundbuch,
+    vm: &PyVm,
+    nb: &[Nebenbeteiligter],
+    konfiguration: &Konfiguration,
+) -> Abt2Analysiert {
+    let mut warnungen = Vec::new();
+    let mut fehler = Vec::new();
+
+    let mut eintrag_veraenderungen = Vec::new();
+    let mut eintrag = eintrag.clone();
+
+    for v in grundbuch.abt2.veraenderungen.iter() {
+        let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
+            Ok(s) => s,
             Err(e) => {
-                fehler.push(e);
+                fehler.push(format!(
+                    "Konnte Abt. 2 Veränderung nicht lesen: {}: {}",
+                    v.lfd_nr.text(),
+                    e
+                ));
                 Vec::new()
             }
         };
 
-        let mut rechteart = match kt.rechteart.clone() {
-            Some(s) => s,
-            None => {
-                fehler.push(format!("Konnte Rechteart nicht auslesen"));
-                RechteArt::SonstigeDabagrechteart
-            }
-        };
+        if spalte_1_nummern.contains(&eintrag.lfd_nr) {
+            eintrag_veraenderungen.push(v.text.clone());
+        }
+    }
 
-        let rechtsinhaber = match kt.rechtsinhaber.clone() {
-            Some(s) => s,
-            None => match rechteart.clone() {
-                r if !r.benoetigt_rechteinhaber() => String::new(),
-                RechteArt::SpeziellVormerkung { rechteverweis } => {
-                    if let Some(recht) = abt2_analysiert
-                        .iter()
-                        .find(|r| r.lfd_nr == rechteverweis)
-                        .cloned()
-                    {
-                        rechteart = recht.rechteart.clone();
-                        recht.rechtsinhaber.clone()
-                    } else {
-                        fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
-                        String::new()
-                    }
-                }
-                _ => {
+    // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
+    if !eintrag_veraenderungen.is_empty() {
+        for v in eintrag_veraenderungen.iter() {
+            warnungen.push(format!("Veränderungsmitteilung beachten:<br/>{}", v.text()));
+            if eintrag.text.contains("Rang") || eintrag.text.contains("Gleichrang") {
+                eintrag.text.push_str(" ");
+                eintrag.text.push_str(&v.text());
+                eintrag.text.push_str("\r\n");
+            }
+        }
+    }
+
+    let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+    let blatt = grundbuch.titelblatt.blatt.clone();
+    let lfd_nr = eintrag.lfd_nr;
+    let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
+
+    let kt = crate::kurztext::text_kuerzen_abt2(
+        vm.clone(),
+        &recht_id,
+        &eintrag.text.text(),
+        &mut fehler,
+        konfiguration,
+    );
+    let mut lastend_an = Vec::new();
+    let mut debug_log = String::new();
+    let belastete_flurstuecke = match get_belastete_flurstuecke(
+        vm.clone(),
+        &eintrag.bv_nr.text(),
+        &kt.text_sauber,
+        &grundbuch.titelblatt,
+        &grundbuch.bestandsverzeichnis.eintraege,
+        konfiguration,
+        &mut debug_log,
+        &mut lastend_an,
+        &mut warnungen,
+        &mut fehler,
+    ) {
+        Ok(o) => o,
+        Err(e) => {
+            fehler.push(e);
+            Vec::new()
+        }
+    };
+
+    let mut rechteart = match kt.rechteart.clone() {
+        Some(s) => s,
+        None => {
+            fehler.push(format!("Konnte Rechteart nicht auslesen"));
+            RechteArt::SonstigeDabagrechteart
+        }
+    };
+
+    let rechtsinhaber = match kt.rechtsinhaber.clone() {
+        Some(s) => s,
+        None => match rechteart.clone() {
+            r if !r.benoetigt_rechteinhaber() => String::new(),
+            RechteArt::SpeziellVormerkung { rechteverweis } => {
+                if let Some((ra, ri)) = grundbuch
+                    .abt2
+                    .eintraege
+                    .iter()
+                    .filter(|e| !e.ist_geroetet())
+                    .find(|r| r.lfd_nr == rechteverweis)
+                    .map(|eintrag| {
+                        let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+                        let blatt = grundbuch.titelblatt.blatt.clone();
+                        let lfd_nr = eintrag.lfd_nr;
+                        let recht_id =
+                            format!("{grundbuch_von} Blatt {blatt} Abt. 2 lfd. Nr. {lfd_nr}");
+
+                        let kt = crate::kurztext::text_kuerzen_abt2(
+                            vm.clone(),
+                            &recht_id,
+                            &eintrag.text.text(),
+                            &mut Vec::new(),
+                            konfiguration,
+                        );
+                        (
+                            kt.rechteart.unwrap_or(RechteArt::SonstigeDabagrechteart),
+                            kt.rechtsinhaber,
+                        )
+                    })
+                {
+                    rechteart = ra;
+                    ri.unwrap_or_default()
+                } else {
                     fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
                     String::new()
                 }
-            },
-        };
-
-        let rangvermerk = kt.rangvermerk.clone();
-
-        let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
-            Some(s) => s.clone(),
-            None => {
-                if rechteart.benoetigt_rechteinhaber() {
-                    warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
-                }
-                Nebenbeteiligter {
-                    typ: None,
-                    ordnungsnummer: None,
-                    name: rechtsinhaber.clone(),
-                    extra: NebenbeteiligterExtra::default(),
-                }
             }
-        };
+            _ => {
+                fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
+                String::new()
+            }
+        },
+    };
 
-        if rangvermerk.is_some() {
-            if !(kt.gekuerzt.contains("Rang") || kt.gekuerzt.contains("Gleichrang")) {
-                fehler.push(format!(
-                    "Rangvermerk vorhanden, aber nicht in Kurztext vermerkt"
-                ));
+    let rangvermerk = kt.rangvermerk.clone();
+
+    let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
+        Some(s) => s.clone(),
+        None => {
+            if rechteart.benoetigt_rechteinhaber() {
+                warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
+            }
+            Nebenbeteiligter {
+                typ: None,
+                ordnungsnummer: None,
+                name: rechtsinhaber.clone(),
+                extra: NebenbeteiligterExtra::default(),
             }
         }
+    };
 
-        abt2_analysiert.push(Abt2Analysiert {
-            lfd_nr: eintrag.lfd_nr,
-            text_kurz: kt.gekuerzt,
-            rechteart,
-            rechtsinhaber,
-            rangvermerk,
-            spalte_2: eintrag.bv_nr.clone().text(),
-            belastete_flurstuecke,
-            lastend_an,
-            text_original: kt.text_sauber,
-            nebenbeteiligter,
-            warnungen,
-            fehler,
-        })
+    if rangvermerk.is_some() {
+        if !(kt.gekuerzt.contains("Rang") || kt.gekuerzt.contains("Gleichrang")) {
+            fehler.push(format!(
+                "Rangvermerk vorhanden, aber nicht in Kurztext vermerkt"
+            ));
+        }
     }
 
-    for eintrag in grundbuch.abt3.eintraege.iter() {
-        if eintrag.ist_geroetet() {
-            continue;
-        }
+    Abt2Analysiert {
+        lfd_nr: eintrag.lfd_nr,
+        text_kurz: kt.gekuerzt,
+        rechteart,
+        rechtsinhaber,
+        rangvermerk,
+        spalte_2: eintrag.bv_nr.clone().text(),
+        belastete_flurstuecke,
+        lastend_an,
+        text_original: kt.text_sauber,
+        nebenbeteiligter,
+        warnungen,
+        fehler,
+        geroetet: eintrag.ist_geroetet(),
+        fertig_analysiert: true,
+    }
+}
 
-        let mut warnungen = Vec::new();
-        let mut fehler = Vec::new();
+fn rayon_task_analyze_abt3(
+    eintrag: &Abt3Eintrag,
+    grundbuch: &Grundbuch,
+    vm: &PyVm,
+    nb: &[Nebenbeteiligter],
+    konfiguration: &Konfiguration,
+) -> Abt3Analysiert {
+    let mut warnungen = Vec::new();
+    let mut fehler = Vec::new();
 
-        let mut eintrag_veraenderungen = Vec::new();
-        let mut eintrag = eintrag.clone();
+    let mut eintrag_veraenderungen = Vec::new();
+    let mut eintrag = eintrag.clone();
 
-        for v in grundbuch.abt3.veraenderungen.iter() {
-            let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
-                Ok(s) => s,
-                Err(e) => {
-                    fehler.push(format!(
-                        "Konnte Abt. 3 Veränderung nicht lesen: {}: {}",
-                        v.lfd_nr.text(),
-                        e
-                    ));
-                    Vec::new()
-                }
-            };
-
-            if spalte_1_nummern.contains(&eintrag.lfd_nr) {
-                eintrag_veraenderungen.push(v.text.clone());
-            }
-        }
-
-        // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
-        if !eintrag_veraenderungen.is_empty() {
-            warnungen.push(format!(
-                "Veränderungsmittelungen Abt.3 beachten!: {}",
-                eintrag_veraenderungen
-                    .iter()
-                    .map(|q| q.text())
-                    .collect::<Vec<_>>()
-                    .join("\r\n")
-            ));
-            for v in eintrag_veraenderungen.iter() {
-                if eintrag.text.contains("Rang")
-                    || eintrag.text.contains("Gleichrang")
-                    || eintrag.text.contains("Mithaft")
-                    || eintrag.text.contains("Gesamthaft")
-                {
-                    eintrag.text.push_str(" ");
-                    eintrag.text.push_str(&v.text());
-                    eintrag.text.push_str("\r\n");
-                }
-            }
-        }
-
-        let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
-        let blatt = grundbuch.titelblatt.blatt.clone();
-        let lfd_nr = eintrag.lfd_nr;
-        let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
-
-        let kt = crate::kurztext::text_kuerzen_abt3(
-            vm.clone(),
-            &recht_id,
-            &eintrag.betrag.text(),
-            &eintrag.text.text(),
-            &mut fehler,
-            konfiguration,
-        );
-        let mut lastend_an = Vec::new();
-        let mut debug_log = String::new();
-        let belastete_flurstuecke = match get_belastete_flurstuecke(
-            vm.clone(),
-            &eintrag.bv_nr.text(),
-            &kt.text_sauber,
-            &grundbuch.titelblatt,
-            &grundbuch.bestandsverzeichnis.eintraege,
-            konfiguration,
-            &mut debug_log,
-            &mut lastend_an,
-            &mut warnungen,
-            &mut fehler,
-        ) {
-            Ok(o) => o,
+    for v in grundbuch.abt3.veraenderungen.iter() {
+        let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
+            Ok(s) => s,
             Err(e) => {
-                fehler.push(e);
+                fehler.push(format!(
+                    "Konnte Abt. 3 Veränderung nicht lesen: {}: {}",
+                    v.lfd_nr.text(),
+                    e
+                ));
                 Vec::new()
             }
         };
 
-        let rechtsinhaber = match kt.rechtsinhaber.clone() {
-            Some(s) => s,
-            None => {
-                fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
-                String::new()
-            }
-        };
-
-        let schuldenart = match kt.schuldenart.clone() {
-            Some(s) => s,
-            None => {
-                fehler.push(format!("Konnte Schuldenart nicht auslesen"));
-                SchuldenArt::Grundschuld
-            }
-        };
-
-        let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
-            Some(s) => s.clone(),
-            None => {
-                warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
-                Nebenbeteiligter {
-                    typ: None,
-                    ordnungsnummer: None,
-                    name: rechtsinhaber.clone(),
-                    extra: NebenbeteiligterExtra::default(),
-                }
-            }
-        };
-
-        abt3_analysiert.push(Abt3Analysiert {
-            lfd_nr: eintrag.lfd_nr,
-            text_kurz: kt.gekuerzt,
-            schuldenart,
-            rechtsinhaber,
-            betrag: kt.betrag,
-            spalte_2: eintrag.bv_nr.clone().text(),
-            belastete_flurstuecke,
-            lastend_an,
-            text_original: kt.text_sauber,
-            nebenbeteiligter,
-            warnungen,
-            fehler,
-        });
+        if spalte_1_nummern.contains(&eintrag.lfd_nr) {
+            eintrag_veraenderungen.push(v.text.clone());
+        }
     }
 
-    GrundbuchAnalysiert {
-        abt2: abt2_analysiert,
-        abt3: abt3_analysiert,
+    // Veränderungen Abt. 2 einfügen (speziell Rangvermerke)
+    if !eintrag_veraenderungen.is_empty() {
+        warnungen.push(format!(
+            "Veränderungsmittelungen Abt.3 beachten!: {}",
+            eintrag_veraenderungen
+                .iter()
+                .map(|q| q.text())
+                .collect::<Vec<_>>()
+                .join("\r\n")
+        ));
+        for v in eintrag_veraenderungen.iter() {
+            if eintrag.text.contains("Rang")
+                || eintrag.text.contains("Gleichrang")
+                || eintrag.text.contains("Mithaft")
+                || eintrag.text.contains("Gesamthaft")
+            {
+                eintrag.text.push_str(" ");
+                eintrag.text.push_str(&v.text());
+                eintrag.text.push_str("\r\n");
+            }
+        }
+    }
+
+    let grundbuch_von = grundbuch.titelblatt.grundbuch_von.clone();
+    let blatt = grundbuch.titelblatt.blatt.clone();
+    let lfd_nr = eintrag.lfd_nr;
+    let recht_id = format!("{grundbuch_von} Blatt {blatt} Abt. 3 lfd. Nr. {lfd_nr}");
+
+    let kt = crate::kurztext::text_kuerzen_abt3(
+        vm.clone(),
+        &recht_id,
+        &eintrag.betrag.text(),
+        &eintrag.text.text(),
+        &mut fehler,
+        konfiguration,
+    );
+    let mut lastend_an = Vec::new();
+    let mut debug_log = String::new();
+    let belastete_flurstuecke = match get_belastete_flurstuecke(
+        vm.clone(),
+        &eintrag.bv_nr.text(),
+        &kt.text_sauber,
+        &grundbuch.titelblatt,
+        &grundbuch.bestandsverzeichnis.eintraege,
+        konfiguration,
+        &mut debug_log,
+        &mut lastend_an,
+        &mut warnungen,
+        &mut fehler,
+    ) {
+        Ok(o) => o,
+        Err(e) => {
+            fehler.push(e);
+            Vec::new()
+        }
+    };
+
+    let rechtsinhaber = match kt.rechtsinhaber.clone() {
+        Some(s) => s,
+        None => {
+            fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
+            String::new()
+        }
+    };
+
+    let schuldenart = match kt.schuldenart.clone() {
+        Some(s) => s,
+        None => {
+            fehler.push(format!("Konnte Schuldenart nicht auslesen"));
+            SchuldenArt::Grundschuld
+        }
+    };
+
+    let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
+        Some(s) => s.clone(),
+        None => {
+            warnungen.push(format!("Konnte keine Ordnungsnummer finden"));
+            Nebenbeteiligter {
+                typ: None,
+                ordnungsnummer: None,
+                name: rechtsinhaber.clone(),
+                extra: NebenbeteiligterExtra::default(),
+            }
+        }
+    };
+
+    Abt3Analysiert {
+        lfd_nr: eintrag.lfd_nr,
+        text_kurz: kt.gekuerzt,
+        schuldenart,
+        rechtsinhaber,
+        betrag: kt.betrag,
+        spalte_2: eintrag.bv_nr.clone().text(),
+        belastete_flurstuecke,
+        lastend_an,
+        text_original: kt.text_sauber,
+        nebenbeteiligter,
+        warnungen,
+        fehler,
+        geroetet: eintrag.ist_geroetet(),
+        fertig_analysiert: true,
     }
 }
-
 
 pub fn get_belastete_flurstuecke(
     vm: PyVm,
@@ -705,7 +957,6 @@ fn flurstuecke_fortfuehren(
 
     bv_belastet
 }
-*/
 
 fn parse_spalte_1_veraenderung(spalte_1: &str) -> Result<Vec<usize>, String> {
     Ok(Vec::new()) // TODO

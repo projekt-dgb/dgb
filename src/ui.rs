@@ -2030,7 +2030,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     </div>
                 ", 
                     max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-                    analyse = render_analyse_grundbuch(open_file.get_analyse_grundbuch_nonblocking(rpc_data.vm.clone(), &rpc_data.loaded_nb, &rpc_data.konfiguration), false, false)
+                    analyse = render_analyse_grundbuch(&open_file.cache.start_and_block_until_finished(&open_file.analysiert, &rpc_data.vm, &rpc_data.loaded_nb, &rpc_data.konfiguration), false, false)
                 )
             } else {
                 format!("")
@@ -2085,7 +2085,7 @@ pub fn render_analyse_grundbuch(
                     {warnungen}
                 </div>
                 </div>",
-                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  gb_analysiert.titelblatt.grundbuch_von, gb_analysiert.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
                 text_original = if fuer_druck { format!("<p style='margin-top:10px;font-family:sans-serif;'>{}</p>", a2a.text_original) } else { String::new() }, 
                 max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a2a.text_kurz,
@@ -2200,7 +2200,7 @@ pub fn render_analyse_grundbuch(
                         {warnungen}
                     </div>
                 </div>",
-                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  gb_analysiert.titelblatt.grundbuch_von, gb_analysiert.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
                 text_original = if fuer_druck { format!("<p style='margin-top:10px;font-family:sans-serif;'>{}</p>", a3a.text_original) } else { String::new() }, 
                 max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a3a.text_kurz,
