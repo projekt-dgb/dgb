@@ -1123,6 +1123,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 &data.loaded_nb,
                 &data.konfiguration,
             );
+
+            if data.konfiguration.lefis_analyse_einblenden {
+                let _ = webview.evaluate_script(&format!(
+                    "replaceAnalyseGrundbuch(`{}`);",
+                    ui::render_analyse_grundbuch(&analyse, false, false)
+                ));
+            }
         }
         Cmd::SignalPdfPageRendered {
             pdf_amtsgericht,

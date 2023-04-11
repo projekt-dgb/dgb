@@ -2030,7 +2030,7 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                     </div>
                 ", 
                     max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-                    analyse = render_analyse_grundbuch(&open_file.cache.start_and_block_until_finished(&open_file.analysiert, &rpc_data.vm, &rpc_data.loaded_nb, &rpc_data.konfiguration), false, false)
+                    analyse = render_analyse_grundbuch(&open_file.cache.start_analyzing(&open_file.analysiert, &rpc_data.vm, &rpc_data.loaded_nb, &rpc_data.konfiguration), false, false)
                 )
             } else {
                 format!("")

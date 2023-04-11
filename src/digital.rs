@@ -674,20 +674,17 @@ pub fn lese_titelblatt(pdf_bytes: &[u8]) -> Result<Titelblatt, Fehler> {
     let strings = content
         .operations
         .iter()
-        .filter_map(|op| {
-            println!("{:?}", op);
-            match op.operator.as_str() {
-                "TJ" => Some(
-                    String::from_utf8_lossy(
-                        op.operands
-                            .get(0)
-                            .and_then(|o| lopdf::Object::as_array(o).ok())
-                            .and_then(|s| lopdf::Object::as_str(s.get(0)?).ok())?,
-                    )
-                    .to_string(),
-                ),
-                _ => None,
-            }
+        .filter_map(|op| match op.operator.as_str() {
+            "TJ" => Some(
+                String::from_utf8_lossy(
+                    op.operands
+                        .get(0)
+                        .and_then(|o| lopdf::Object::as_array(o).ok())
+                        .and_then(|s| lopdf::Object::as_str(s.get(0)?).ok())?,
+                )
+                .to_string(),
+            ),
+            _ => None,
         })
         .collect::<Vec<_>>();
 

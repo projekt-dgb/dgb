@@ -139,6 +139,8 @@ impl GrundbuchAnalysiertCache {
         nb: &[Nebenbeteiligter],
         konfiguration: &Konfiguration,
     ) -> GrundbuchAnalysiert {
+        let now = std::time::Instant::now();
+
         let current_state_cloned = self
             .inner
             .lock()
@@ -169,7 +171,13 @@ impl GrundbuchAnalysiertCache {
             let abt2_result = match current_state_cloned.abt2.get(&abt2_hash).cloned() {
                 Some(s) => s,
                 None => {
-                    if !current_state_cloned.abt2_in_progress.contains(&abt2_hash) {
+                    if !self
+                        .inner
+                        .lock()
+                        .unwrap()
+                        .abt2_in_progress
+                        .contains(&abt2_hash)
+                    {
                         self.inner
                             .lock()
                             .unwrap()
@@ -229,7 +237,13 @@ impl GrundbuchAnalysiertCache {
             let abt3_result = match current_state_cloned.abt3.get(&abt3_hash).cloned() {
                 Some(s) => s,
                 None => {
-                    if !current_state_cloned.abt3_in_progress.contains(&abt3_hash) {
+                    if !self
+                        .inner
+                        .lock()
+                        .unwrap()
+                        .abt3_in_progress
+                        .contains(&abt3_hash)
+                    {
                         self.inner
                             .lock()
                             .unwrap()
@@ -263,6 +277,8 @@ impl GrundbuchAnalysiertCache {
             };
             abt3_analysiert.push(abt3_result);
         }
+
+        let now2 = std::time::Instant::now();
 
         GrundbuchAnalysiert {
             titelblatt: grundbuch.titelblatt.clone(),
