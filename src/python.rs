@@ -1,3 +1,4 @@
+use crate::analyse::AnalyseFehler;
 use crate::Konfiguration;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -55,6 +56,8 @@ pub enum PyOk {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PyError {
     pub text: String,
+    #[serde(skip, default)]
+    pub py_script: Vec<String>,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -245,6 +248,7 @@ impl PyVm {
         }
 
         let generated = generate_script(konfiguration, &args);
+        let generated_lines = generated.lines().map(|s| s.to_string()).collect::<Vec<_>>();
 
         let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
@@ -257,31 +261,42 @@ impl PyVm {
             unsafe { Module::deserialize(&store, self.python_compiled_module.clone()) }.map_err(
                 |e| PyError {
                     text: format!("failed to deserialize module: {e}"),
+                    py_script: generated_lines.clone(),
                 },
             )?;
 
         module.set_name("python");
 
         let mut stdout_pipe = WasiBidirectionalSharedPipePair::new().with_blocking(false);
+        let mut stderr_pipe = WasiBidirectionalSharedPipePair::new().with_blocking(false);
 
-        let wasi_env =
-            prepare_webc_env(&mut store, stdout_pipe.clone(), &python_unpacked, "python").map_err(
-                |e| PyError {
-                    text: format!("{e}"),
-                },
-            )?;
-
-        exec_module(&mut store, &module, wasi_env).map_err(|e| PyError {
-            text: format!("{e}"),
+        let wasi_env = prepare_webc_env(
+            &mut store,
+            stdout_pipe.clone(),
+            stderr_pipe.clone(),
+            &python_unpacked,
+            "python",
+        )
+        .map_err(|e| PyError {
+            text: format!("prepare_webc_env: {e}"),
+            py_script: generated_lines.clone(),
         })?;
+
+        let _ = exec_module(&mut store, &module, wasi_env);
+
+        let mut buf_stderr = Vec::new();
+        let _ = stderr_pipe.read_to_end(&mut buf_stderr);
 
         let mut buf = Vec::new();
-        stdout_pipe.read_to_end(&mut buf).map_err(|e| PyError {
-            text: format!("failed to read pipe: {e}"),
-        })?;
+        let _ = stdout_pipe.read_to_end(&mut buf);
 
         let result: PyResult = serde_json::from_slice(&buf).map_err(|e| PyError {
-            text: format!("serde_json from slice: {e}"),
+            text: format!(
+                "{}\r\n{}",
+                e.to_string(),
+                String::from_utf8_lossy(&buf_stderr)
+            ),
+            py_script: generated_lines.clone(),
         })?;
 
         self.script_result
@@ -389,6 +404,7 @@ fn unpack_tar_gz(bytes: Vec<u8>, prefix: &str) -> Result<FileMap, String> {
 fn prepare_webc_env(
     store: &mut Store,
     stdout: WasiBidirectionalSharedPipePair,
+    stderr: WasiBidirectionalSharedPipePair,
     files: &FileMap,
     command: &str,
 ) -> Result<WasiFunctionEnv, String> {
@@ -452,7 +468,8 @@ fn prepare_webc_env(
         .env("PYTHONHOME", "/")
         .env("PYTHONIOENCODING", "UTF-8")
         .arg("/lib/file.py")
-        .stdout(Box::new(stdout));
+        .stdout(Box::new(stdout))
+        .stderr(Box::new(stderr));
 
     Ok(wasi_env.finalize(store).map_err(|e| format!("E5: {e}"))?)
 }
@@ -589,7 +606,7 @@ pub fn text_saubern(
     vm: PyVm,
     rechtstext: &str,
     konfiguration: &Konfiguration,
-) -> Result<String, String> {
+) -> Result<String, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -597,11 +614,26 @@ pub fn text_saubern(
                 recht: rechtstext.to_string(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Betrag"
+            .to_string()
+            .into()),
+        PyOk::List(_) => Err("Erwartete PyOk::Str, kriegte PyOk::List".to_string().into()),
+        PyOk::RechteArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::RechteArt"
+            .to_string()
+            .into()),
+        PyOk::SchuldenArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
+            .to_string()
+            .into()),
+        PyOk::Spalte1(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Spalte1"
+            .to_string()
+            .into()),
     }
 }
 
@@ -610,7 +642,7 @@ pub fn get_belastete_flurstuecke(
     bv_nr: &str,
     text_sauber: &str,
     konfiguration: &Konfiguration,
-) -> Result<Spalte1Eintraege, String> {
+) -> Result<Spalte1Eintraege, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -619,22 +651,77 @@ pub fn get_belastete_flurstuecke(
                 text: text_sauber.to_string(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Spalte1(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err(
+            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::List(_) => Err(
+            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::List"
+                .to_string()
+                .into(),
+        ),
+        PyOk::RechteArt(_) => Err(
+            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Str(_) => Err(
+            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::Str"
+                .to_string()
+                .into(),
+        ),
     }
 }
 
-pub fn get_abkuerzungen(vm: PyVm, konfiguration: &Konfiguration) -> Result<Vec<String>, String> {
+pub fn get_abkuerzungen(
+    vm: PyVm,
+    konfiguration: &Konfiguration,
+) -> Result<Vec<String>, AnalyseFehler> {
     let result = vm
         .execute_script(konfiguration, ExecuteScriptType::GetAbkuerzungen)
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::List(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err(
+            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
+        PyOk::RechteArt(_) => Err(
+            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Str(_) => Err("get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::Str"
+            .to_string()
+            .into()),
     }
 }
 
@@ -644,7 +731,7 @@ pub fn get_rechte_art_abt2(
     text_sauber: &str,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<RechteArt, String> {
+) -> Result<RechteArt, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -652,11 +739,38 @@ pub fn get_rechte_art_abt2(
                 saetze: saetze_clean.to_vec(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::RechteArt(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err(
+            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
+        PyOk::List(_) => Err(
+            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::List"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Str(_) => Err(
+            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::Str"
+                .to_string()
+                .into(),
+        ),
     }
 }
 
@@ -666,7 +780,7 @@ pub fn get_rangvermerk_abt2(
     text_sauber: &str,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<String, String> {
+) -> Result<String, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -674,11 +788,26 @@ pub fn get_rangvermerk_abt2(
                 saetze: saetze_clean.to_vec(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Betrag"
+            .to_string()
+            .into()),
+        PyOk::List(_) => Err("Erwartete PyOk::Str, kriegte PyOk::List".to_string().into()),
+        PyOk::RechteArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::RechteArt"
+            .to_string()
+            .into()),
+        PyOk::SchuldenArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
+            .to_string()
+            .into()),
+        PyOk::Spalte1(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Spalte1"
+            .to_string()
+            .into()),
     }
 }
 
@@ -688,7 +817,7 @@ pub fn get_rechtsinhaber_abt2(
     text_sauber: &str,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<String, String> {
+) -> Result<String, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -696,11 +825,26 @@ pub fn get_rechtsinhaber_abt2(
                 saetze: saetze_clean.to_vec(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Betrag"
+            .to_string()
+            .into()),
+        PyOk::List(_) => Err("Erwartete PyOk::Str, kriegte PyOk::List".to_string().into()),
+        PyOk::RechteArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::RechteArt"
+            .to_string()
+            .into()),
+        PyOk::SchuldenArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
+            .to_string()
+            .into()),
+        PyOk::Spalte1(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Spalte1"
+            .to_string()
+            .into()),
     }
 }
 
@@ -710,7 +854,7 @@ pub fn get_betrag_abt3(
     text_sauber: &str,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<Betrag, String> {
+) -> Result<Betrag, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -718,11 +862,36 @@ pub fn get_betrag_abt3(
                 saetze: saetze_clean.to_vec(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Betrag(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Str(_) => Err("get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::Str"
+            .to_string()
+            .into()),
+        PyOk::List(_) => Err(
+            "get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::List"
+                .to_string()
+                .into(),
+        ),
+        PyOk::RechteArt(_) => Err(
+            "get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_betrag_abt3: Erwartete PyOk::SBetragtr, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
     }
 }
 
@@ -732,7 +901,7 @@ pub fn get_schulden_art_abt3(
     text_sauber: &str,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<SchuldenArt, String> {
+) -> Result<SchuldenArt, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -740,11 +909,38 @@ pub fn get_schulden_art_abt3(
                 saetze: saetze_clean.to_vec(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::SchuldenArt(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Str(_) => Err(
+            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::Str"
+                .to_string()
+                .into(),
+        ),
+        PyOk::List(_) => Err(
+            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::List"
+                .to_string()
+                .into(),
+        ),
+        PyOk::RechteArt(_) => Err(
+            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Betrag(_) => Err(
+            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
     }
 }
 
@@ -754,7 +950,7 @@ pub fn get_rechtsinhaber_abt3(
     text_sauber: &str,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<String, String> {
+) -> Result<String, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -763,11 +959,38 @@ pub fn get_rechtsinhaber_abt3(
                 recht_id: recht_id.to_string(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err(
+            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::List(_) => Err(
+            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::List"
+                .to_string()
+                .into(),
+        ),
+        PyOk::RechteArt(_) => Err(
+            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
     }
 }
 
@@ -779,7 +1002,7 @@ pub fn get_kurztext_abt2(
     rangvermerk: Option<String>,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<String, String> {
+) -> Result<String, AnalyseFehler> {
     let result = vm
         .execute_script(
             &konfiguration,
@@ -789,11 +1012,36 @@ pub fn get_kurztext_abt2(
                 rangvermerk: rangvermerk.unwrap_or_default(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err(
+            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::List(_) => Err("get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::List"
+            .to_string()
+            .into()),
+        PyOk::RechteArt(_) => Err(
+            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
     }
 }
 
@@ -806,7 +1054,7 @@ pub fn get_kurztext_abt3(
     rechtsinhaber: Option<String>,
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
-) -> Result<String, String> {
+) -> Result<String, AnalyseFehler> {
     let result = vm
         .execute_script(
             konfiguration,
@@ -817,11 +1065,36 @@ pub fn get_kurztext_abt3(
                 rechtsinhaber: rechtsinhaber.unwrap_or_default(),
             },
         )
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| AnalyseFehler {
+            text: e.text,
+            py_script: Some(e.py_script),
+        })?;
 
     match result {
         PyOk::Str(s) => Ok(s),
-        e => Err(format!("{:?}", e)),
+        PyOk::Betrag(_) => Err(
+            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::Betrag"
+                .to_string()
+                .into(),
+        ),
+        PyOk::List(_) => Err("get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::List"
+            .to_string()
+            .into()),
+        PyOk::RechteArt(_) => Err(
+            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::RechteArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::SchuldenArt(_) => Err(
+            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
+                .to_string()
+                .into(),
+        ),
+        PyOk::Spalte1(_) => Err(
+            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::Spalte1"
+                .to_string()
+                .into(),
+        ),
     }
 }
 

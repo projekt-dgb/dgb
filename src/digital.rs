@@ -1,7 +1,6 @@
 use crate::{python::PyVm, AnpassungSeite, Konfiguration, PdfFile, Rect};
 use chrono::{DateTime, Utc};
 use image::ImageError;
-use lopdf::content::Operation;
 use lopdf::Error as LoPdfError;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -710,6 +709,7 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     pdf_bytes: &[u8],
     seite: u32,
     titelblatt: &Titelblatt,
+    render_hocr: bool,
 ) -> Result<(), Fehler> {
     let temp_ordner = std::env::temp_dir()
         .join(&titelblatt.grundbuch_von)
@@ -718,41 +718,21 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
 
-    let mut pdftoppm_output_path = format!("page-clean-{}.png", seite);
+    let pdftoppm_output_path = format!("page-clean-{}.png", seite);
 
-    if temp_ordner.join(&pdftoppm_output_path).exists() {
-        if !temp_ordner.join(&format!("{seite}.hocr.json")).exists() {
-            let bytes = match read_png_and_convert_to_bmp(&temp_ordner.join(&pdftoppm_output_path))
-            {
-                Some(s) => s,
-                None => return Ok(()), // TODO
-            };
-            let hocr = match crate::tesseract_get_hocr(&bytes) {
-                Ok(o) => o,
-                _ => return Ok(()), // TODO
-            };
-            let _ = std::fs::write(
-                &temp_ordner.join(&format!("{seite}.hocr.json")),
-                serde_json::to_string_pretty(&hocr).unwrap_or_default(),
-            );
-        }
-
+    if temp_ordner.join(&pdftoppm_output_path).exists() && !render_hocr {
         return Ok(());
     }
 
     let mut pdf_bytes = pdf_bytes.to_vec();
     pdf_bytes = clean_pdf_bytes(&pdf_bytes)?;
 
-    if temp_ordner.join(&pdftoppm_output_path).exists() {
-        return Ok(());
-    }
-
     let pdf_base64 = base64::encode(pdf_bytes);
     let pdf_amtsgericht = &titelblatt.amtsgericht;
     let pdf_grundbuch_von = &titelblatt.grundbuch_von;
     let pdf_blatt = titelblatt.blatt.clone();
 
-    let _ = webview.evaluate_script(&format!("renderPdfPage(`{pdf_base64}`, `{pdf_amtsgericht}`, `{pdf_grundbuch_von}`, `{pdf_blatt}`, {seite})"));
+    let _ = webview.evaluate_script(&format!("renderPdfPage(`{pdf_base64}`, `{pdf_amtsgericht}`, `{pdf_grundbuch_von}`, `{pdf_blatt}`, {seite}, {render_hocr:?})"));
 
     Ok(())
 }
@@ -3563,7 +3543,7 @@ fn column_contains_point(col: &Column, start_x: f32, start_y: f32) -> bool {
     start_x <= col.max_x && start_x >= col.min_x && start_y <= col.max_y && start_y >= col.min_y
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Grundbuch {
     pub titelblatt: Titelblatt,
     #[serde(default)]
@@ -3658,7 +3638,7 @@ impl PositionInPdf {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bestandsverzeichnis {
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -4239,7 +4219,7 @@ impl FlurstueckGroesse {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BvZuschreibung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -4269,7 +4249,7 @@ impl BvZuschreibung {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BvAbschreibung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -4967,7 +4947,7 @@ pub fn bv_eintraege_roetungen_loeschen(bv_eintraege: &mut [BvEintrag]) {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abteilung1 {
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -5028,7 +5008,7 @@ impl Abteilung1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 #[repr(C)]
 pub enum Abt1Eintrag {
@@ -5036,7 +5016,7 @@ pub enum Abt1Eintrag {
     V2(Abt1EintragV2),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt1EintragV2 {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
@@ -5057,7 +5037,7 @@ pub struct Abt1EintragV2 {
     pub position_in_pdf: Option<PositionInPdf>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt1EintragV1 {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
@@ -5083,7 +5063,7 @@ pub struct Abt1EintragV1 {
     pub position_in_pdf: Option<PositionInPdf>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt1GrundEintragung {
     // lfd. Nr. der Eintragung
     #[serde(default)]
@@ -5361,7 +5341,7 @@ pub fn analysiere_abt1(
     Ok(abt1)
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abteilung2 {
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -5380,7 +5360,7 @@ impl Abteilung2 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt2Eintrag {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
@@ -5752,7 +5732,7 @@ pub struct GemarkungFlurFlurstueck {
     pub flurstueck: String,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt1Veraenderung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -5779,7 +5759,7 @@ impl Abt1Veraenderung {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Abt1Loeschung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -5806,7 +5786,7 @@ impl Abt1Loeschung {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Abt2Veraenderung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -5833,7 +5813,7 @@ impl Abt2Veraenderung {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt2Loeschung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -5996,7 +5976,7 @@ pub fn analysiere_abt2(
     })
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abteilung3 {
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -6015,7 +5995,7 @@ impl Abteilung3 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt3Eintrag {
     // lfd. Nr. der Eintragung
     pub lfd_nr: usize,
@@ -6062,7 +6042,7 @@ impl Abt3Eintrag {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt3Veraenderung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]
@@ -6091,7 +6071,7 @@ impl Abt3Veraenderung {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Abt3Loeschung {
     #[serde(default)]
     #[serde(skip_serializing_if = "StringOrLines::is_empty")]

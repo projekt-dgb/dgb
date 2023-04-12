@@ -77,7 +77,7 @@ let rpc = {
     });
   },
 
-  check_for_pdf_loaded: function(arg, arg2, arg3) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2, pdf_path: arg3 }); },
+  check_for_pdf_loaded: function(arg, arg2, arg3, reload_hocr) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2, pdf_path: arg3, reload_hocr: reload_hocr }); },
   edit_text: function(arg, arg2) { rpc.invoke({ cmd : 'edit_text', path: arg, new_value: arg2 }); },
   eintrag_neu: function(arg) { rpc.invoke({ cmd : 'eintrag_neu', path: arg }); },
   eintrag_loeschen: function(arg) { rpc.invoke({ cmd : 'eintrag_loeschen', path: arg }); },
@@ -134,6 +134,7 @@ let rpc = {
     pdf_blatt,
     seite,
     image_data_base64,
+    render_hocr,
     ) { 
         rpc.invoke({ 
         cmd : 'signal_pdf_page_rendered', 
@@ -142,6 +143,7 @@ let rpc = {
         pdf_blatt: pdf_blatt,
         seite: seite, 
         image_data_base64: image_data_base64, 
+        render_hocr: render_hocr,
         }); 
     },
 };
@@ -172,7 +174,7 @@ let files_to_check = {};
 
 setInterval(function(){
     for (const [key, value] of Object.entries(files_to_check)) {
-        rpc.check_for_pdf_loaded(key, value[0], value[1]);
+        rpc.check_for_pdf_loaded(key, value.filename, value.pdf_file_name, value.reload_hocr);
     }
 }, 1000);
 
@@ -181,8 +183,18 @@ setInterval(function(){
     rpc.check_for_grundbuch_loaded();
 }, 194);
 
-function startCheckingForPageLoaded(filepath, filename, pdf_file_name) {
-    files_to_check[filepath] = [filename, pdf_file_name];
+function startCheckingForPageLoaded(filepath, filename, pdf_file_name, reload_hocr) {
+    console.log("startCheckingForPageLoaded");
+    console.log(filepath);
+    console.log(filename);
+    console.log(pdf_file_name);
+    console.log(reload_hocr);
+    console.log("----");
+    files_to_check[filepath] = {
+        filename: filename, 
+        pdf_file_name: pdf_file_name, 
+        reload_hocr: reload_hocr
+    };
 }
 
 function stopCheckingForPageLoaded(filename) {
@@ -204,6 +216,7 @@ async function renderPdfPage(
     pdf_grundbuch_von,
     pdf_blatt,
     seite,
+    skip_hocr,
 ) {
   
 console.log("renderPdfPage");
@@ -234,6 +247,7 @@ console.log("renderPdfPage");
                 pdf_blatt,
                 seite,
                 dataURL,
+                skip_hocr,
             )
         });
     });

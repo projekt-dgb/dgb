@@ -2142,11 +2142,19 @@ pub fn render_analyse_grundbuch(
                     .iter()
                     .map(|w| {
                         format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
-                            <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <p style='display:inline-block;margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                <img src='{fehler_icon}' style='width:12px;height:12px;'/>
+                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            text = w,
+                            text = {
+                                println!("error {}", w.text);
+                                normalize_for_js(w.text.clone())
+                            },
+                            opt_button = match w.py_script.as_deref() {
+                                None => "",
+                                Some(s) => "<div style='display:flex;flex-grow:1;'></div><button>Script ansehen</button>",
+                            },
                         )
                     })
                     .collect::<Vec<_>>()
@@ -2244,12 +2252,18 @@ pub fn render_analyse_grundbuch(
                     fehler.dedup();
                     
                     fehler.iter().map(|w| {
-                        format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
-                            <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <p style='display:inline-block;margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                        format!("
+                            <span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
+                                <img src='{fehler_icon}' style='width:12px;height:12px;'/>
+                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            text = w,
+                            text = normalize_for_js(w.text.clone()),
+                            opt_button = match w.py_script.as_deref() {
+                                Some(s) => "<div style='display:flex;flex-grow:1;'></div><button>Script ansehen</button>",
+                                None => "",
+                            },
                         )
                     }).collect::<Vec<_>>().join("\r\n")
                 },
@@ -3794,5 +3808,8 @@ pub fn render_pdf_image_zeilen(
 }
 
 pub fn normalize_for_js(s: String) -> String {
-    s.lines().map(|s| s.trim()).collect::<Vec<_>>().join("")
+    s.lines()
+        .map(|s| s.trim().replace('`', "'"))
+        .collect::<Vec<_>>()
+        .join("")
 }

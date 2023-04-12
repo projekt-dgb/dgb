@@ -14,6 +14,29 @@ pub struct GrundbuchAnalysiert {
     pub abt3: Vec<Abt3Analysiert>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub struct AnalyseFehler {
+    pub text: String,
+    #[serde(skip, default)]
+    pub py_script: Option<Vec<String>>,
+}
+
+impl From<String> for AnalyseFehler {
+    fn from(s: String) -> AnalyseFehler {
+        AnalyseFehler {
+            text: s,
+            py_script: None,
+        }
+    }
+}
+
+impl From<AnalyseFehler> for String {
+    fn from(s: AnalyseFehler) -> String {
+        s.text.clone()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Abt2Analysiert {
     pub lfd_nr: usize,
@@ -29,7 +52,7 @@ pub struct Abt2Analysiert {
     pub text_original: String,
     pub nebenbeteiligter: Nebenbeteiligter,
     pub warnungen: Vec<String>,
-    pub fehler: Vec<String>,
+    pub fehler: Vec<AnalyseFehler>,
     #[serde(skip, default)]
     pub geroetet: bool,
     #[serde(skip, default)]
@@ -51,7 +74,7 @@ pub struct Abt3Analysiert {
     pub text_original: String,
     pub nebenbeteiligter: Nebenbeteiligter,
     pub warnungen: Vec<String>,
-    pub fehler: Vec<String>,
+    pub fehler: Vec<AnalyseFehler>,
     #[serde(skip, default)]
     pub geroetet: bool,
     #[serde(skip, default)]
@@ -139,8 +162,6 @@ impl GrundbuchAnalysiertCache {
         nb: &[Nebenbeteiligter],
         konfiguration: &Konfiguration,
     ) -> GrundbuchAnalysiert {
-        let now = std::time::Instant::now();
-
         let current_state_cloned = self
             .inner
             .lock()
@@ -164,7 +185,7 @@ impl GrundbuchAnalysiertCache {
                 text_original: eintrag.text.text(),
                 nebenbeteiligter: Nebenbeteiligter::default(),
                 warnungen: Vec::new(),
-                fehler: vec!["Wird geladen...".to_string()],
+                fehler: vec!["Wird geladen...".to_string().into()],
                 geroetet: eintrag.ist_geroetet(),
                 fertig_analysiert: false,
             };
@@ -230,7 +251,7 @@ impl GrundbuchAnalysiertCache {
                 text_original: eintrag.text.text(),
                 nebenbeteiligter: Nebenbeteiligter::default(),
                 warnungen: Vec::new(),
-                fehler: vec!["Wird geladen...".to_string()],
+                fehler: vec!["Wird geladen...".to_string().into()],
                 geroetet: eintrag.ist_geroetet(),
                 fertig_analysiert: false,
             };
@@ -277,8 +298,6 @@ impl GrundbuchAnalysiertCache {
             };
             abt3_analysiert.push(abt3_result);
         }
-
-        let now2 = std::time::Instant::now();
 
         GrundbuchAnalysiert {
             titelblatt: grundbuch.titelblatt.clone(),
@@ -344,11 +363,14 @@ fn rayon_task_analyze_abt2(
         let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
             Ok(s) => s,
             Err(e) => {
-                fehler.push(format!(
-                    "Konnte Abt. 2 Veränderung nicht lesen: {}: {}",
-                    v.lfd_nr.text(),
-                    e
-                ));
+                fehler.push(AnalyseFehler {
+                    text: format!(
+                        "Konnte Abt. 2 Veränderung nicht lesen: {}: {}",
+                        v.lfd_nr.text(),
+                        e
+                    ),
+                    py_script: None,
+                });
                 Vec::new()
             }
         };
@@ -403,13 +425,10 @@ fn rayon_task_analyze_abt2(
         }
     };
 
-    let mut rechteart = match kt.rechteart.clone() {
-        Some(s) => s,
-        None => {
-            fehler.push(format!("Konnte Rechteart nicht auslesen"));
-            RechteArt::SonstigeDabagrechteart
-        }
-    };
+    let mut rechteart = kt
+        .rechteart
+        .clone()
+        .unwrap_or(RechteArt::SonstigeDabagrechteart);
 
     let rechtsinhaber = match kt.rechtsinhaber.clone() {
         Some(s) => s,
@@ -445,12 +464,12 @@ fn rayon_task_analyze_abt2(
                     rechteart = ra;
                     ri.unwrap_or_default()
                 } else {
-                    fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
+                    fehler.push(format!("Konnte Rechtsinhaber nicht auslesen").into());
                     String::new()
                 }
             }
             _ => {
-                fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
+                fehler.push(format!("Konnte Rechtsinhaber nicht auslesen").into());
                 String::new()
             }
         },
@@ -475,9 +494,7 @@ fn rayon_task_analyze_abt2(
 
     if rangvermerk.is_some() {
         if !(kt.gekuerzt.contains("Rang") || kt.gekuerzt.contains("Gleichrang")) {
-            fehler.push(format!(
-                "Rangvermerk vorhanden, aber nicht in Kurztext vermerkt"
-            ));
+            fehler.push(format!("Rangvermerk vorhanden, aber nicht in Kurztext vermerkt").into());
         }
     }
 
@@ -516,11 +533,14 @@ fn rayon_task_analyze_abt3(
         let spalte_1_nummern = match parse_spalte_1_veraenderung(&v.lfd_nr.text()) {
             Ok(s) => s,
             Err(e) => {
-                fehler.push(format!(
-                    "Konnte Abt. 3 Veränderung nicht lesen: {}: {}",
-                    v.lfd_nr.text(),
-                    e
-                ));
+                fehler.push(AnalyseFehler {
+                    text: format!(
+                        "Konnte Abt. 3 Veränderung nicht lesen: {}: {}",
+                        v.lfd_nr.text(),
+                        e
+                    ),
+                    py_script: None,
+                });
                 Vec::new()
             }
         };
@@ -587,21 +607,9 @@ fn rayon_task_analyze_abt3(
         }
     };
 
-    let rechtsinhaber = match kt.rechtsinhaber.clone() {
-        Some(s) => s,
-        None => {
-            fehler.push(format!("Konnte Rechtsinhaber nicht auslesen"));
-            String::new()
-        }
-    };
+    let rechtsinhaber = kt.rechtsinhaber.clone().unwrap_or_default();
 
-    let schuldenart = match kt.schuldenart.clone() {
-        Some(s) => s,
-        None => {
-            fehler.push(format!("Konnte Schuldenart nicht auslesen"));
-            SchuldenArt::Grundschuld
-        }
-    };
+    let schuldenart = kt.schuldenart.clone().unwrap_or(SchuldenArt::Grundschuld);
 
     let nebenbeteiligter = match nb.iter().find(|n| n.name == rechtsinhaber) {
         Some(s) => s.clone(),
@@ -644,13 +652,19 @@ pub fn get_belastete_flurstuecke(
     debug_log: &mut String,
     eintraege: &mut Vec<Spalte1Eintrag>,
     warnungen: &mut Vec<String>,
-    fehler: &mut Vec<String>,
-) -> Result<Vec<BvEintrag>, String> {
+    fehler: &mut Vec<AnalyseFehler>,
+) -> Result<Vec<BvEintrag>, AnalyseFehler> {
     let spalte1_eintraege =
         crate::python::get_belastete_flurstuecke(vm, bv_nr, text_sauber, konfiguration)?;
 
     eintraege.append(&mut spalte1_eintraege.eintraege.clone());
-    fehler.append(&mut spalte1_eintraege.warnungen.clone());
+    fehler.extend(
+        spalte1_eintraege
+            .warnungen
+            .clone()
+            .into_iter()
+            .map(Into::into),
+    );
 
     let grundbuch_von = titelblatt.grundbuch_von.clone();
     let blatt = titelblatt.blatt.clone();
@@ -851,13 +865,16 @@ pub fn get_belastete_flurstuecke(
         .collect::<Vec<_>>();
 
     if belastet_bv.is_empty() {
-        fehler.push(format!("Konnte keine Flurstücke zuordnen!"));
+        fehler.push(format!("Konnte keine Flurstücke zuordnen!").into());
         log.push(format!("<strong>Regex:</strong>"));
         log.push(format!("<p>{}</p>", regex_matches.join(", ")));
-        fehler.push(format!(
-            "<div style='flex-direction:row;max-width:600px;'>{}</div>",
-            log.join("\r\n")
-        ));
+        fehler.push(
+            format!(
+                "<div style='flex-direction:row;max-width:600px;'>{}</div>",
+                log.join("\r\n")
+            )
+            .into(),
+        );
     }
 
     debug_log.push_str(&format!("Regex:\r\n"));
@@ -896,7 +913,7 @@ fn flurstuecke_fortfuehren(
     titelblatt: &Titelblatt,
     bestandsverzeichnis: &[BvEintrag],
     warnungen: &mut Vec<String>,
-    fehler: &mut Vec<String>,
+    fehler: &mut Vec<AnalyseFehler>,
 ) -> Vec<BvEintrag> {
     let mut bv_belastet = bv_eintraege.to_vec();
     let mut alle_fortgefuehrt = false;
@@ -959,12 +976,12 @@ fn flurstuecke_fortfuehren(
                 fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}",
                     bv.get_lfd_nr(),
                     fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
-                ));
+                ).into());
             } else {
                 fehler.push(format!("BV-Nr. {} wurde fortgeführt, kann aber nicht eindeutig zugeordnet werden (Zerlegung?): Fortgeführt als eins von {:?}",
                     bv.get_lfd_nr(),
                     fortgeführt_als.iter().map(|l| l.get_lfd_nr()).collect::<Vec<_>>(),
-                ));
+                ).into());
             }
         }
 

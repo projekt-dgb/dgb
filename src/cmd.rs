@@ -153,6 +153,7 @@ pub enum Cmd {
         pdf_path: String,
         file_path: String,
         file_name: String,
+        reload_hocr: bool,
     },
     #[serde(rename = "edit_text")]
     EditText { path: String, new_value: String },
@@ -222,6 +223,7 @@ pub enum Cmd {
         pdf_blatt: String,
         seite: usize,
         image_data_base64: String,
+        render_hocr: bool,
     },
     #[serde(rename = "check_for_grundbuch_loaded")]
     CheckForGrundbuchLoaded,

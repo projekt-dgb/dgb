@@ -1,4 +1,5 @@
 use crate::{
+    analyse::AnalyseFehler,
     python::{Betrag, PyVm, RechteArt, SchuldenArt},
     Konfiguration,
 };
@@ -20,7 +21,7 @@ pub fn text_kuerzen_abt2(
     vm: PyVm,
     recht_id: &str,
     input: &str,
-    fehler: &mut Vec<String>,
+    fehler: &mut Vec<AnalyseFehler>,
     konfiguration: &Konfiguration,
 ) -> KurzTextAbt2 {
     let (text_sauber, saetze_clean) = match text_saubern(vm.clone(), input, konfiguration) {
@@ -40,6 +41,7 @@ pub fn text_kuerzen_abt2(
     ) {
         Ok(o) => Some(o),
         Err(e) => {
+            println!("text_kuerzen_abt2: rechtsinhaber = {:?}", e);
             fehler.push(e);
             None
         }
@@ -132,7 +134,7 @@ pub fn text_kuerzen_abt3(
     recht_id: &str,
     betrag: &str,
     input: &str,
-    fehler: &mut Vec<String>,
+    fehler: &mut Vec<AnalyseFehler>,
     konfiguration: &Konfiguration,
 ) -> KurzTextAbt3 {
     let (text_sauber, saetze_clean) = match text_saubern(vm.clone(), input, konfiguration) {
@@ -312,7 +314,7 @@ pub fn text_saubern(
     vm: PyVm,
     input: &str,
     konfiguration: &Konfiguration,
-) -> Result<(String, Vec<String>), String> {
+) -> Result<(String, Vec<String>), AnalyseFehler> {
     let text_sauber = crate::python::text_saubern(vm.clone(), input, konfiguration)?;
 
     let abkuerzungen = crate::python::get_abkuerzungen(vm.clone(), konfiguration)?;
