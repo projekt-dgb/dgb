@@ -1119,6 +1119,32 @@ pub struct LefisDateiExport {
 
 fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
     match &arg {
+        Cmd::OpenScript { lines } => {
+            let lines = lines
+                .iter()
+                .map(|l| {
+                    l.replace("⠁", "\"")
+                        .replace("⠂", "'")
+                        .replace("⠇", "`")
+                        .replace("⠉", "\\\"")
+                        .replace("⠊", "\\")
+                        .replace("⠍", ">")
+                        .replace("⠎", "<")
+                        .replace("⠏", ")")
+                        .replace("⠑", "(")
+                        .replace("⠟", "{")
+                        .replace("⠠", "}")
+                })
+                .collect::<Vec<_>>();
+            let random = rand::random::<u64>();
+            let tempdir = std::env::temp_dir().join(format!("{random}.txt"));
+            let _ = std::fs::write(&tempdir, lines.join("\r\n"));
+            let url = match url::Url::parse(&format!("file://{}", tempdir.display())) {
+                Ok(o) => o,
+                Err(_) => return,
+            };
+            url_open::open(&url);
+        }
         Cmd::CheckForGrundbuchLoaded => {
             let open_file = match data
                 .open_page

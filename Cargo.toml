@@ -43,6 +43,8 @@ sha2 = "0.10.6"
 tesseract-static = "0.1.0"
 euclid = "0.22.9"
 hex = "0.4.3"
+url_open = "0.0.1"
+url = "2.3.1"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"

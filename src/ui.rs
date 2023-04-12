@@ -2152,8 +2152,22 @@ pub fn render_analyse_grundbuch(
                                 normalize_for_js(w.text.clone())
                             },
                             opt_button = match w.py_script.as_deref() {
-                                None => "",
-                                Some(s) => "<div style='display:flex;flex-grow:1;'></div><button>Script ansehen</button>",
+                                None => String::new(),
+                                Some(s) => {
+                                    let json = s.join("⠀")
+                                    .replace("\"", "⠁")
+                                    .replace("'", "⠂")
+                                    .replace('`', "⠇")
+                                    .replace("\\\"", "⠉")
+                                    .replace("\\", "⠊")
+                                    .replace(">", "⠍")
+                                    .replace("<", "⠎")
+                                    .replace(")", "⠏")
+                                    .replace("(", "⠑")
+                                    .replace("{", "⠟")
+                                    .replace("}", "⠠");
+                                    format!("<div style='display:flex;flex-grow:1;'></div><button class='__application-view-script' onmouseup='openScript(\"{json}\")' >Script ansehen</button>")
+                                },
                             },
                         )
                     })
@@ -2261,8 +2275,22 @@ pub fn render_analyse_grundbuch(
                             fehler_icon = fehler_str,
                             text = normalize_for_js(w.text.clone()),
                             opt_button = match w.py_script.as_deref() {
-                                Some(s) => "<div style='display:flex;flex-grow:1;'></div><button>Script ansehen</button>",
-                                None => "",
+                                None => String::new(),
+                                Some(s) => {
+                                    let json = s.join("⠀")
+                                    .replace("\"", "⠁")
+                                    .replace("'", "⠂")
+                                    .replace('`', "⠇")
+                                    .replace("\\\"", "⠉")
+                                    .replace("\\", "⠊")
+                                    .replace(">", "⠍")
+                                    .replace("<", "⠎")
+                                    .replace(")", "⠏")
+                                    .replace("(", "⠑")
+                                    .replace("{", "⠟")
+                                    .replace("}", "⠠");
+                                    format!("<div style='display:flex;flex-grow:1;'></div><button class='__application-view-script' onmouseup='openScript(\"{json}\")' >Script ansehen</button>")
+                                },
                             },
                         )
                     }).collect::<Vec<_>>().join("\r\n")

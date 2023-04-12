@@ -227,4 +227,6 @@ pub enum Cmd {
     },
     #[serde(rename = "check_for_grundbuch_loaded")]
     CheckForGrundbuchLoaded,
+    #[serde(rename = "open_script")]
+    OpenScript { lines: Vec<String> },
 }

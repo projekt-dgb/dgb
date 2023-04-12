@@ -6347,20 +6347,3 @@ pub fn analysiere_abt3(
         loeschungen: abt3_loeschungen,
     })
 }
-
-fn get_erster_text_bei_ca(
-    texte: &[Textblock],
-    skip: usize,
-    start: f32,
-    ziel: f32,
-) -> Option<&Textblock> {
-    for t in texte.iter().skip(skip.saturating_sub(1)) {
-        let start = start - 20.0;
-        // let ziel = ziel + 20.0;
-        if t.start_y > start || !(t.end_y < start) {
-            return Some(t);
-        }
-    }
-
-    None
-}

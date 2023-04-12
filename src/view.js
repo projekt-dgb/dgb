@@ -37,7 +37,8 @@ let rpc = {
   upload_gbx: function() { rpc.invoke({ cmd : 'upload_gbx' }); },
   download_gbx: function(download_id) { rpc.invoke({ cmd : 'download_gbx', download_id: download_id }); },
   grundbuch_abonnieren: function(download_id) { rpc.invoke({ cmd : 'grundbuch_abonnieren', download_id: download_id }); },
-  
+  open_script: function(lines) { rpc.invoke({ cmd : 'open_script', lines: lines }); },
+
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
@@ -219,7 +220,6 @@ async function renderPdfPage(
     skip_hocr,
 ) {
   
-console.log("renderPdfPage");
   var pdf_bytes = atob(pdf_base64);
   var loadingTask = pdfjsLib.getDocument({data: pdf_bytes});
 
@@ -252,6 +252,10 @@ console.log("renderPdfPage");
         });
     });
   });
+}
+
+function openScript(script) {
+    rpc.open_script(script.split('⠀'));
 }
 
 function editCommitTitle(event) {

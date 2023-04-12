@@ -547,3 +547,19 @@ img {
     text-decoration: none;
 }
         
+.__application-view-script {
+    font-size: 10px;
+    color: black;
+    background: white;
+    border: 1px solid rgb(22, 99, 162);
+    outline:none;
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+.__application-view-script:hover {
+    background: rgb(22, 99, 162);
+    color: white;
+    border: 1px solid rgb(22, 52, 76);
+}
