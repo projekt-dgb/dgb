@@ -19,6 +19,8 @@ pub struct GrundbuchAnalysiert {
 pub struct AnalyseFehler {
     pub text: String,
     #[serde(skip, default)]
+    pub traceback: Option<Vec<String>>,
+    #[serde(skip, default)]
     pub py_script: Option<Vec<String>>,
 }
 
@@ -26,6 +28,7 @@ impl From<String> for AnalyseFehler {
     fn from(s: String) -> AnalyseFehler {
         AnalyseFehler {
             text: s,
+            traceback: None,
             py_script: None,
         }
     }
@@ -369,6 +372,7 @@ fn rayon_task_analyze_abt2(
                         v.lfd_nr.text(),
                         e
                     ),
+                    traceback: None,
                     py_script: None,
                 });
                 Vec::new()
@@ -535,6 +539,7 @@ fn rayon_task_analyze_abt3(
                         v.lfd_nr.text(),
                         e
                     ),
+                    traceback: None,
                     py_script: None,
                 });
                 Vec::new()

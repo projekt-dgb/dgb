@@ -217,22 +217,27 @@ impl ExecuteScriptOk {
             PyOk::Str(s) => Ok(s.clone()),
             PyOk::Betrag(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Str, erhielt Betrag"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::List(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Str, erhielt List"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::RechteArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Str, erhielt RechteArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::SchuldenArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Str, erhielt SchuldenArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Spalte1(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Str, erhielt Spalte1"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
         }
@@ -242,22 +247,27 @@ impl ExecuteScriptOk {
             PyOk::List(s) => Ok(s.clone()),
             PyOk::Betrag(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete List, erhielt Betrag"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Str(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete List, erhielt Str"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::RechteArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete List, erhielt RechteArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::SchuldenArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete List, erhielt SchuldenArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Spalte1(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete List, erhielt Spalte1"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
         }
@@ -267,22 +277,27 @@ impl ExecuteScriptOk {
             PyOk::Spalte1(s) => Ok(s.clone()),
             PyOk::Betrag(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Spalte1, erhielt Betrag"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Str(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Spalte1, erhielt Str"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::RechteArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Spalte1, erhielt RechteArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::SchuldenArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Spalte1, erhielt SchuldenArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::List(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Spalte1, erhielt List"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
         }
@@ -292,22 +307,27 @@ impl ExecuteScriptOk {
             PyOk::RechteArt(s) => Ok(s.clone()),
             PyOk::Betrag(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete RechteArt, erhielt Betrag"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Str(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete RechteArt, erhielt Str"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Spalte1(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete RechteArt, erhielt Spalte1"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::SchuldenArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete RechteArt, erhielt SchuldenArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::List(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete RechteArt, erhielt List"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
         }
@@ -317,22 +337,27 @@ impl ExecuteScriptOk {
             PyOk::SchuldenArt(s) => Ok(s.clone()),
             PyOk::Betrag(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete SchuldenArt, erhielt Betrag"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Str(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete SchuldenArt, erhielt Str"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Spalte1(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete SchuldenArt, erhielt Spalte1"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::RechteArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete SchuldenArt, erhielt RechteArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::List(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete SchuldenArt, erhielt List"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
         }
@@ -342,22 +367,27 @@ impl ExecuteScriptOk {
             PyOk::Betrag(s) => Ok(s.clone()),
             PyOk::SchuldenArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Betrag, erhielt SchuldenArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Str(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Betrag, erhielt Str"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::Spalte1(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Betrag, erhielt Spalte1"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::RechteArt(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Betrag, erhielt RechteArt"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
             PyOk::List(_) => Err(AnalyseFehler {
                 text: format!("{id}: Erwartete Betrag, erhielt List"),
+                traceback: None,
                 py_script: Some(self.script.clone()),
             }),
         }
@@ -408,18 +438,23 @@ impl PyVm {
                 })
             }
             Some(PyResult::Err(e)) => {
+                let decoded_traceback = base64::decode(&e.text)
+                    .ok()
+                    .and_then(|bytes| String::from_utf8(bytes).ok())
+                    .unwrap_or_default();
+
+                let mut lines = decoded_traceback
+                    .split('⣿')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>();
+                let last_line = lines.pop().unwrap_or_default();
+
                 return Err(AnalyseFehler {
-                    text: format!(
-                        "{id}:⣿{}",
-                        html_escape::encode_text(&{
-                            base64::decode(&e.text)
-                                .ok()
-                                .and_then(|bytes| String::from_utf8(bytes).ok())
-                                .unwrap_or_default()
-                        })
-                    ),
+                    text: format!("{id}: {}", html_escape::encode_text(&last_line).to_string()),
+                    traceback: if lines.is_empty() { None } else { Some(lines) },
                     py_script: Some(generated_lines.clone()),
-                })
+                });
             }
             _ => {}
         }
@@ -435,6 +470,7 @@ impl PyVm {
             unsafe { Module::deserialize(&store, self.python_compiled_module.clone()) }.map_err(
                 |e| AnalyseFehler {
                     text: format!("{id}: failed to deserialize module: {e}"),
+                    traceback: None,
                     py_script: Some(generated_lines.clone()),
                 },
             )?;
@@ -453,6 +489,7 @@ impl PyVm {
         )
         .map_err(|e| AnalyseFehler {
             text: format!("3: {id}: prepare_webc_env: {e}"),
+            traceback: None,
             py_script: Some(generated_lines.clone()),
         })?;
 
@@ -465,7 +502,8 @@ impl PyVm {
         let _ = stdout_pipe.read_to_end(&mut buf);
 
         let result: PyResult = serde_json::from_slice(&buf).map_err(|e| AnalyseFehler {
-            text: format!("{id} (json decode):⣿{}", e.to_string()),
+            text: format!("{id} (json decode): {}", e.to_string()),
+            traceback: None,
             py_script: Some(generated_lines.clone()),
         })?;
 
@@ -479,18 +517,25 @@ impl PyVm {
                 ok: o,
                 script: generated_lines.clone(),
             }),
-            PyResult::Err(e) => Err(AnalyseFehler {
-                text: format!(
-                    "{id}:⣿{}",
-                    html_escape::encode_text(&{
-                        base64::decode(&e.text)
-                            .ok()
-                            .and_then(|bytes| String::from_utf8(bytes).ok())
-                            .unwrap_or_default()
-                    })
-                ),
-                py_script: Some(generated_lines.clone()),
-            }),
+            PyResult::Err(e) => {
+                let decoded_traceback = base64::decode(&e.text)
+                    .ok()
+                    .and_then(|bytes| String::from_utf8(bytes).ok())
+                    .unwrap_or_default();
+
+                let mut lines = decoded_traceback
+                    .split('⣿')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>();
+                let last_line = lines.pop().unwrap_or_default();
+
+                return Err(AnalyseFehler {
+                    text: format!("{id}: {}", html_escape::encode_text(&last_line).to_string()),
+                    traceback: if lines.is_empty() { None } else { Some(lines) },
+                    py_script: Some(generated_lines.clone()),
+                });
+            }
         }
     }
 }
@@ -989,19 +1034,21 @@ pub type RegexMap = BTreeMap<String, String>;
 impl ExecuteScriptType {
     pub fn get_id(&self) -> &'static str {
         match self {
-            ExecuteScriptType::TextSaubern { .. } => "text_saubern",
-            ExecuteScriptType::TextKuerzenAbt2 { .. } => "text_kuerzen_abt2",
-            ExecuteScriptType::TextKuerzenAbt3 { .. } => "text_kuerzen_abt3",
-            ExecuteScriptType::GetAbkuerzungen => "get_abkuerzungen",
-            ExecuteScriptType::FlurstueckeAuslesen { .. } => "flurstuecke_auslesen",
-            ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => "klassifiziere_rechteart_abt2",
-            ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => {
-                "klassifiziere_schuldenart_abt3"
+            ExecuteScriptType::TextSaubern { .. } => "Text säubern",
+            ExecuteScriptType::TextKuerzenAbt2 { .. } => "Text kürzen (Abt. 2)",
+            ExecuteScriptType::TextKuerzenAbt3 { .. } => "Text kürzen (Abt. 3)",
+            ExecuteScriptType::GetAbkuerzungen => "Abkürzungen korrigieren",
+            ExecuteScriptType::FlurstueckeAuslesen { .. } => "Flurstücke auslesen",
+            ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => "Klassifikation RechteArt",
+            ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => "Klassifikation SchuldenArt",
+            ExecuteScriptType::BetragAuslesen { .. } => "Betrag auslesen",
+            ExecuteScriptType::RangvermerkAuslesen { .. } => "Rangvermerk auslesen",
+            ExecuteScriptType::RechtsinhaberAuslesenAbt2 { .. } => {
+                "Rechtsinhaber auslesen (Abt. 2)"
             }
-            ExecuteScriptType::BetragAuslesen { .. } => "betrag_auslesen",
-            ExecuteScriptType::RangvermerkAuslesen { .. } => "rangvermerk_auslesen",
-            ExecuteScriptType::RechtsinhaberAuslesenAbt2 { .. } => "rechtsinhaber_auslesen_abt2",
-            ExecuteScriptType::RechtsinhaberAuslesenAbt3 { .. } => "rechtsinhaber_auslesen_abt3",
+            ExecuteScriptType::RechtsinhaberAuslesenAbt3 { .. } => {
+                "Rechtsinhaber auslesen (Abt. 3)"
+            }
         }
     }
 }

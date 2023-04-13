@@ -2141,30 +2141,17 @@ pub fn render_analyse_grundbuch(
                     fehler
                     .iter()
                     .map(|w| {
-                        format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
+                        format!("<span title='{alt_text}' style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
                                 <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <div style='margin-left:10px;display:flex;flex-direction:column;'>
-                                    {error_text}
-                                </div>
+                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
                                 {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            error_text = normalize_for_js(
-                                w.text
-                                .trim()
-                                .split('⣿')
-                                .map(|s| {
-                                    let mut s = s.to_string();
-                                    /* 
-                                    if s.len() > 50 {
-                                        s = s.chars().take(50).collect();
-                                        s.push_str(" ...");
-                                    }*/
-                                    s.replace(' ', "&nbsp;")
-                                })
-                                .map(|text| format!("<p color:rgb(129,8,8);font-family:monospace;'>{text}</p>"))
-                                .collect::<Vec<_>>().join("<br/>")
-                            ),
+                            text = normalize_for_js(w.text.clone()),
+                            alt_text = match w.traceback.as_ref() {
+                                Some(s) => s.iter().map(|s| html_escape::encode_safe(&s).to_string()).collect::<Vec<_>>().join("&#013;"),
+                                None => String::new()
+                            },
                             opt_button = match w.py_script.as_deref() {
                                 None => String::new(),
                                 Some(s) => {
@@ -2281,30 +2268,17 @@ pub fn render_analyse_grundbuch(
                     
                     fehler.iter().map(|w| {
                         format!("
-                            <span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
+                            <span title='{alt_text}' style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
                                 <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <div style='margin-left:10px;display:flex;flex-direction:column;'>
-                                    {error_text}
-                                </div>
+                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
                                 {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            error_text = normalize_for_js(
-                                w.text
-                                .trim()
-                                .split('⣿')
-                                .map(|s| {
-                                    let mut s = s.to_string();
-                                    /* 
-                                    if s.len() > 50 {
-                                        s = s.chars().take(50).collect();
-                                        s.push_str(" ...");
-                                    }*/
-                                    s.replace(' ', "&nbsp;")
-                                })
-                                .map(|text| format!("<p color:rgb(129,8,8);font-family:monospace;'>{text}</p>"))
-                                .collect::<Vec<_>>().join("<br/>")
-                            ),
+                            text = normalize_for_js(w.text.clone()),
+                            alt_text = match w.traceback.as_ref() {
+                                Some(s) => s.iter().map(|s| html_escape::encode_safe(&s).to_string()).collect::<Vec<_>>().join("&#013;"),
+                                None => String::new()
+                            },
                             opt_button = match w.py_script.as_deref() {
                                 None => String::new(),
                                 Some(s) => {
