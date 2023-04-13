@@ -2143,14 +2143,28 @@ pub fn render_analyse_grundbuch(
                     .map(|w| {
                         format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
                                 <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                <div style='margin-left:10px;display:flex;flex-direction:column;'>
+                                    {error_text}
+                                </div>
                                 {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            text = {
-                                println!("error {}", w.text);
-                                normalize_for_js(w.text.clone())
-                            },
+                            error_text = normalize_for_js(
+                                w.text
+                                .trim()
+                                .split('⣿')
+                                .map(|s| {
+                                    let mut s = s.to_string();
+                                    /* 
+                                    if s.len() > 50 {
+                                        s = s.chars().take(50).collect();
+                                        s.push_str(" ...");
+                                    }*/
+                                    s.replace(' ', "&nbsp;")
+                                })
+                                .map(|text| format!("<p color:rgb(129,8,8);font-family:monospace;'>{text}</p>"))
+                                .collect::<Vec<_>>().join("<br/>")
+                            ),
                             opt_button = match w.py_script.as_deref() {
                                 None => String::new(),
                                 Some(s) => {
@@ -2269,11 +2283,28 @@ pub fn render_analyse_grundbuch(
                         format!("
                             <span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
                                 <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                <div style='margin-left:10px;display:flex;flex-direction:column;'>
+                                    {error_text}
+                                </div>
                                 {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            text = normalize_for_js(w.text.clone()),
+                            error_text = normalize_for_js(
+                                w.text
+                                .trim()
+                                .split('⣿')
+                                .map(|s| {
+                                    let mut s = s.to_string();
+                                    /* 
+                                    if s.len() > 50 {
+                                        s = s.chars().take(50).collect();
+                                        s.push_str(" ...");
+                                    }*/
+                                    s.replace(' ', "&nbsp;")
+                                })
+                                .map(|text| format!("<p color:rgb(129,8,8);font-family:monospace;'>{text}</p>"))
+                                .collect::<Vec<_>>().join("<br/>")
+                            ),
                             opt_button = match w.py_script.as_deref() {
                                 None => String::new(),
                                 Some(s) => {

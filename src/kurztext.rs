@@ -41,7 +41,6 @@ pub fn text_kuerzen_abt2(
     ) {
         Ok(o) => Some(o),
         Err(e) => {
-            println!("text_kuerzen_abt2: rechtsinhaber = {:?}", e);
             fehler.push(e);
             None
         }

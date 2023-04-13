@@ -168,6 +168,7 @@ img {
 #__application-analyse-grundbuch {
     user-select: initial;
     -webkit-user-select: initial;
+    flex-direction: column;
 }
 
 #__application-main #__application-main-container:hover {

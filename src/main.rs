@@ -16,6 +16,7 @@ use crate::digital::{
     NebenbeteiligterExtra, NebenbeteiligterTyp, SeitenTyp, Titelblatt,
 };
 use crate::digital::{Abteilung1, Abteilung2, Abteilung3, Bestandsverzeichnis};
+use crate::python::Spalte1Eintrag;
 use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt};
 use analyse::{AnalyseFehler, GrundbuchAnalysiertCache};
 use digital::HocrSeite;
@@ -712,22 +713,7 @@ impl Konfiguration {
     pub fn get_hash(&self) -> String {
         use sha2::Digest;
 
-        let arr = serde_json::to_string(&[
-            serde_json::to_string(&self.regex).unwrap_or_default(),
-            serde_json::to_string(&self.abkuerzungen_script).unwrap_or_default(),
-            serde_json::to_string(&self.text_saubern_script).unwrap_or_default(),
-            serde_json::to_string(&self.flurstuecke_auslesen_script).unwrap_or_default(),
-            serde_json::to_string(&self.text_kuerzen_abt2_script).unwrap_or_default(),
-            serde_json::to_string(&self.text_kuerzen_abt3_script).unwrap_or_default(),
-            serde_json::to_string(&self.betrag_auslesen_script).unwrap_or_default(),
-            serde_json::to_string(&self.rechtsinhaber_auslesen_abt3_script).unwrap_or_default(),
-            serde_json::to_string(&self.rechtsinhaber_auslesen_abt2_script).unwrap_or_default(),
-            serde_json::to_string(&self.rangvermerk_auslesen_abt2_script).unwrap_or_default(),
-            serde_json::to_string(&self.klassifiziere_rechteart).unwrap_or_default(),
-            serde_json::to_string(&self.klassifiziere_schuldenart).unwrap_or_default(),
-        ])
-        .unwrap_or_default();
-
+        let arr = serde_json::to_string(&self).unwrap_or_default();
         let mut hasher = sha2::Sha256::default();
         hasher.update(arr.as_bytes());
         let hash = hasher.finalize();
@@ -4136,11 +4122,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     .join(&open_file.analysiert.titelblatt.blatt.to_string());
 
                 let output = temp_ordner.join(format!("{s}.hocr.json"));
-                println!(
-                    "reload grundbuch: {} exists: {:?}",
-                    output.display(),
-                    output.exists()
-                );
                 if !output.exists() {
                     let pdf_bytes = match open_file.datei.as_ref().and_then(|f| fs::read(f).ok()) {
                         Some(s) => s,
@@ -5530,6 +5511,26 @@ fn analyse_grundbuch(vm: PyVm, pdf: &PdfFile, konfguration: &Konfiguration) -> O
 }
 
 fn clean_grundbuch(mut grundbuch: Grundbuch) -> Grundbuch {
+    grundbuch
+        .bestandsverzeichnis
+        .eintraege
+        .retain(|bv| !bv.ist_leer());
+    grundbuch
+        .abt1
+        .eintraege
+        .retain(|a1| !(a1.get_lfd_nr() == 0 && a1.get_eigentuemer().is_empty()));
+    grundbuch
+        .abt1
+        .grundlagen_eintragungen
+        .retain(|a1| !(a1.bv_nr.is_empty() && a1.text.is_empty()));
+    grundbuch
+        .abt2
+        .eintraege
+        .retain(|a2| !(a2.lfd_nr == 0 && a2.text.is_empty() && a2.bv_nr.is_empty()));
+    grundbuch.abt3.eintraege.retain(|a3| {
+        !(a3.lfd_nr == 0 && a3.bv_nr.is_empty() && a3.text.is_empty() && a3.betrag.is_empty())
+    });
+
     // BV-Nr: "." ->
     for zuschreibungen in grundbuch.bestandsverzeichnis.zuschreibungen.iter_mut() {
         zuschreibungen.bv_nr = clean_bv(&zuschreibungen.bv_nr);
@@ -5851,6 +5852,14 @@ fn main() -> wry::Result<()> {
             }
         })
         .build()?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&crate::python::PyOk::RechteArt(
+            crate::python::RechteArt::SpeziellVormerkung { rechteverweis: 5 }
+        ))
+        .unwrap_or_default()
+    );
 
     webview.open_devtools();
     webview.focus();

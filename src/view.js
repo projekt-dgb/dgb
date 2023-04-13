@@ -185,12 +185,6 @@ setInterval(function(){
 }, 194);
 
 function startCheckingForPageLoaded(filepath, filename, pdf_file_name, reload_hocr) {
-    console.log("startCheckingForPageLoaded");
-    console.log(filepath);
-    console.log(filename);
-    console.log(pdf_file_name);
-    console.log(reload_hocr);
-    console.log("----");
     files_to_check[filepath] = {
         filename: filename, 
         pdf_file_name: pdf_file_name, 
@@ -714,7 +708,6 @@ function closePopOver(s) {
 function activateSelectedFile(event) {
     var file = event.target.getAttribute("data-fileName");
     if (!file) {
-        console.log(event.target);
         return;
     }
     rpc.set_open_file(file);
@@ -1383,8 +1376,6 @@ function zeileNeu(event) {
     }
     
     var event_ok = event.which === 1 && !event.metaKey;
-
-    console.log("zeileNeu " + event_ok);
     
     if (!event_ok) {
         return;
@@ -1418,9 +1409,6 @@ function zeileLoeschen(event) {
     
     event.stopPropagation();
     
-    console.log("zeileLoeschen");
-    console.log(event);
-
     let event_ok = event.which === 3 || event.which === 2 || event.metaKey;
     if (!event_ok) {
         return;
@@ -1449,7 +1437,6 @@ function zeileLoeschen(event) {
         zeileId = Number(zeileIdString);
     }
     
-    console.log("zeile loeschen " + zeileId);
     rpc.zeile_loeschen(file, page, zeileId);
 }
 

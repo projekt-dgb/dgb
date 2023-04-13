@@ -3825,7 +3825,7 @@ impl BvEintrag {
     pub fn ist_leer(&self) -> bool {
         match self {
             BvEintrag::Flurstueck(flst) => {
-                flst.lfd_nr == 0
+                (flst.lfd_nr == 0 || flst.lfd_nr == 1)
                     && flst.bisherige_lfd_nr == None
                     && flst.flur == 0
                     && flst.flurstueck == String::new()
@@ -3834,7 +3834,9 @@ impl BvEintrag {
                     && flst.groesse.ist_leer()
             }
             BvEintrag::Recht(recht) => {
-                recht.lfd_nr == 0 && recht.bisherige_lfd_nr == None && recht.text.is_empty()
+                (recht.lfd_nr == 0 || recht.lfd_nr == 1)
+                    && recht.bisherige_lfd_nr == None
+                    && recht.text.is_empty()
             }
         }
     }

@@ -29,7 +29,7 @@ pub struct PyVm {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "result", content = "data")]
-enum PyResult {
+pub enum PyResult {
     #[serde(rename = "ok")]
     Ok(PyOk),
     #[serde(rename = "err")]
@@ -56,8 +56,6 @@ pub enum PyOk {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PyError {
     pub text: String,
-    #[serde(skip, default)]
-    pub py_script: Vec<String>,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -208,6 +206,164 @@ impl RechteArt {
     }
 }
 
+pub struct ExecuteScriptOk {
+    pub ok: PyOk,
+    pub script: Vec<String>,
+}
+
+impl ExecuteScriptOk {
+    pub fn downcast_str(&self, id: &str) -> Result<String, AnalyseFehler> {
+        match &self.ok {
+            PyOk::Str(s) => Ok(s.clone()),
+            PyOk::Betrag(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Str, erhielt Betrag"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::List(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Str, erhielt List"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::RechteArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Str, erhielt RechteArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::SchuldenArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Str, erhielt SchuldenArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Spalte1(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Str, erhielt Spalte1"),
+                py_script: Some(self.script.clone()),
+            }),
+        }
+    }
+    pub fn downcast_list(&self, id: &str) -> Result<Vec<String>, AnalyseFehler> {
+        match &self.ok {
+            PyOk::List(s) => Ok(s.clone()),
+            PyOk::Betrag(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete List, erhielt Betrag"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Str(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete List, erhielt Str"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::RechteArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete List, erhielt RechteArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::SchuldenArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete List, erhielt SchuldenArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Spalte1(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete List, erhielt Spalte1"),
+                py_script: Some(self.script.clone()),
+            }),
+        }
+    }
+    pub fn downcast_spalte1(&self, id: &str) -> Result<Spalte1Eintraege, AnalyseFehler> {
+        match &self.ok {
+            PyOk::Spalte1(s) => Ok(s.clone()),
+            PyOk::Betrag(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Spalte1, erhielt Betrag"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Str(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Spalte1, erhielt Str"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::RechteArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Spalte1, erhielt RechteArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::SchuldenArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Spalte1, erhielt SchuldenArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::List(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Spalte1, erhielt List"),
+                py_script: Some(self.script.clone()),
+            }),
+        }
+    }
+    pub fn downcast_rechteart(&self, id: &str) -> Result<RechteArt, AnalyseFehler> {
+        match &self.ok {
+            PyOk::RechteArt(s) => Ok(s.clone()),
+            PyOk::Betrag(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete RechteArt, erhielt Betrag"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Str(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete RechteArt, erhielt Str"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Spalte1(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete RechteArt, erhielt Spalte1"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::SchuldenArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete RechteArt, erhielt SchuldenArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::List(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete RechteArt, erhielt List"),
+                py_script: Some(self.script.clone()),
+            }),
+        }
+    }
+    pub fn downcast_schuldenart(&self, id: &str) -> Result<SchuldenArt, AnalyseFehler> {
+        match &self.ok {
+            PyOk::SchuldenArt(s) => Ok(s.clone()),
+            PyOk::Betrag(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete SchuldenArt, erhielt Betrag"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Str(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete SchuldenArt, erhielt Str"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Spalte1(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete SchuldenArt, erhielt Spalte1"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::RechteArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete SchuldenArt, erhielt RechteArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::List(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete SchuldenArt, erhielt List"),
+                py_script: Some(self.script.clone()),
+            }),
+        }
+    }
+    pub fn downcast_betrag(&self, id: &str) -> Result<Betrag, AnalyseFehler> {
+        match &self.ok {
+            PyOk::Betrag(s) => Ok(s.clone()),
+            PyOk::SchuldenArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Betrag, erhielt SchuldenArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Str(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Betrag, erhielt Str"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::Spalte1(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Betrag, erhielt Spalte1"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::RechteArt(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Betrag, erhielt RechteArt"),
+                py_script: Some(self.script.clone()),
+            }),
+            PyOk::List(_) => Err(AnalyseFehler {
+                text: format!("{id}: Erwartete Betrag, erhielt List"),
+                py_script: Some(self.script.clone()),
+            }),
+        }
+    }
+}
+
 impl PyVm {
     pub fn new() -> Result<Self, String> {
         let mut python_unpacked = unpack_tar_gz(PYTHON.to_vec(), "python/atom/").unwrap();
@@ -231,10 +387,13 @@ impl PyVm {
         &self,
         konfiguration: &Konfiguration,
         args: ExecuteScriptType,
-    ) -> Result<PyOk, PyError> {
+    ) -> Result<ExecuteScriptOk, AnalyseFehler> {
         use std::io::Read;
 
         let key = get_script_cache_key(&konfiguration.regex, &args);
+        let generated = generate_script(konfiguration, &args);
+        let generated_lines = generated.lines().map(|s| s.to_string()).collect::<Vec<_>>();
+        let id = args.get_id();
 
         match self
             .script_result
@@ -242,13 +401,28 @@ impl PyVm {
             .ok()
             .and_then(|lock| lock.get(&key).cloned())
         {
-            Some(PyResult::Ok(o)) => return Ok(o.clone()),
-            Some(PyResult::Err(e)) => return Err(e.clone()),
+            Some(PyResult::Ok(o)) => {
+                return Ok(ExecuteScriptOk {
+                    ok: o.clone(),
+                    script: generated_lines,
+                })
+            }
+            Some(PyResult::Err(e)) => {
+                return Err(AnalyseFehler {
+                    text: format!(
+                        "{id}:⣿{}",
+                        html_escape::encode_text(&{
+                            base64::decode(&e.text)
+                                .ok()
+                                .and_then(|bytes| String::from_utf8(bytes).ok())
+                                .unwrap_or_default()
+                        })
+                    ),
+                    py_script: Some(generated_lines.clone()),
+                })
+            }
             _ => {}
         }
-
-        let generated = generate_script(konfiguration, &args);
-        let generated_lines = generated.lines().map(|s| s.to_string()).collect::<Vec<_>>();
 
         let mut python_unpacked = self.file_system.clone();
         python_unpacked.insert(
@@ -259,9 +433,9 @@ impl PyVm {
         let mut store = Store::default();
         let mut module =
             unsafe { Module::deserialize(&store, self.python_compiled_module.clone()) }.map_err(
-                |e| PyError {
-                    text: format!("failed to deserialize module: {e}"),
-                    py_script: generated_lines.clone(),
+                |e| AnalyseFehler {
+                    text: format!("{id}: failed to deserialize module: {e}"),
+                    py_script: Some(generated_lines.clone()),
                 },
             )?;
 
@@ -277,9 +451,9 @@ impl PyVm {
             &python_unpacked,
             "python",
         )
-        .map_err(|e| PyError {
-            text: format!("prepare_webc_env: {e}"),
-            py_script: generated_lines.clone(),
+        .map_err(|e| AnalyseFehler {
+            text: format!("3: {id}: prepare_webc_env: {e}"),
+            py_script: Some(generated_lines.clone()),
         })?;
 
         let _ = exec_module(&mut store, &module, wasi_env);
@@ -290,13 +464,9 @@ impl PyVm {
         let mut buf = Vec::new();
         let _ = stdout_pipe.read_to_end(&mut buf);
 
-        let result: PyResult = serde_json::from_slice(&buf).map_err(|e| PyError {
-            text: format!(
-                "{}\r\n{}",
-                e.to_string(),
-                String::from_utf8_lossy(&buf_stderr)
-            ),
-            py_script: generated_lines.clone(),
+        let result: PyResult = serde_json::from_slice(&buf).map_err(|e| AnalyseFehler {
+            text: format!("{id} (json decode):⣿{}", e.to_string()),
+            py_script: Some(generated_lines.clone()),
         })?;
 
         self.script_result
@@ -305,8 +475,22 @@ impl PyVm {
             .and_then(|mut lock| lock.insert(key, result.clone()));
 
         match result {
-            PyResult::Ok(o) => Ok(o),
-            PyResult::Err(e) => Err(e),
+            PyResult::Ok(o) => Ok(ExecuteScriptOk {
+                ok: o,
+                script: generated_lines.clone(),
+            }),
+            PyResult::Err(e) => Err(AnalyseFehler {
+                text: format!(
+                    "{id}:⣿{}",
+                    html_escape::encode_text(&{
+                        base64::decode(&e.text)
+                            .ok()
+                            .and_then(|bytes| String::from_utf8(bytes).ok())
+                            .unwrap_or_default()
+                    })
+                ),
+                py_script: Some(generated_lines.clone()),
+            }),
         }
     }
 }
@@ -579,7 +763,7 @@ pub struct Spalte1Eintrag {
     pub nur_lastend_an: Vec<FlurFlurstueck>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Spalte1Eintraege {
     pub eintraege: Vec<Spalte1Eintrag>,
     pub warnungen: Vec<String>,
@@ -607,34 +791,13 @@ pub fn text_saubern(
     rechtstext: &str,
     konfiguration: &Konfiguration,
 ) -> Result<String, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::TextSaubern {
-                recht: rechtstext.to_string(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
-
-    match result {
-        PyOk::Str(s) => Ok(s),
-        PyOk::Betrag(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Betrag"
-            .to_string()
-            .into()),
-        PyOk::List(_) => Err("Erwartete PyOk::Str, kriegte PyOk::List".to_string().into()),
-        PyOk::RechteArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::RechteArt"
-            .to_string()
-            .into()),
-        PyOk::SchuldenArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
-            .to_string()
-            .into()),
-        PyOk::Spalte1(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Spalte1"
-            .to_string()
-            .into()),
-    }
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::TextSaubern {
+            recht: rechtstext.to_string(),
+        },
+    )?;
+    result.downcast_str("text_saubern")
 }
 
 pub fn get_belastete_flurstuecke(
@@ -643,86 +806,24 @@ pub fn get_belastete_flurstuecke(
     text_sauber: &str,
     konfiguration: &Konfiguration,
 ) -> Result<Spalte1Eintraege, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::FlurstueckeAuslesen {
-                spalte1: bv_nr.to_string(),
-                text: text_sauber.to_string(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::FlurstueckeAuslesen {
+            spalte1: bv_nr.to_string(),
+            text: text_sauber.to_string(),
+        },
+    )?;
 
-    match result {
-        PyOk::Spalte1(s) => Ok(s),
-        PyOk::Betrag(_) => Err(
-            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::List(_) => Err(
-            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::List"
-                .to_string()
-                .into(),
-        ),
-        PyOk::RechteArt(_) => Err(
-            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Str(_) => Err(
-            "get_belastete_flurstuecke: erwartete PyOk::Spalte1, kriegte PyOk::Str"
-                .to_string()
-                .into(),
-        ),
-    }
+    result.downcast_spalte1("get_belastete_flurstuecke")
 }
 
 pub fn get_abkuerzungen(
     vm: PyVm,
     konfiguration: &Konfiguration,
 ) -> Result<Vec<String>, AnalyseFehler> {
-    let result = vm
-        .execute_script(konfiguration, ExecuteScriptType::GetAbkuerzungen)
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(konfiguration, ExecuteScriptType::GetAbkuerzungen)?;
 
-    match result {
-        PyOk::List(s) => Ok(s),
-        PyOk::Betrag(_) => Err(
-            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-        PyOk::RechteArt(_) => Err(
-            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Str(_) => Err("get_abkuerzungen: erwartete PyOk::List, kriegte PyOk::Str"
-            .to_string()
-            .into()),
-    }
+    result.downcast_list("get_abkuerzungen")
 }
 
 pub fn get_rechte_art_abt2(
@@ -732,46 +833,14 @@ pub fn get_rechte_art_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<RechteArt, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::KlassifiziereRechteArtAbt2 {
-                saetze: saetze_clean.to_vec(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::KlassifiziereRechteArtAbt2 {
+            saetze: saetze_clean.to_vec(),
+        },
+    )?;
 
-    match result {
-        PyOk::RechteArt(s) => Ok(s),
-        PyOk::Betrag(_) => Err(
-            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-        PyOk::List(_) => Err(
-            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::List"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Str(_) => Err(
-            "get_rechte_art_abt2: erwartete PyOk::RechteArt, kriegte PyOk::Str"
-                .to_string()
-                .into(),
-        ),
-    }
+    result.downcast_rechteart("get_rechte_art_abt2")
 }
 
 pub fn get_rangvermerk_abt2(
@@ -781,34 +850,13 @@ pub fn get_rangvermerk_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::RangvermerkAuslesen {
-                saetze: saetze_clean.to_vec(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
-
-    match result {
-        PyOk::Str(s) => Ok(s),
-        PyOk::Betrag(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Betrag"
-            .to_string()
-            .into()),
-        PyOk::List(_) => Err("Erwartete PyOk::Str, kriegte PyOk::List".to_string().into()),
-        PyOk::RechteArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::RechteArt"
-            .to_string()
-            .into()),
-        PyOk::SchuldenArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
-            .to_string()
-            .into()),
-        PyOk::Spalte1(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Spalte1"
-            .to_string()
-            .into()),
-    }
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::RangvermerkAuslesen {
+            saetze: saetze_clean.to_vec(),
+        },
+    )?;
+    result.downcast_str("get_rangvermerk_abt2")
 }
 
 pub fn get_rechtsinhaber_abt2(
@@ -818,34 +866,14 @@ pub fn get_rechtsinhaber_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::RechtsinhaberAuslesenAbt2 {
-                saetze: saetze_clean.to_vec(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::RechtsinhaberAuslesenAbt2 {
+            saetze: saetze_clean.to_vec(),
+        },
+    )?;
 
-    match result {
-        PyOk::Str(s) => Ok(s),
-        PyOk::Betrag(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Betrag"
-            .to_string()
-            .into()),
-        PyOk::List(_) => Err("Erwartete PyOk::Str, kriegte PyOk::List".to_string().into()),
-        PyOk::RechteArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::RechteArt"
-            .to_string()
-            .into()),
-        PyOk::SchuldenArt(_) => Err("Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
-            .to_string()
-            .into()),
-        PyOk::Spalte1(_) => Err("Erwartete PyOk::Str, kriegte PyOk::Spalte1"
-            .to_string()
-            .into()),
-    }
+    result.downcast_str("get_rechtsinhaber_abt2")
 }
 
 pub fn get_betrag_abt3(
@@ -855,44 +883,13 @@ pub fn get_betrag_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<Betrag, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::BetragAuslesen {
-                saetze: saetze_clean.to_vec(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
-
-    match result {
-        PyOk::Betrag(s) => Ok(s),
-        PyOk::Str(_) => Err("get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::Str"
-            .to_string()
-            .into()),
-        PyOk::List(_) => Err(
-            "get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::List"
-                .to_string()
-                .into(),
-        ),
-        PyOk::RechteArt(_) => Err(
-            "get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_betrag_abt3: Erwartete PyOk::Betrag, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_betrag_abt3: Erwartete PyOk::SBetragtr, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-    }
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::BetragAuslesen {
+            saetze: saetze_clean.to_vec(),
+        },
+    )?;
+    result.downcast_betrag("get_betrag_abt3")
 }
 
 pub fn get_schulden_art_abt3(
@@ -902,46 +899,14 @@ pub fn get_schulden_art_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<SchuldenArt, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::KlassifiziereSchuldenArtAbt3 {
-                saetze: saetze_clean.to_vec(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::KlassifiziereSchuldenArtAbt3 {
+            saetze: saetze_clean.to_vec(),
+        },
+    )?;
 
-    match result {
-        PyOk::SchuldenArt(s) => Ok(s),
-        PyOk::Str(_) => Err(
-            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::Str"
-                .to_string()
-                .into(),
-        ),
-        PyOk::List(_) => Err(
-            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::List"
-                .to_string()
-                .into(),
-        ),
-        PyOk::RechteArt(_) => Err(
-            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Betrag(_) => Err(
-            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_schulden_art_abt3: Erwartete PyOk::SchuldenArt, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-    }
+    result.downcast_schuldenart("get_schulden_art_abt3")
 }
 
 pub fn get_rechtsinhaber_abt3(
@@ -951,47 +916,15 @@ pub fn get_rechtsinhaber_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::RechtsinhaberAuslesenAbt3 {
-                saetze: saetze_clean.to_vec(),
-                recht_id: recht_id.to_string(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::RechtsinhaberAuslesenAbt3 {
+            saetze: saetze_clean.to_vec(),
+            recht_id: recht_id.to_string(),
+        },
+    )?;
 
-    match result {
-        PyOk::Str(s) => Ok(s),
-        PyOk::Betrag(_) => Err(
-            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::List(_) => Err(
-            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::List"
-                .to_string()
-                .into(),
-        ),
-        PyOk::RechteArt(_) => Err(
-            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_rechtsinhaber_abt3: Erwartete PyOk::Str, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-    }
+    result.downcast_str("get_rechtsinhaber_abt3")
 }
 
 pub fn get_kurztext_abt2(
@@ -1003,46 +936,16 @@ pub fn get_kurztext_abt2(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            &konfiguration,
-            ExecuteScriptType::TextKuerzenAbt2 {
-                saetze: saetze_clean.to_vec(),
-                rechtsinhaber: rechtsinhaber.unwrap_or_default(),
-                rangvermerk: rangvermerk.unwrap_or_default(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        &konfiguration,
+        ExecuteScriptType::TextKuerzenAbt2 {
+            saetze: saetze_clean.to_vec(),
+            rechtsinhaber: rechtsinhaber.unwrap_or_default(),
+            rangvermerk: rangvermerk.unwrap_or_default(),
+        },
+    )?;
 
-    match result {
-        PyOk::Str(s) => Ok(s),
-        PyOk::Betrag(_) => Err(
-            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::List(_) => Err("get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::List"
-            .to_string()
-            .into()),
-        PyOk::RechteArt(_) => Err(
-            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_kurztext_abt2: Erwartete PyOk::Str, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-    }
+    result.downcast_str("get_kurztext_abt2")
 }
 
 pub fn get_kurztext_abt3(
@@ -1055,47 +958,17 @@ pub fn get_kurztext_abt3(
     saetze_clean: &[String],
     konfiguration: &Konfiguration,
 ) -> Result<String, AnalyseFehler> {
-    let result = vm
-        .execute_script(
-            konfiguration,
-            ExecuteScriptType::TextKuerzenAbt3 {
-                saetze: saetze_clean.to_vec(),
-                betrag: betrag.unwrap_or_default(),
-                schuldenart: schuldenart.unwrap_or_default(),
-                rechtsinhaber: rechtsinhaber.unwrap_or_default(),
-            },
-        )
-        .map_err(|e| AnalyseFehler {
-            text: e.text,
-            py_script: Some(e.py_script),
-        })?;
+    let result = vm.execute_script(
+        konfiguration,
+        ExecuteScriptType::TextKuerzenAbt3 {
+            saetze: saetze_clean.to_vec(),
+            betrag: betrag.unwrap_or_default(),
+            schuldenart: schuldenart.unwrap_or_default(),
+            rechtsinhaber: rechtsinhaber.unwrap_or_default(),
+        },
+    )?;
 
-    match result {
-        PyOk::Str(s) => Ok(s),
-        PyOk::Betrag(_) => Err(
-            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::Betrag"
-                .to_string()
-                .into(),
-        ),
-        PyOk::List(_) => Err("get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::List"
-            .to_string()
-            .into()),
-        PyOk::RechteArt(_) => Err(
-            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::RechteArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::SchuldenArt(_) => Err(
-            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::SchuldenArt"
-                .to_string()
-                .into(),
-        ),
-        PyOk::Spalte1(_) => Err(
-            "get_kurztext_abt3: Erwartete PyOk::Str, kriegte PyOk::Spalte1"
-                .to_string()
-                .into(),
-        ),
-    }
+    result.downcast_str("get_kurztext_abt3")
 }
 
 #[test]
@@ -1112,6 +985,26 @@ fn test_pym_script_1() {
 }
 
 pub type RegexMap = BTreeMap<String, String>;
+
+impl ExecuteScriptType {
+    pub fn get_id(&self) -> &'static str {
+        match self {
+            ExecuteScriptType::TextSaubern { .. } => "text_saubern",
+            ExecuteScriptType::TextKuerzenAbt2 { .. } => "text_kuerzen_abt2",
+            ExecuteScriptType::TextKuerzenAbt3 { .. } => "text_kuerzen_abt3",
+            ExecuteScriptType::GetAbkuerzungen => "get_abkuerzungen",
+            ExecuteScriptType::FlurstueckeAuslesen { .. } => "flurstuecke_auslesen",
+            ExecuteScriptType::KlassifiziereRechteArtAbt2 { .. } => "klassifiziere_rechteart_abt2",
+            ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { .. } => {
+                "klassifiziere_schuldenart_abt3"
+            }
+            ExecuteScriptType::BetragAuslesen { .. } => "betrag_auslesen",
+            ExecuteScriptType::RangvermerkAuslesen { .. } => "rangvermerk_auslesen",
+            ExecuteScriptType::RechtsinhaberAuslesenAbt2 { .. } => "rechtsinhaber_auslesen_abt2",
+            ExecuteScriptType::RechtsinhaberAuslesenAbt3 { .. } => "rechtsinhaber_auslesen_abt3",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 pub enum ExecuteScriptType {
@@ -1257,22 +1150,22 @@ fn generate_script(konfiguration: &Konfiguration, script: &ExecuteScriptType) ->
         ExecuteScriptType::BetragAuslesen { saetze, .. } => {
             let mut s = String::new();
 
-            s.push_str(&format!("saetze = \"\\n\".join([\n"));
+            s.push_str(&format!("saetze = [\n"));
             for l in saetze {
                 s.push_str(&format!("    {:?},\n", l));
             }
-            s.push_str("])\n\n");
+            s.push_str("]\n\n");
 
             s
         }
         ExecuteScriptType::KlassifiziereSchuldenArtAbt3 { saetze, .. } => {
             let mut s = String::new();
 
-            s.push_str(&format!("saetze = \"\\n\".join([\n"));
+            s.push_str(&format!("saetze = [\n"));
             for l in saetze {
                 s.push_str(&format!("    {:?},\n", l));
             }
-            s.push_str("])\n\n");
+            s.push_str("]\n\n");
 
             s
         }

@@ -3,6 +3,8 @@
 import json
 from re import compile
 from json import JSONEncoder
+import traceback
+import base64
 
 class Regex(dict):
     
@@ -16,7 +18,9 @@ class Regex(dict):
         matches = self["re"].findall(text)
         if index < len(matches):
             return matches[index]
-        else:
+        elif (len(matches) == 1 and index < len(matches[0])):
+            return matches[0][index]
+        else: 
             return None
 
     def find_all(self, text): 
@@ -24,7 +28,7 @@ class Regex(dict):
 
     def replace_all(self, text, text_neu):
         if self["re"].match(text):
-            return self["re"].sub(text, text_neu)
+            return self["re"].sub(text_neu, text)
         else:
             return text
 
@@ -35,6 +39,8 @@ def _default(self, obj):
 
 _default.default = JSONEncoder().default
 JSONEncoder.default = _default
+
+speziell_vormerkung_index = None
 
 class SchuldenArt(str):
     Grundschuld = 'Grundschuld'
@@ -149,6 +155,11 @@ class RechteArt(str):
     Zwangsversteigerungsvermerk = 'Zwangsversteigerungsvermerk'
     Zwangsverwaltungsvermerk = 'Zwangsverwaltungsvermerk'
 
+    def SpeziellVormerkung(rechteverweis):
+        global speziell_vormerkung_index
+        speziell_vormerkung_index = rechteverweis
+        return 'SpeziellVormerkung'
+
 class Waehrung(str):
     Euro = 'Euro'
     DMark = 'DMark'
@@ -172,6 +183,27 @@ class FlurFlurstueck(dict):
         self["gemarkung"] = gemarkung
         self["teilflaeche_qm"] = teilflaeche_qm
 
+class Spalte1Eintraege(dict):
+
+    def __init__(self, eintraege = []):
+        self.eintraege = eintraege # List[Spalte1Eintrag]
+        self.warnungen = []
+
+    def __len__(self):
+        return len(self.eintraege)
+    
+    def __getitem__(self, index):
+        return self.eintraege[index]
+
+    def __setitem__(self, key, value):
+        self.eintraege[key] = value
+
+    def append(self, eintrag):
+        self.eintraege.append(eintrag)
+
+    def warnung(self, warnung):
+        self.warnungen.append(warnung)
+
 class Spalte1Eintrag(dict):
 
     def __init__(self, lfd_nr, voll_belastet = True, nur_lastend_an = []):
@@ -186,59 +218,65 @@ class Spalte1Eintrag(dict):
         self["voll_belastet"] = False
         self["nur_lastend_an"].extend(nur_lastend_an)
 
-def text_saubern(recht):
-    return recht
-
 class PyResult(dict):
-
-    def err(self, string):
+    
+    def err(self, any):
         self.type = "err"
-        self.err = string
+        self.err = any
         self.rechteart = False
         self.schuldenart = False
+        return self
 
     def ok(self, any, ra, sa):
         self.type = "ok"
         self.ok = any
         self.rechteart = ra
         self.schuldenart = sa
+        return self
 
     def get_string(self):
         if self.type == "ok":
             if self.rechteart:
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"rechteart\", \"data\": " + json.dumps(self.ok) + " } }"
+                if speziell_vormerkung_index is not None:
+                    return "{\"result\": \"ok\", \"data\": { \"type\": \"rechteart\", \"data\": { \"SpeziellVormerkung\": { \"rechteverweis\": " + str(speziell_vormerkung_index) + " } } } }"
+                else: 
+                    return "{\"result\": \"ok\", \"data\": { \"type\": \"rechteart\", \"data\": " + json.dumps(self.ok) + " } }"
             elif self.schuldenart:
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"schuldenart\", \"data\": " + json.dumps(self.ok) + " } }"
             elif isinstance(self.ok, str):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"str\", \"data\": \"" + self.ok + "\" } }"
             elif isinstance(self.ok, list):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"list\", \"data\": " + json.dumps(self.ok) + " } }"
-            elif isinstance(self.ok, Spalte1Eintrag):
-                return "{\"result\": \"ok\", \"data\": { \"type\": \"spalte1\", \"data\": " + json.dumps(self.ok) + " } }"
+            elif isinstance(self.ok, Spalte1Eintraege):
+                return "{\"result\": \"ok\", \"data\": { \"type\": \"spalte1\", \"data\": { \"eintraege\": " + json.dumps(self.ok.eintraege) + ", \"warnungen\": " + json.dumps(self.ok.warnungen) + "} } }"
             elif isinstance(self.ok, Betrag):
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"betrag\", \"data\": " + json.dumps(self.ok) + " } }"
             else:
                 return "{\"result\": \"ok\", \"data\": { \"type\": \"???\", \"data\": \"\" } }"
-        elif self.type == "err":
+        else:
             return "{\"result\": \"err\", \"data\": { \"text\": \"" + self.err + "\" } }"
-        else: 
-            return "{\"result\": \"err\", \"data\": { \"text\": \"Unknown error\" } }"
 
 def main_func():
 ## MAIN_SCRIPT
     pass
 
 def main():
-    result = PyResult()
-    result.err("invalid function")
+    result = PyResult().err("invalid function")
+
     ra = False 
     sa = False
     ## RA_SA
+
     try:
         return_val = main_func()
-        result.ok(return_val, ra, sa)
-    except BaseException as err:
-        result.err("Unexpected error" + err.message)
+        result = PyResult().ok(return_val, ra, sa)
+    except Exception as ex:
+        tb = "".join(traceback.TracebackException.from_exception(ex).format())
+        tb = tb.replace("\"", "'").replace("\r\n", "⣿").replace("\n", "⣿")
+        tb = tb.encode("utf-8")
+        tb = base64.b64encode(tb)
+        tb = tb.decode("utf-8")
+        result = PyResult().err(tb)
     finally:
         result_str = result.get_string()
         print(u'' + result_str)

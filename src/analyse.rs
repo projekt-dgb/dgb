@@ -464,14 +464,10 @@ fn rayon_task_analyze_abt2(
                     rechteart = ra;
                     ri.unwrap_or_default()
                 } else {
-                    fehler.push(format!("Konnte Rechtsinhaber nicht auslesen").into());
                     String::new()
                 }
             }
-            _ => {
-                fehler.push(format!("Konnte Rechtsinhaber nicht auslesen").into());
-                String::new()
-            }
+            _ => String::new(),
         },
     };
 
@@ -846,39 +842,11 @@ pub fn get_belastete_flurstuecke(
         }
     }
 
-    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0));
-
-    let regex_values = konfiguration.regex.values().cloned().collect::<Vec<_>>();
-    let regex_matches = konfiguration
-        .regex
-        .iter()
-        .filter_map(|(k, v)| {
-            if get_or_insert_regex(&regex_values, v)
-                .ok()?
-                .matches(text_sauber)
-            {
-                Some(k.clone())
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
+    belastet_bv.retain(|bv| *bv != BvEintrag::neu(0) && !bv.ist_geroetet());
 
     if belastet_bv.is_empty() {
         fehler.push(format!("Konnte keine Flurstücke zuordnen!").into());
-        log.push(format!("<strong>Regex:</strong>"));
-        log.push(format!("<p>{}</p>", regex_matches.join(", ")));
-        fehler.push(
-            format!(
-                "<div style='flex-direction:row;max-width:600px;'>{}</div>",
-                log.join("\r\n")
-            )
-            .into(),
-        );
     }
-
-    debug_log.push_str(&format!("Regex:\r\n"));
-    debug_log.push_str(&format!("{}\r\n", regex_matches.join(",\r\n ")));
 
     let belastet_bv = flurstuecke_fortfuehren(
         &belastet_bv,
