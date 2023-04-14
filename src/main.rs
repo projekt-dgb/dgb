@@ -572,8 +572,6 @@ impl PdfFile {
         nb: &[Nebenbeteiligter],
         konfiguration: &Konfiguration,
     ) -> Option<PdfFileIcon> {
-        return None;
-        /*
         if !self.ist_geladen() {
             return None;
         }
@@ -587,7 +585,6 @@ impl PdfFile {
         }
 
         Some(PdfFileIcon::AllesOkay)
-        */
     }
 
     pub fn alle_seiten_gerendert(&self) -> bool {
@@ -829,6 +826,12 @@ pub mod pgp {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct LoginForm {
+    email: String,
+    passwort: String,
+}
+
 impl Konfiguration {
     const DEFAULT: &'static str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -942,24 +945,77 @@ impl Konfiguration {
         Ok((hash, signatur))
     }
 
-    pub fn get_passwort(&self) -> Option<String> {
-        let pw_file_path = std::env::temp_dir().join("dgb").join("passwort.txt");
-        match std::fs::read_to_string(pw_file_path) {
-            Ok(o) => return Some(o.trim().to_string()),
-            Err(_) => {
-                let email = &self.server_email;
-                let pw = tinyfiledialogs::password_box(
-                    &format!("Passwort für {email} eingeben"),
-                    &format!("Bitte geben Sie das Passwort für {email} ein:"),
-                )?;
+    pub fn get_authtoken(&self) -> Option<String> {
+        let pw_file_path = std::env::temp_dir().join("dgb").join("auth.json");
 
-                let _ = std::fs::create_dir_all(std::env::temp_dir().join("dgb"));
-                let _ = std::fs::write(
-                    std::env::temp_dir().join("dgb").join("passwort.txt"),
-                    pw.clone().as_bytes(),
-                );
+        loop {
+            let authtoken_json = std::fs::read_to_string(&pw_file_path)
+                .ok()
+                .and_then(|f| serde_json::from_str(&f).ok())
+                .and_then(|at: LoginResponseOk| {
+                    if at.valid_until > chrono::Local::now() + chrono::Duration::seconds(20) {
+                        Some(at.token)
+                    } else {
+                        None
+                    }
+                });
 
-                Some(pw)
+            if let Some(at) = authtoken_json {
+                return Some(at);
+            }
+
+            let email = &self.server_email;
+            let server_url = &self.server_url;
+            let pw = tinyfiledialogs::password_box(
+                &format!("Passwort für {email} eingeben"),
+                &format!("Bitte geben Sie das Passwort für {email} ein:"),
+            )?;
+
+            let url = format!("{}/login", self.server_url);
+            let client = reqwest::blocking::Client::new();
+            let resp = client
+                .post(&url)
+                .form(&LoginForm {
+                    email: self.server_email.clone(),
+                    passwort: pw,
+                })
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .send();
+
+            let resp = match resp {
+                Ok(o) => o,
+                Err(e) => {
+                    let _ = tinyfiledialogs::message_box_ok(
+                        &format!("Fehler bei Verbindung zu Server {server_url}"),
+                        &format!("Konnte nicht zu Server verbinden: {}", e),
+                        tinyfiledialogs::MessageBoxIcon::Error,
+                    );
+                    return None;
+                }
+            };
+
+            match resp.json::<LoginResponse>() {
+                Ok(LoginResponse::Ok(o)) => {
+                    let _ = std::fs::write(
+                        &pw_file_path,
+                        serde_json::to_string_pretty(&o).unwrap_or_default(),
+                    );
+                    return Some(o.token);
+                }
+                Ok(LoginResponse::Error(e)) => {
+                    let _ = tinyfiledialogs::message_box_ok(
+                        &format!("Falsches Passwort"),
+                        &format!("Das eingegebene Passwort war ungültig, bitte überprüfen Sie die Server-URL ({server_url}) und die E-Mail Adresse ({email}) in den Einstellungen.\r\nE{}: {}", e.code, e.text),
+                        tinyfiledialogs::MessageBoxIcon::Error
+                    );
+                }
+                Err(e) => {
+                    let _ = tinyfiledialogs::message_box_ok(
+                        &format!("Ungültige JSON-Antwort"),
+                        &format!("Die Antwort des Servers war ungültig: {}", e),
+                        tinyfiledialogs::MessageBoxIcon::Error,
+                    );
+                }
             }
         }
     }
@@ -1132,6 +1188,39 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             url_open::open(&url);
         }
         Cmd::CheckForGrundbuchLoaded => {
+            // Icons
+            let mut new_icons = BTreeMap::new();
+            let mut icon_count = 0;
+
+            for (k, v) in data.loaded_files.iter() {
+                if icon_count >= 1 {
+                    break;
+                }
+
+                if v.ist_geladen() {
+                    let icon =
+                        match v.get_icon(data.vm.clone(), &data.loaded_nb, &data.konfiguration) {
+                            Some(s) => s,
+                            None => {
+                                return;
+                            }
+                        };
+                    new_icons.insert(k.clone(), icon);
+                    icon_count += 1;
+                }
+            }
+
+            for (k, v) in new_icons {
+                if let Some(s) = data.loaded_files.get_mut(&k.clone()) {
+                    s.icon = Some(v);
+                    let _ = webview.evaluate_script(&format!(
+                        "replaceIcon(`{}`, `{}`)",
+                        k,
+                        v.get_base64()
+                    ));
+                }
+            }
+
             let open_file = match data
                 .open_page
                 .clone()
@@ -1465,7 +1554,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 return;
             }
 
-            let passwort = match data.konfiguration.get_passwort() {
+            let authtoken = match data.konfiguration.get_authtoken() {
                 Some(s) => s,
                 None => return,
             };
@@ -1491,7 +1580,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         );
                     }
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
             }
@@ -1572,22 +1661,19 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let _ = webview.evaluate_script("startCheckingForPdfErrors()");
         }
         Cmd::Search { search_text } => {
-            let passwort = match data.konfiguration.get_passwort() {
+            let authtoken = match data.konfiguration.get_authtoken() {
                 Some(s) => s,
                 None => return,
             };
 
             let server_url = &data.konfiguration.server_url;
-            let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let search_text = urlencoding::encode(&search_text);
-            let passwort = urlencoding::encode(&passwort);
-            let url = format!(
-                "{server_url}/suche/{search_text}?email={server_email}&passwort={passwort}"
-            );
+            let url = format!("{server_url}/suche/{search_text}");
 
             let client = reqwest::blocking::Client::new();
             let res = client
                 .get(&url)
+                .bearer_auth(authtoken)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .send();
 
@@ -1604,7 +1690,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         ))
                     ));
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
             };
@@ -1622,7 +1708,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         ))
                     ));
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
             };
@@ -1633,7 +1719,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             ));
         }
         Cmd::GrundbuchAbonnieren { download_id } => {
-            let passwort = match data.konfiguration.get_passwort() {
+            let authtoken = match data.konfiguration.get_authtoken() {
                 Some(s) => s,
                 None => return,
             };
@@ -1643,7 +1729,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let download_id = download_id;
             let server_url = &data.konfiguration.server_url;
             let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let passwort = urlencoding::encode(&passwort);
 
             let tag = tinyfiledialogs::input_box(
                 &format!("Aktenzeichen eingeben"),
@@ -1657,11 +1742,12 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             let tag = urlencoding::encode(&tag);
-            let url = format!("{server_url}/abo-neu/email/{download_id}/{tag}?email={server_email}&passwort={passwort}");
+            let url = format!("{server_url}/abo-neu/email/{download_id}/{tag}");
 
             let client = reqwest::blocking::Client::new();
             let res = client
                 .get(&url)
+                .bearer_auth(authtoken)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .send();
 
@@ -1674,7 +1760,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         MessageBoxIcon::Error
                     );
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
             };
@@ -1689,7 +1775,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         MessageBoxIcon::Error
                     );
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
             };
@@ -1711,7 +1797,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         MessageBoxIcon::Error
                     );
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
             }
@@ -1725,32 +1811,31 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
 
-            let passwort = match data.konfiguration.get_passwort() {
+            let authtoken = match data.konfiguration.get_authtoken() {
                 Some(s) => s,
                 None => return,
             };
 
-            let server_url = &data.konfiguration.server_url;
-            let server_email = urlencoding::encode(&data.konfiguration.server_email);
             let download_id = download_id;
             let server_url = &data.konfiguration.server_url;
-            let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let passwort = urlencoding::encode(&passwort);
-            let url = format!(
-                "{server_url}/download/gbx/{download_id}?email={server_email}&passwort={passwort}"
-            );
+            let url = format!("{server_url}/download/gbx/{download_id}");
 
-            let resp = match reqwest::blocking::get(&url) {
+            let resp = reqwest::blocking::Client::new()
+                .get(&url)
+                .bearer_auth(authtoken)
+                .send();
+
+            let resp = match resp {
                 Ok(s) => s,
                 Err(e) => {
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     let fehler = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
-                        &format!("Fehler beim Herunterladen von {download_id}"), 
-                        &format!("Datei {download_id} konnte nicht heruntergeladen werden:\r\nInterner Server-Fehler:\r\nHTTP GET {url}:\r\n{fehler}"), 
-                        MessageBoxIcon::Error
-                    );
+                            &format!("Fehler beim Herunterladen von {download_id}"), 
+                            &format!("Datei {download_id} konnte nicht heruntergeladen werden:\r\nInterner Server-Fehler:\r\nHTTP GET {url}:\r\n{fehler}"), 
+                            MessageBoxIcon::Error
+                        );
                     return;
                 }
             };
@@ -1759,7 +1844,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 Ok(s) => s,
                 Err(e) => {
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     let fehler = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
                         &format!("Fehler beim Herunterladen von {download_id}"), 
@@ -1774,7 +1859,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 Ok(s) => s,
                 Err(e) => {
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     let fehler = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
                         &format!("Fehler beim Herunterladen von {download_id}"), 
@@ -1888,15 +1973,13 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            let passwort = match data.konfiguration.get_passwort() {
+            let authtoken = match data.konfiguration.get_authtoken() {
                 Some(s) => s,
                 None => return,
             };
 
             let server_url = &data.konfiguration.server_url;
-            let server_email = urlencoding::encode(&data.konfiguration.server_email);
-            let passwort = urlencoding::encode(&passwort);
-            let url = format!("{server_url}/upload?email={server_email}&passwort={passwort}");
+            let url = format!("{server_url}/upload");
 
             let commit_msg = crate::pdf::hyphenate(&crate::pdf::unhyphenate(&data.commit_msg), 80);
 
@@ -1911,38 +1994,54 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 data: d,
             };
 
-            let client = reqwest::blocking::Client::new();
-            let res = match client.post(url.clone()).json(&data_changes).send() {
-                Ok(o) => match o.json::<UploadChangesetResponse>() {
-                    Ok(UploadChangesetResponse::StatusOk(o)) => {
-                        data.reset_diff_backup_files(&o);
-                        data.popover_state = None;
-                        data.commit_title.clear();
-                        data.commit_msg.clear();
+            let resp = reqwest::blocking::Client::new()
+                .post(&url)
+                .bearer_auth(authtoken)
+                .json(&data_changes)
+                .send();
+
+            match resp {
+                Ok(o) => {
+                    let body = o
+                        .bytes()
+                        .ok()
+                        .and_then(|s| String::from_utf8(s.to_vec()).ok())
+                        .unwrap_or_default();
+
+                    match serde_json::from_str::<UploadChangesetResponse>(&body) {
+                        Ok(UploadChangesetResponse::StatusOk(o)) => {
+                            data.reset_diff_backup_files(&o);
+                            data.popover_state = None;
+                            data.commit_title.clear();
+                            data.commit_msg.clear();
+                        }
+                        Ok(UploadChangesetResponse::StatusError(e)) => {
+                            let err = e.text.replace("\"", "").replace("'", "");
+                            tinyfiledialogs::message_box_ok(
+                                "Fehler beim Hochladen der Dateien",
+                                &format!("E{}: {err}", e.code),
+                                MessageBoxIcon::Error,
+                            );
+                            let _ = std::fs::remove_file(
+                                std::env::temp_dir().join("dgb").join("auth.json"),
+                            );
+                        }
+                        Err(e) => {
+                            let e = format!("{e}").replace("\"", "").replace("'", "");
+                            tinyfiledialogs::message_box_ok(
+                                "Fehler beim Hochladen der Dateien",
+                                &format!(
+                                    "Antwort vom Server ist nicht im richtigen Format:\r\n{}{}",
+                                    body.chars().collect::<String>(),
+                                    e
+                                )
+                                .replace("'", "")
+                                .replace("\"", ""),
+                                MessageBoxIcon::Error,
+                            );
+                        }
                     }
-                    Ok(UploadChangesetResponse::StatusError(e)) => {
-                        let err = e.text.replace("\"", "").replace("'", "");
-                        tinyfiledialogs::message_box_ok(
-                            "Fehler beim Hochladen der Dateien",
-                            &format!("E{}: {err}", e.code),
-                            MessageBoxIcon::Error,
-                        );
-                        let _ = std::fs::remove_file(
-                            std::env::temp_dir().join("dgb").join("passwort.txt"),
-                        );
-                    }
-                    Err(e) => {
-                        let e = format!("{e}").replace("\"", "").replace("'", "");
-                        tinyfiledialogs::message_box_ok(
-                            "Fehler beim Hochladen der Dateien",
-                            &format!("Antwort vom Server ist nicht im richtigen Format:\r\n{}", e),
-                            MessageBoxIcon::Error,
-                        );
-                        let _ = std::fs::remove_file(
-                            std::env::temp_dir().join("dgb").join("passwort.txt"),
-                        );
-                    }
-                },
+                }
                 Err(e) => {
                     let e = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
@@ -1951,7 +2050,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         MessageBoxIcon::Error,
                     );
                     let _ =
-                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                 }
             };
 
@@ -3396,41 +3495,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ui::render_entire_screen(data)
             ));
         }
-        Cmd::CheckPdfForErrors => {
-            let mut new_icons = BTreeMap::new();
-            let mut icon_count = 0;
-
-            for (k, v) in data.loaded_files.iter() {
-                if icon_count >= 1 {
-                    break;
-                }
-
-                if v.ist_geladen() && v.icon.is_none() {
-                    let icon =
-                        match v.get_icon(data.vm.clone(), &data.loaded_nb, &data.konfiguration) {
-                            Some(s) => s,
-                            None => {
-                                return;
-                            }
-                        };
-                    new_icons.insert(k.clone(), icon);
-                    icon_count += 1;
-                }
-            }
-
-            for (k, v) in new_icons {
-                if let Some(s) = data.loaded_files.get_mut(&k.clone()) {
-                    s.icon = Some(v);
-                    let konfiguration = data.konfiguration.clone();
-                    let titelblatt = s.analysiert.titelblatt.clone();
-                    let _ = webview.evaluate_script(&format!(
-                        "replaceIcon(`{}`, `{}`)",
-                        k,
-                        v.get_base64()
-                    ));
-                }
-            }
-        }
+        Cmd::CheckPdfForErrors => {}
         Cmd::ToggleLefisAnalyse => {
             data.konfiguration.lefis_analyse_einblenden =
                 !data.konfiguration.lefis_analyse_einblenden;
@@ -4698,6 +4763,32 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let _ = std::fs::write(&f, html.as_bytes());
         }
+        Cmd::ExportAlleHvm => {
+            if data.loaded_files.is_empty() {
+                return;
+            }
+
+            let file_dialog_result =
+                tinyfiledialogs::save_file_dialog("Herrschvermerke .HTML speichern unter", "");
+
+            let f = match file_dialog_result {
+                Some(f) => {
+                    if f.ends_with(".html") {
+                        f
+                    } else {
+                        format!("{}.html", f)
+                    }
+                }
+                None => return,
+            };
+
+            let html = format!(
+                "<html><head><style>* {{ margin:0px;padding:0px; }}</style></head><body>{}</body>",
+                get_alle_herrschvermerke_html(&data)
+            );
+
+            let _ = std::fs::write(&f, html.as_bytes());
+        }
         Cmd::ExportAlleAbt1 => {
             if data.loaded_files.is_empty() {
                 return;
@@ -5217,6 +5308,39 @@ fn get_alle_teilbelastungen_html(data: &RpcData) -> String {
     entries
 }
 
+fn get_alle_herrschvermerke_html(data: &RpcData) -> String {
+    let mut entries = String::new();
+
+    for (f_name, f) in data.loaded_files.iter() {
+        let blatt = &f.analysiert.titelblatt.grundbuch_von;
+        let nr = &f.analysiert.titelblatt.blatt;
+        entries.push_str(&format!("<div><p>{blatt} Nr. {nr}</p>",));
+
+        for bv_eintrag in f
+            .analysiert
+            .bestandsverzeichnis
+            .eintraege
+            .iter()
+            .filter(|bv| !bv.ist_geroetet())
+            .filter_map(|bv| match bv {
+                BvEintrag::Recht(r) => Some(r.clone()),
+                _ => None,
+            })
+        {
+            let lfd_nr = bv_eintrag.lfd_nr;
+            let zu_nr = bv_eintrag.zu_nr.text();
+            let text = bv_eintrag.text.text();
+            entries.push_str(&format!(
+                "<div><p>{lfd_nr} (zu Nr. {zu_nr})</p><p>{text}</p></div>"
+            ));
+        }
+
+        entries.push_str(&format!("</div>"));
+    }
+
+    entries
+}
+
 fn get_alle_abt1_html(data: &RpcData) -> String {
     let mut entries = String::new();
 
@@ -5693,26 +5817,48 @@ pub struct PdfFileNichtVorhanden {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status")]
+pub enum LoginResponse {
+    #[serde(rename = "ok")]
+    Ok(LoginResponseOk),
+    #[serde(rename = "error")]
+    Error(LoginResponseError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginResponseOk {
+    pub token: String,
+    pub valid_until: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginResponseError {
+    pub code: usize,
+    pub text: String,
+}
+
 // Versucht eine Synchronisierung von  ~/.config/dgb/backup/XXX.gbx mit der Datenbank
 fn try_download_file_database(
     konfiguration: Konfiguration,
     titelblatt: Titelblatt,
 ) -> Result<(), Option<String>> {
-    let passwort = match konfiguration.get_passwort() {
+    let authtoken = match konfiguration.get_authtoken() {
         Some(s) => s,
         None => return Err(None),
     };
 
     let server_url = &konfiguration.server_url;
-    let server_email = urlencoding::encode(&konfiguration.server_email);
     let download_id = format!(
         "{}/{}/{}",
         titelblatt.amtsgericht, titelblatt.grundbuch_von, titelblatt.blatt
     );
-    let url =
-        format!("{server_url}/download/gbx/{download_id}?email={server_email}&passwort={passwort}");
+    let url = format!("{server_url}/download/gbx/{download_id}");
 
-    let resp = reqwest::blocking::get(&url)
+    let resp = reqwest::blocking::Client::new()
+        .get(&url)
+        .bearer_auth(authtoken)
+        .send()
         .map_err(|e| Some(format!("Fehler beim Downloaden von {url}: {e}")))?;
 
     let json = resp
@@ -5827,7 +5973,7 @@ fn main() -> wry::Result<()> {
     let initial_screen = ui::render_entire_screen(&mut userdata);
 
     let resizable = true;
-    let debug = true;
+    let debug = false;
     let app_html = include_str!("app.html")
         .to_string()
         .replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
@@ -5841,7 +5987,7 @@ fn main() -> wry::Result<()> {
 
     let webview = WebViewBuilder::new(window)?
         .with_html(app_html)?
-        .with_devtools(true)
+        .with_devtools(false)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
             Ok(o) => {
@@ -5853,15 +5999,6 @@ fn main() -> wry::Result<()> {
         })
         .build()?;
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&crate::python::PyOk::RechteArt(
-            crate::python::RechteArt::SpeziellVormerkung { rechteverweis: 5 }
-        ))
-        .unwrap_or_default()
-    );
-
-    webview.open_devtools();
     webview.focus();
 
     event_loop.run(move |event, _, control_flow| {
@@ -5874,7 +6011,7 @@ fn main() -> wry::Result<()> {
             } => {
                 *control_flow = ControlFlow::Exit;
 
-                let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("passwort.txt"));
+                let _ = std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
 
                 if let Ok(original_value) = original_value.as_ref() {
                     env::set_var(GTK_OVERLAY_SCROLLING, original_value);

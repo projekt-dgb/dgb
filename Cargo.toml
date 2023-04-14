@@ -23,7 +23,7 @@ image = { version = "0.23.14", features = ["pnm", "bmp"] }
 rayon = "1.5.1"
 kuchiki = "0.8.1"
 tinyfiledialogs = "3.8.3"
-chrono = { version = "0.4.19", features = ["serde"] }
+chrono = { version = "0.4.19", default-features = false, features = ["alloc", "std", "clock", "serde"] }
 toml = "0.5"
 dirs = "4.0"
 num_cpus = "1.0"

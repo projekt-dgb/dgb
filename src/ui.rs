@@ -1505,7 +1505,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     let alle_hvm_speichern = {
         format!("
         <div class='__application-ribbon-section-content'>
-            <label onmouseup='tab_functions.export_alle_hvm(event)' class='__application-ribbon-action-vertical-large'>
+            <label onmouseup='tab_functions.export_alle_hvm(event)'  class='__application-ribbon-action-vertical-large'>
                 <div class='icon-wrapper'>
                     <img class='icon {disabled}' src='data:image/png;base64,{icon_hvm}'>
                 </div>

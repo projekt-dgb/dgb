@@ -35,6 +35,8 @@ pub enum Cmd {
     ExportAlleFehler,
     #[serde(rename = "export_alle_abt1")]
     ExportAlleAbt1,
+    #[serde(rename = "export_alle_hvm")]
+    ExportAlleHvm,
     #[serde(rename = "export_alle_teilbelastungen")]
     ExportAlleTeilbelastungen,
     #[serde(rename = "open_grundbuch_suchen_dialog")]

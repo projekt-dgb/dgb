@@ -175,6 +175,9 @@ impl GrundbuchAnalysiertCache {
         let mut abt3_analysiert = Vec::new();
 
         for eintrag in grundbuch.abt2.eintraege.iter() {
+            if eintrag.ist_geroetet() {
+                continue;
+            }
             let abt2_hash = Abt2Hash::new(eintrag, grundbuch, konfiguration, nb);
             let default_eintrag = Abt2Analysiert {
                 lfd_nr: eintrag.lfd_nr,
@@ -237,6 +240,9 @@ impl GrundbuchAnalysiertCache {
         }
 
         for eintrag in grundbuch.abt3.eintraege.iter() {
+            if eintrag.ist_geroetet() {
+                continue;
+            }
             let abt3_hash = Abt3Hash::new(eintrag, grundbuch, konfiguration, nb);
             let default_eintrag = Abt3Analysiert {
                 lfd_nr: eintrag.lfd_nr,
@@ -326,6 +332,9 @@ impl GrundbuchAnalysiertCache {
         let mut abt3_analysiert = Vec::new();
 
         for eintrag in grundbuch.abt2.eintraege.iter() {
+            if eintrag.ist_geroetet() {
+                continue;
+            }
             let abt2_hash = Abt2Hash::new(eintrag, grundbuch, konfiguration, nb);
             abt2_analysiert.push(match current_state_cloned.abt2.get(&abt2_hash).cloned() {
                 Some(s) => s,
@@ -334,6 +343,9 @@ impl GrundbuchAnalysiertCache {
         }
 
         for eintrag in grundbuch.abt3.eintraege.iter() {
+            if eintrag.ist_geroetet() {
+                continue;
+            }
             let abt3_hash = Abt3Hash::new(eintrag, grundbuch, konfiguration, nb);
             abt3_analysiert.push(match current_state_cloned.abt3.get(&abt3_hash).cloned() {
                 Some(s) => s,

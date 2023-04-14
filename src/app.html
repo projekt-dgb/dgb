@@ -89676,6 +89676,8 @@ let rpc = {
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
   export_alle_teilbelastungen: function() { rpc.invoke({ cmd : 'export_alle_teilbelastungen' }); },
+  export_alle_hvm: function() { rpc.invoke({ cmd : 'export_alle_hvm' }); },
+
   check_pdf_image_sichtbar: function() { rpc.invoke({ cmd : 'check_pdf_image_sichtbar' }); },
   toggle_lefis_analyse: function() { rpc.invoke({ cmd : 'toggle_lefis_analyse' }); },
   toggle_dateiliste: function(arg) { rpc.invoke({ cmd : 'toggle_dateiliste', toggle: arg }) },
@@ -89796,6 +89798,7 @@ let tab_functions = {
     export_alle_fehler: function(event) { rpc.export_alle_fehler() },
     export_alle_teilbelastungen: function(event) { rpc.export_alle_teilbelastungen() },
     export_alle_abt1: function(event) { rpc.export_alle_abt1() },
+    export_alle_hvm: function(event) { rpc.export_alle_hvm() },
     export_lefis: function(event) { rpc.export_lefis() },
     export_pdf: function(event) { rpc.export_pdf() },
     open_configuration: function(event) { rpc.open_configuration() },
