@@ -75,6 +75,7 @@ jobs:
       - name: Bundle Linux
         if: ${{ matrix.build }} == 'linux-x64'
         run: |
+          sudo apt install pkg-config
           cargo install cargo-deb
           cargo deb
       - name: Bundle Mac
