@@ -1638,10 +1638,12 @@ dependencies = [
 
 [[package]]
 name = "gbx"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "277d84ed3a4ce8d7cf27446e8cbcffb4d302f67bf3e70d43c4041d407fc3e676"
+checksum = "9959761964255f9d5923a083ee98f200de3e0ffebcb436ed601612a7145dd7ec"
 dependencies = [
+ "lazy_static",
+ "regex",
  "serde",
 ]
 
@@ -3595,9 +3597,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.7.2"
+version = "1.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cce168fea28d3e05f158bda4576cf0c844d5045bc2cc3620fa0292ed5bb5814c"
+checksum = "8b1f693b24f6ac912f4893ef08244d70b6067480d2f1a46e950c9691e6749d1d"
 dependencies = [
  "aho-corasick",
  "memchr",
