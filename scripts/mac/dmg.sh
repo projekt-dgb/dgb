@@ -2,9 +2,9 @@
 
 set -e
 
-APP_NAME=ld39
-MACOS_BIN_NAME=energygrid-bin
-MACOS_APP_NAME=EnergyGrid
+APP_NAME=dgb
+MACOS_BIN_NAME=dgb
+MACOS_APP_NAME=DigitalesGrundbuch
 MACOS_APP_DIR=$MACOS_APP_NAME.app
 
 mkdir -p macbuild
@@ -14,29 +14,29 @@ rm -rf $MACOS_APP_NAME
 rm -rf $MACOS_APP_DIR
 mkdir -p $MACOS_APP_DIR/Contents/MacOS
 
-cargo rustc \
-    --verbose \
-    --release
+cargo build # --release
 
 echo "Copying binary"
 MACOS_APP_BIN=$MACOS_APP_DIR/Contents/MacOS/$MACOS_BIN_NAME
-cp ../target/release/$APP_NAME $MACOS_APP_BIN
+cp ../target/debug/$APP_NAME $MACOS_APP_BIN
+# cp ../target/release/$APP_NAME $MACOS_APP_BIN
 
 echo "Copying resources directory"
-cp -r ../resources $MACOS_APP_DIR/Contents/MacOS
+cp -r ../scripts/mac/resources $MACOS_APP_DIR/Contents/MacOS
 
 echo "Copying launcher"
-cp ../scripts/macos_launch.sh $MACOS_APP_DIR/Contents/MacOS/$MACOS_APP_NAME
+cp ../scripts/mac/macos_launch.sh $MACOS_APP_DIR/Contents/MacOS/$MACOS_APP_NAME
 
 echo "Copying Icon"
 mkdir -p $MACOS_APP_DIR/Contents/Resources
-mv ../resources/Info.plist $MACOS_APP_DIR/Contents/
-mv ../resources/logo.icns $MACOS_APP_DIR/Contents/Resources/
+cp ../scripts/mac/Info.plist $MACOS_APP_DIR/Contents/
+cp ../scripts/mac/dgb.icns $MACOS_APP_DIR/Contents/Resources/
 
 echo "Creating dmg"
 mkdir -p $MACOS_APP_NAME
 cp -r $MACOS_APP_DIR $MACOS_APP_NAME/
 rm -rf $MACOS_APP_NAME/.Trashes
+ln -s /Applications $MACOS_APP_NAME/Applications
 
 FULL_NAME=$MACOS_APP_NAME
 

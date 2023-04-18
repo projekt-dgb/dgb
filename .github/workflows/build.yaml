@@ -3,10 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - master
-      - 'with-ci-.*'
-      - 'v3.0.x'
-      - 'v3.1.x'
+      - 'master'
     tags:
       # this is _not_ a regex, see: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
       - '[0-9]+.[0-9]+.[0-9]+*'
@@ -69,22 +66,38 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ matrix.build }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}-v1
+      - name: Bundle Windows
+        if: ${{ matrix.build }} == 'windows-x64'
+        shell: bash
+        run: |
+          cargo install cargo-wix
+          cargo wix
       - name: Bundle Linux
         if: ${{ matrix.build }} == 'linux-x64'
         run: |
           cargo install cargo-deb
           cargo deb
       - name: Bundle Mac
-        if: ${{ matrix.build }} == 'linux-x64'
-        run: |
-          cargo install cargo-bundle
-          cargo bundle --release
+        if: ${{ matrix.build }} == 'macos-x64'
+        shell: bash
+        run: scripts/mac/dmg.sh
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.artifact_name }}
-          path: dist
-          if-no-files-found: error
+          path: macbuild/DigitalesGrundbuch.dmg
+          retention-days: 2
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: target/release/dgb.deb
+          retention-days: 2
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: target/release/dgb.msi
           retention-days: 2
 
   release:

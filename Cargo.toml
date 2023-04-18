@@ -76,7 +76,7 @@ strip = true
 
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
-depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
+depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
@@ -98,5 +98,5 @@ short_description = "Digitales Grundbuch"
 long_description = """
 Anwendung zum Bearbeiten und Digitalisieren vom digitalen Grundbuch
 """
-deb_depends = ["$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"]
+deb_depends = ["$auto"]
 osx_frameworks = []
