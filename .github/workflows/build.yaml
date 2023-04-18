@@ -1,19 +1,25 @@
-name: Builds
-
-env:
-  RUST_BACKTRACE: 1
+name: Build
 
 on:
   push:
     branches:
-      - 'master'
+      - master
+      - 'with-ci-.*'
+      - 'v3.0.x'
+      - 'v3.1.x'
     tags:
       # this is _not_ a regex, see: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
       - '[0-9]+.[0-9]+.[0-9]+*'
+  pull_request:
   workflow_dispatch:
     inputs:
       release:
           description: 'Make release'
+
+# Automatically cancel previous workflow runs when a new commit is pushed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   setup:
@@ -35,7 +41,7 @@ jobs:
           echo $DOING_RELEASE
 
   build:
-   name: Build on ${{ matrix.build }}
+    name: Build on ${{ matrix.build }}
     runs-on: ${{ matrix.os }}
     needs: setup
     strategy:
