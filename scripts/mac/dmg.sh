@@ -40,5 +40,5 @@ ln -s /Applications $MACOS_APP_NAME/Applications
 
 FULL_NAME=$MACOS_APP_NAME
 
-hdiutil create $FULL_NAME.dmg -srcfolder $MACOS_APP_NAME -ov
+hdiutil create $FULL_NAME.dmg -srcfolder `pwd`/$MACOS_APP_NAME -ov
 rm -rf $MACOS_APP_NAME

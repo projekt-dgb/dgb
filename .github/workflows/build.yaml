@@ -71,11 +71,11 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-wix
-          cargo wix scripts/windows
+          cargo wix scripts/windows/main.wxs
       - name: Bundle Linux
         if: matrix.build == 'linux-x64'
         run: |
-          sudo apt install pkg-config libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-37
+          sudo apt install pkg-config libgtk-3-dev libsoup2.4-dev libwebkit2gtk-4.0-37 javascriptcoregtk-4.0-dev
           cargo install cargo-deb
           cargo deb
       - name: Bundle Mac
