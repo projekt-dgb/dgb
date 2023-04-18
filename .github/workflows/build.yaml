@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-wix
-          cargo wix
+          cargo wix scripts/windows
       - name: Bundle Linux
         if: matrix.build == 'linux-x64'
         run: |
