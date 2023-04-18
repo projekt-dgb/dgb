@@ -16,13 +16,13 @@ mkdir -p $MACOS_APP_DIR/Contents/MacOS
 
 cargo build # --release
 
+echo "pwd"
+pwd
+
 echo "Copying binary"
 MACOS_APP_BIN=$MACOS_APP_DIR/Contents/MacOS/$MACOS_BIN_NAME
 cp ../target/debug/$APP_NAME $MACOS_APP_BIN
 # cp ../target/release/$APP_NAME $MACOS_APP_BIN
-
-echo "Copying resources directory"
-cp -r ../scripts/mac/resources $MACOS_APP_DIR/Contents/MacOS
 
 echo "Copying launcher"
 cp ../scripts/mac/macos_launch.sh $MACOS_APP_DIR/Contents/MacOS/$MACOS_APP_NAME
