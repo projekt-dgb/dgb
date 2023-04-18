@@ -6842,7 +6842,7 @@ fn main() -> wry::Result<()> {
 
     let webview = WebViewBuilder::new(window)?
         .with_html(app_html)?
-        .with_devtools(true)
+        .with_devtools(false)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
             Ok(o) => {
@@ -6855,7 +6855,6 @@ fn main() -> wry::Result<()> {
         .build()?;
 
     webview.focus();
-    webview.open_devtools();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
