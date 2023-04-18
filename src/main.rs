@@ -10,17 +10,20 @@ use std::sync::Mutex;
 use crate::analyse::GrundbuchAnalysiert;
 use crate::digital::HocrLayout;
 use crate::digital::{
-    Abt1Eintrag, Abt1GrundEintragung, Abt1Loeschung, Abt1Veraenderung, Abt2Eintrag, Abt2Loeschung,
-    Abt2Veraenderung, Abt3Eintrag, Abt3Loeschung, Abt3Veraenderung, Anrede, BvAbschreibung,
-    BvEintrag, BvZuschreibung, Grundbuch, Nebenbeteiligter, NebenbeteiligterExport,
-    NebenbeteiligterExtra, NebenbeteiligterTyp, SeitenTyp, Titelblatt,
+    Abt1Eintrag, Abt1EintragV1, Abt1EintragV2, Abt1GrundEintragung, Abt1Loeschung,
+    Abt1Veraenderung, Abt2Eintrag, Abt2Loeschung, Abt2Veraenderung, Abt3Eintrag, Abt3Loeschung,
+    Abt3Veraenderung, Anrede, BvAbschreibung, BvEintrag, BvEintragFlurstueck, BvEintragRecht,
+    BvZuschreibung, Grundbuch, HocrArea, HocrLine, HocrParagraph, HocrWord, Linie,
+    Nebenbeteiligter, NebenbeteiligterExport, NebenbeteiligterExtra, NebenbeteiligterTyp, Punkt,
+    SeitenTyp, Titelblatt,
 };
 use crate::digital::{Abteilung1, Abteilung2, Abteilung3, Bestandsverzeichnis};
-use crate::python::Spalte1Eintrag;
 use crate::python::{Betrag, PyVm, RechteArt, SchuldenArt};
 use analyse::{AnalyseFehler, GrundbuchAnalysiertCache};
+use digital::FlurstueckGroesse;
 use digital::HocrSeite;
 use digital::ParsedHocr;
+use digital::PositionInPdf;
 use digital::StringOrLines;
 use serde_derive::{Deserialize, Serialize};
 use tinyfiledialogs::MessageBoxIcon;
@@ -28,13 +31,6 @@ use wry::webview::WebView;
 
 const APP_TITLE: &str = "Digitales Grundbuch";
 const GTK_OVERLAY_SCROLLING: &str = "GTK_OVERLAY_SCROLLING";
-
-#[cfg(target_os = "windows")]
-static TESSERACT_SOURCE_ZIP: &[u8] = include_bytes!("../bin/Tesseract-OCR.zip");
-#[cfg(target_os = "windows")]
-static PDFTOOLS_SOURCE_ZIP: &[u8] = include_bytes!("../bin/xpdf-tools-win-4.04.zip");
-#[cfg(target_os = "windows")]
-static QPDF_SOURCE_ZIP: &[u8] = include_bytes!("../bin/qpdf-10.6.3-bin-mingw32.zip");
 
 type FileName = String;
 
@@ -59,6 +55,7 @@ pub struct RpcData {
     pub commit_msg: String,
 
     pub loaded_files: BTreeMap<FileName, PdfFile>,
+    pub loaded_remote_files: BTreeMap<FileName, gbx::PdfFile>,
     pub loaded_nb: Vec<Nebenbeteiligter>,
     pub loaded_nb_paths: Vec<String>,
 
@@ -83,8 +80,868 @@ pub struct PgpSignatur {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadChangesetData {
-    pub neu: Vec<PdfFile>,
-    pub geaendert: Vec<GbxAenderung>,
+    pub neu: Vec<gbx::PdfFile>,
+    pub geaendert: Vec<GbxAenderungForUpload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GbxAenderungForUpload {
+    pub alt: gbx::PdfFile,
+    pub neu: gbx::PdfFile,
+}
+
+fn translate_rect(r: &Rect) -> gbx::Rect {
+    gbx::Rect {
+        min_x: r.min_x,
+        min_y: r.min_y,
+        max_x: r.max_x,
+        max_y: r.max_y,
+    }
+}
+
+fn translate_position_in_seite(p: &Option<PositionInPdf>) -> Option<gbx::PositionInPdf> {
+    p.as_ref().and_then(|f| {
+        Some(gbx::PositionInPdf {
+            seite: f.seite.clone(),
+            rect: gbx::Rect {
+                min_x: f.rect.min_x.clone()?,
+                max_x: f.rect.max_x.clone()?,
+                min_y: f.rect.min_y.clone()?,
+                max_y: f.rect.max_y.clone()?,
+            },
+        })
+    })
+}
+
+fn translate_stringorlines(s: &StringOrLines) -> gbx::StringOrLines {
+    match s {
+        StringOrLines::SingleLine(s) => gbx::StringOrLines::SingleLine(s.clone()),
+        StringOrLines::MultiLine(s) => gbx::StringOrLines::MultiLine(s.clone()),
+    }
+}
+
+fn untranslate_rect(r: &gbx::Rect) -> Rect {
+    Rect {
+        min_x: r.min_x,
+        min_y: r.min_y,
+        max_x: r.max_x,
+        max_y: r.max_y,
+    }
+}
+
+fn untranslate_position_in_seite(p: &Option<gbx::PositionInPdf>) -> Option<PositionInPdf> {
+    p.as_ref().and_then(|f| {
+        Some(PositionInPdf {
+            seite: f.seite.clone(),
+            rect: crate::digital::OptRect {
+                min_x: Some(f.rect.min_x),
+                max_x: Some(f.rect.max_x),
+                min_y: Some(f.rect.min_y),
+                max_y: Some(f.rect.max_y),
+            },
+        })
+    })
+}
+
+fn untranslate_stringorlines(s: &gbx::StringOrLines) -> StringOrLines {
+    match s {
+        gbx::StringOrLines::SingleLine(s) => StringOrLines::SingleLine(s.clone()),
+        gbx::StringOrLines::MultiLine(s) => StringOrLines::MultiLine(s.clone()),
+    }
+}
+
+fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
+    PdfFile {
+        cache: GrundbuchAnalysiertCache::default(),
+        land: None,
+        icon: None,
+        next_state: None,
+        nebenbeteiligte_dateipfade: Vec::new(),
+        previous_state: None,
+        datei: if f.digitalisiert {
+            Some(format!(
+                "./{}_{}.pdf",
+                f.analysiert.titelblatt.grundbuch_von, f.analysiert.titelblatt.blatt
+            ))
+        } else {
+            None
+        },
+        gbx_datei_pfad: None, // TODO?
+        hocr: HocrLayout {
+            seiten: f
+                .hocr
+                .seiten
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        HocrSeite {
+                            breite_mm: v.breite_mm,
+                            hoehe_mm: v.hoehe_mm,
+                            parsed: ParsedHocr {
+                                bounds: untranslate_rect(&v.parsed.bounds),
+                                careas: v
+                                    .parsed
+                                    .careas
+                                    .iter()
+                                    .map(|ca| HocrArea {
+                                        bounds: untranslate_rect(&ca.bounds),
+                                        paragraphs: ca
+                                            .paragraphs
+                                            .iter()
+                                            .map(|ca| HocrParagraph {
+                                                bounds: Rect {
+                                                    min_x: ca.bounds.min_x,
+                                                    min_y: ca.bounds.min_y,
+                                                    max_x: ca.bounds.max_x,
+                                                    max_y: ca.bounds.max_y,
+                                                },
+                                                lines: ca
+                                                    .lines
+                                                    .iter()
+                                                    .map(|ca| HocrLine {
+                                                        bounds: Rect {
+                                                            min_x: ca.bounds.min_x,
+                                                            min_y: ca.bounds.min_y,
+                                                            max_x: ca.bounds.max_x,
+                                                            max_y: ca.bounds.max_y,
+                                                        },
+                                                        words: ca
+                                                            .words
+                                                            .iter()
+                                                            .map(|ca| HocrWord {
+                                                                bounds: Rect {
+                                                                    min_x: ca.bounds.min_x,
+                                                                    min_y: ca.bounds.min_y,
+                                                                    max_x: ca.bounds.max_x,
+                                                                    max_y: ca.bounds.max_y,
+                                                                },
+                                                                confidence: ca.confidence,
+                                                                text: ca.text.clone(),
+                                                            })
+                                                            .collect(),
+                                                    })
+                                                    .collect(),
+                                            })
+                                            .collect(),
+                                    })
+                                    .collect(),
+                            },
+                            rote_linien: v
+                                .rote_linien
+                                .iter()
+                                .map(|r| Linie {
+                                    punkte: r
+                                        .punkte
+                                        .iter()
+                                        .map(|p| Punkt { x: p.x, y: p.y })
+                                        .collect(),
+                                })
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
+        },
+        anpassungen_seite: f
+            .anpassungen_seite
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    AnpassungSeite {
+                        klassifikation_neu: v.klassifikation_neu.map(|v| match v {
+                            gbx::SeitenTyp::BestandsverzeichnisHorz => {
+                                SeitenTyp::BestandsverzeichnisHorz
+                            }
+                            gbx::SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen => {
+                                SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen
+                            }
+                            gbx::SeitenTyp::BestandsverzeichnisVert => {
+                                SeitenTyp::BestandsverzeichnisVert
+                            }
+                            gbx::SeitenTyp::BestandsverzeichnisVertTyp2 => {
+                                SeitenTyp::BestandsverzeichnisVertTyp2
+                            }
+                            gbx::SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => {
+                                SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen
+                            }
+                            gbx::SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt => {
+                                SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt
+                            }
+                            gbx::SeitenTyp::Abt1Horz => SeitenTyp::Abt1Horz,
+                            gbx::SeitenTyp::Abt1Vert => SeitenTyp::Abt1Vert,
+                            gbx::SeitenTyp::Abt1VertTyp2 => SeitenTyp::Abt1VertTyp2,
+                            gbx::SeitenTyp::Abt2HorzVeraenderungen => {
+                                SeitenTyp::Abt2HorzVeraenderungen
+                            }
+                            gbx::SeitenTyp::Abt2Horz => SeitenTyp::Abt2Horz,
+                            gbx::SeitenTyp::Abt2VertVeraenderungen => {
+                                SeitenTyp::Abt2VertVeraenderungen
+                            }
+                            gbx::SeitenTyp::Abt2Vert => SeitenTyp::Abt2Vert,
+                            gbx::SeitenTyp::Abt2VertTyp2 => SeitenTyp::Abt2VertTyp2,
+                            gbx::SeitenTyp::Abt3HorzVeraenderungenLoeschungen => {
+                                SeitenTyp::Abt3HorzVeraenderungenLoeschungen
+                            }
+                            gbx::SeitenTyp::Abt3VertVeraenderungenLoeschungen => {
+                                SeitenTyp::Abt3VertVeraenderungenLoeschungen
+                            }
+                            gbx::SeitenTyp::Abt3Horz => SeitenTyp::Abt3Horz,
+                            gbx::SeitenTyp::Abt3VertVeraenderungen => {
+                                SeitenTyp::Abt3VertVeraenderungen
+                            }
+                            gbx::SeitenTyp::Abt3VertLoeschungen => SeitenTyp::Abt3VertLoeschungen,
+                            gbx::SeitenTyp::Abt3Vert => SeitenTyp::Abt3Vert,
+                        }),
+                        spalten: v
+                            .spalten
+                            .iter()
+                            .map(|(k, v)| {
+                                (
+                                    k.clone(),
+                                    Rect {
+                                        min_x: v.min_x,
+                                        min_y: v.min_y,
+                                        max_x: v.max_x,
+                                        max_y: v.max_y,
+                                    },
+                                )
+                            })
+                            .collect(),
+                        zeilen: v
+                            .zeilen
+                            .iter()
+                            .filter_map(|(k, v)| Some((k.parse().ok()?, v.clone())))
+                            .collect(),
+                        zeilen_auto: v
+                            .zeilen_auto
+                            .iter()
+                            .filter_map(|(k, v)| Some((k.parse().ok()?, v.clone())))
+                            .collect(),
+                    },
+                )
+            })
+            .collect(),
+        analysiert: Grundbuch {
+            titelblatt: Titelblatt {
+                amtsgericht: f.analysiert.titelblatt.amtsgericht.clone(),
+                grundbuch_von: f.analysiert.titelblatt.grundbuch_von.clone(),
+                blatt: f.analysiert.titelblatt.blatt.clone(),
+            },
+            bestandsverzeichnis: Bestandsverzeichnis {
+                eintraege: f
+                    .analysiert
+                    .bestandsverzeichnis
+                    .eintraege
+                    .iter()
+                    .map(|k| match k {
+                        gbx::BvEintrag::Flurstueck(f) => {
+                            BvEintrag::Flurstueck(BvEintragFlurstueck {
+                                lfd_nr: f.lfd_nr.clone(),
+                                bisherige_lfd_nr: f.bisherige_lfd_nr.clone(),
+                                flur: f.flur.clone(),
+                                flurstueck: f.flurstueck.clone(),
+                                gemarkung: f.gemarkung.clone(),
+                                bezeichnung: f.bezeichnung.as_ref().map(untranslate_stringorlines),
+                                groesse: match f.groesse {
+                                    gbx::FlurstueckGroesse::Hektar { ha, a, m2 } => {
+                                        FlurstueckGroesse::Hektar { ha, a, m2 }
+                                    }
+                                    gbx::FlurstueckGroesse::Metrisch { m2 } => {
+                                        FlurstueckGroesse::Metrisch { m2 }
+                                    }
+                                },
+                                automatisch_geroetet: f.automatisch_geroetet.clone(),
+                                manuell_geroetet: f.manuell_geroetet.clone(),
+                                position_in_pdf: untranslate_position_in_seite(&f.position_in_pdf),
+                            })
+                        }
+                        gbx::BvEintrag::Recht(r) => BvEintrag::Recht(BvEintragRecht {
+                            lfd_nr: r.lfd_nr.clone(),
+                            zu_nr: untranslate_stringorlines(&r.zu_nr),
+                            bisherige_lfd_nr: r.bisherige_lfd_nr.clone(),
+                            text: untranslate_stringorlines(&r.text),
+                            automatisch_geroetet: r.automatisch_geroetet.clone(),
+                            manuell_geroetet: r.manuell_geroetet.clone(),
+                            position_in_pdf: untranslate_position_in_seite(&r.position_in_pdf),
+                        }),
+                    })
+                    .collect(),
+                zuschreibungen: f
+                    .analysiert
+                    .bestandsverzeichnis
+                    .zuschreibungen
+                    .iter()
+                    .map(|k| BvZuschreibung {
+                        bv_nr: untranslate_stringorlines(&k.bv_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                abschreibungen: f
+                    .analysiert
+                    .bestandsverzeichnis
+                    .abschreibungen
+                    .iter()
+                    .map(|k| BvAbschreibung {
+                        bv_nr: untranslate_stringorlines(&k.bv_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+            },
+            abt1: Abteilung1 {
+                eintraege: f
+                    .analysiert
+                    .abt1
+                    .eintraege
+                    .iter()
+                    .map(|k| match k {
+                        gbx::Abt1Eintrag::V1(v) => Abt1Eintrag::V1(Abt1EintragV1 {
+                            lfd_nr: v.lfd_nr.clone(),
+                            eigentuemer: untranslate_stringorlines(&v.eigentuemer),
+                            grundlage_der_eintragung: untranslate_stringorlines(
+                                &v.grundlage_der_eintragung,
+                            ),
+                            bv_nr: untranslate_stringorlines(&v.bv_nr),
+                            automatisch_geroetet: v.automatisch_geroetet.clone(),
+                            manuell_geroetet: v.manuell_geroetet.clone(),
+                            position_in_pdf: untranslate_position_in_seite(&v.position_in_pdf),
+                        }),
+                        gbx::Abt1Eintrag::V2(v) => Abt1Eintrag::V2(Abt1EintragV2 {
+                            lfd_nr: v.lfd_nr.clone(),
+                            version: v.version.clone(),
+                            eigentuemer: untranslate_stringorlines(&v.eigentuemer),
+                            automatisch_geroetet: v.automatisch_geroetet.clone(),
+                            manuell_geroetet: v.manuell_geroetet.clone(),
+                            position_in_pdf: untranslate_position_in_seite(&v.position_in_pdf),
+                        }),
+                    })
+                    .collect(),
+                grundlagen_eintragungen: f
+                    .analysiert
+                    .abt1
+                    .grundlagen_eintragungen
+                    .iter()
+                    .map(|k| Abt1GrundEintragung {
+                        bv_nr: untranslate_stringorlines(&k.bv_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                veraenderungen: f
+                    .analysiert
+                    .abt1
+                    .veraenderungen
+                    .iter()
+                    .map(|k| Abt1Veraenderung {
+                        lfd_nr: untranslate_stringorlines(&k.lfd_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                loeschungen: f
+                    .analysiert
+                    .abt1
+                    .loeschungen
+                    .iter()
+                    .map(|k| Abt1Loeschung {
+                        lfd_nr: untranslate_stringorlines(&k.lfd_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+            },
+            abt2: Abteilung2 {
+                eintraege: f
+                    .analysiert
+                    .abt2
+                    .eintraege
+                    .iter()
+                    .map(|k| Abt2Eintrag {
+                        lfd_nr: k.lfd_nr.clone(),
+                        bv_nr: untranslate_stringorlines(&k.bv_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                veraenderungen: f
+                    .analysiert
+                    .abt2
+                    .veraenderungen
+                    .iter()
+                    .map(|k| Abt2Veraenderung {
+                        lfd_nr: untranslate_stringorlines(&k.lfd_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                loeschungen: f
+                    .analysiert
+                    .abt2
+                    .loeschungen
+                    .iter()
+                    .map(|k| Abt2Loeschung {
+                        lfd_nr: untranslate_stringorlines(&k.lfd_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+            },
+            abt3: Abteilung3 {
+                eintraege: f
+                    .analysiert
+                    .abt3
+                    .eintraege
+                    .iter()
+                    .map(|k| Abt3Eintrag {
+                        lfd_nr: k.lfd_nr.clone(),
+                        bv_nr: untranslate_stringorlines(&k.bv_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                        betrag: untranslate_stringorlines(&k.betrag),
+                    })
+                    .collect(),
+                veraenderungen: f
+                    .analysiert
+                    .abt3
+                    .veraenderungen
+                    .iter()
+                    .map(|k| Abt3Veraenderung {
+                        lfd_nr: untranslate_stringorlines(&k.lfd_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                        betrag: untranslate_stringorlines(&k.betrag),
+                    })
+                    .collect(),
+                loeschungen: f
+                    .analysiert
+                    .abt3
+                    .loeschungen
+                    .iter()
+                    .map(|k| Abt3Loeschung {
+                        lfd_nr: untranslate_stringorlines(&k.lfd_nr),
+                        text: untranslate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
+                        betrag: untranslate_stringorlines(&k.betrag),
+                    })
+                    .collect(),
+            },
+        },
+    }
+}
+
+fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
+    gbx::PdfFile {
+        digitalisiert: f.datei.is_some(),
+        hocr: gbx::HocrLayout {
+            seiten: f
+                .hocr
+                .seiten
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        gbx::HocrSeite {
+                            breite_mm: v.breite_mm,
+                            hoehe_mm: v.hoehe_mm,
+                            parsed: gbx::ParsedHocr {
+                                bounds: translate_rect(&v.parsed.bounds),
+                                careas: v
+                                    .parsed
+                                    .careas
+                                    .iter()
+                                    .map(|ca| gbx::HocrArea {
+                                        bounds: translate_rect(&ca.bounds),
+                                        paragraphs: ca
+                                            .paragraphs
+                                            .iter()
+                                            .map(|ca| gbx::HocrParagraph {
+                                                bounds: gbx::Rect {
+                                                    min_x: ca.bounds.min_x,
+                                                    min_y: ca.bounds.min_y,
+                                                    max_x: ca.bounds.max_x,
+                                                    max_y: ca.bounds.max_y,
+                                                },
+                                                lines: ca
+                                                    .lines
+                                                    .iter()
+                                                    .map(|ca| gbx::HocrLine {
+                                                        bounds: gbx::Rect {
+                                                            min_x: ca.bounds.min_x,
+                                                            min_y: ca.bounds.min_y,
+                                                            max_x: ca.bounds.max_x,
+                                                            max_y: ca.bounds.max_y,
+                                                        },
+                                                        words: ca
+                                                            .words
+                                                            .iter()
+                                                            .map(|ca| gbx::HocrWord {
+                                                                bounds: gbx::Rect {
+                                                                    min_x: ca.bounds.min_x,
+                                                                    min_y: ca.bounds.min_y,
+                                                                    max_x: ca.bounds.max_x,
+                                                                    max_y: ca.bounds.max_y,
+                                                                },
+                                                                confidence: ca.confidence,
+                                                                text: ca.text.clone(),
+                                                            })
+                                                            .collect(),
+                                                    })
+                                                    .collect(),
+                                            })
+                                            .collect(),
+                                    })
+                                    .collect(),
+                            },
+                            rote_linien: v
+                                .rote_linien
+                                .iter()
+                                .map(|r| gbx::Linie {
+                                    punkte: r
+                                        .punkte
+                                        .iter()
+                                        .map(|p| gbx::Punkt { x: p.x, y: p.y })
+                                        .collect(),
+                                })
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
+        },
+        anpassungen_seite: f
+            .anpassungen_seite
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    gbx::AnpassungSeite {
+                        klassifikation_neu: v.klassifikation_neu.map(|v| match v {
+                            SeitenTyp::BestandsverzeichnisHorz => {
+                                gbx::SeitenTyp::BestandsverzeichnisHorz
+                            }
+                            SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen => {
+                                gbx::SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen
+                            }
+                            SeitenTyp::BestandsverzeichnisVert => {
+                                gbx::SeitenTyp::BestandsverzeichnisVert
+                            }
+                            SeitenTyp::BestandsverzeichnisVertTyp2 => {
+                                gbx::SeitenTyp::BestandsverzeichnisVertTyp2
+                            }
+                            SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => {
+                                gbx::SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen
+                            }
+                            SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt => {
+                                gbx::SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt
+                            }
+                            SeitenTyp::Abt1Horz => gbx::SeitenTyp::Abt1Horz,
+                            SeitenTyp::Abt1Vert => gbx::SeitenTyp::Abt1Vert,
+                            SeitenTyp::Abt1VertTyp2 => gbx::SeitenTyp::Abt1VertTyp2,
+                            SeitenTyp::Abt2HorzVeraenderungen => {
+                                gbx::SeitenTyp::Abt2HorzVeraenderungen
+                            }
+                            SeitenTyp::Abt2Horz => gbx::SeitenTyp::Abt2Horz,
+                            SeitenTyp::Abt2VertVeraenderungen => {
+                                gbx::SeitenTyp::Abt2VertVeraenderungen
+                            }
+                            SeitenTyp::Abt2Vert => gbx::SeitenTyp::Abt2Vert,
+                            SeitenTyp::Abt2VertTyp2 => gbx::SeitenTyp::Abt2VertTyp2,
+                            SeitenTyp::Abt3HorzVeraenderungenLoeschungen => {
+                                gbx::SeitenTyp::Abt3HorzVeraenderungenLoeschungen
+                            }
+                            SeitenTyp::Abt3VertVeraenderungenLoeschungen => {
+                                gbx::SeitenTyp::Abt3VertVeraenderungenLoeschungen
+                            }
+                            SeitenTyp::Abt3Horz => gbx::SeitenTyp::Abt3Horz,
+                            SeitenTyp::Abt3VertVeraenderungen => {
+                                gbx::SeitenTyp::Abt3VertVeraenderungen
+                            }
+                            SeitenTyp::Abt3VertLoeschungen => gbx::SeitenTyp::Abt3VertLoeschungen,
+                            SeitenTyp::Abt3Vert => gbx::SeitenTyp::Abt3Vert,
+                        }),
+                        spalten: v
+                            .spalten
+                            .iter()
+                            .map(|(k, v)| {
+                                (
+                                    k.clone(),
+                                    gbx::Rect {
+                                        min_x: v.min_x,
+                                        min_y: v.min_y,
+                                        max_x: v.max_x,
+                                        max_y: v.max_y,
+                                    },
+                                )
+                            })
+                            .collect(),
+                        zeilen: v
+                            .zeilen
+                            .iter()
+                            .map(|(k, v)| (k.to_string(), v.clone()))
+                            .collect(),
+                        zeilen_auto: v
+                            .zeilen_auto
+                            .iter()
+                            .map(|(k, v)| (k.to_string(), v.clone()))
+                            .collect(),
+                    },
+                )
+            })
+            .collect(),
+        analysiert: gbx::Grundbuch {
+            titelblatt: gbx::Titelblatt {
+                amtsgericht: f.analysiert.titelblatt.amtsgericht.clone(),
+                grundbuch_von: f.analysiert.titelblatt.grundbuch_von.clone(),
+                blatt: f.analysiert.titelblatt.blatt.clone(),
+            },
+            bestandsverzeichnis: gbx::Bestandsverzeichnis {
+                eintraege: f
+                    .analysiert
+                    .bestandsverzeichnis
+                    .eintraege
+                    .iter()
+                    .map(|k| match k {
+                        BvEintrag::Flurstueck(f) => {
+                            gbx::BvEintrag::Flurstueck(gbx::BvEintragFlurstueck {
+                                lfd_nr: f.lfd_nr.clone(),
+                                bisherige_lfd_nr: f.bisherige_lfd_nr.clone(),
+                                flur: f.flur.clone(),
+                                flurstueck: f.flurstueck.clone(),
+                                gemarkung: f.gemarkung.clone(),
+                                bezeichnung: f.bezeichnung.as_ref().map(translate_stringorlines),
+                                groesse: match f.groesse {
+                                    FlurstueckGroesse::Hektar { ha, a, m2 } => {
+                                        gbx::FlurstueckGroesse::Hektar { ha, a, m2 }
+                                    }
+                                    FlurstueckGroesse::Metrisch { m2 } => {
+                                        gbx::FlurstueckGroesse::Metrisch { m2 }
+                                    }
+                                },
+                                automatisch_geroetet: f.automatisch_geroetet.clone(),
+                                manuell_geroetet: f.manuell_geroetet.clone(),
+                                position_in_pdf: translate_position_in_seite(&f.position_in_pdf),
+                            })
+                        }
+                        BvEintrag::Recht(r) => gbx::BvEintrag::Recht(gbx::BvEintragRecht {
+                            lfd_nr: r.lfd_nr.clone(),
+                            zu_nr: translate_stringorlines(&r.zu_nr),
+                            bisherige_lfd_nr: r.bisherige_lfd_nr.clone(),
+                            text: translate_stringorlines(&r.text),
+                            automatisch_geroetet: r.automatisch_geroetet.clone(),
+                            manuell_geroetet: r.manuell_geroetet.clone(),
+                            position_in_pdf: translate_position_in_seite(&r.position_in_pdf),
+                        }),
+                    })
+                    .collect(),
+                zuschreibungen: f
+                    .analysiert
+                    .bestandsverzeichnis
+                    .zuschreibungen
+                    .iter()
+                    .map(|k| gbx::BvZuschreibung {
+                        bv_nr: translate_stringorlines(&k.bv_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                abschreibungen: f
+                    .analysiert
+                    .bestandsverzeichnis
+                    .abschreibungen
+                    .iter()
+                    .map(|k| gbx::BvAbschreibung {
+                        bv_nr: translate_stringorlines(&k.bv_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+            },
+            abt1: gbx::Abteilung1 {
+                eintraege: f
+                    .analysiert
+                    .abt1
+                    .eintraege
+                    .iter()
+                    .map(|k| match k {
+                        Abt1Eintrag::V1(v) => gbx::Abt1Eintrag::V1(gbx::Abt1EintragV1 {
+                            lfd_nr: v.lfd_nr.clone(),
+                            eigentuemer: translate_stringorlines(&v.eigentuemer),
+                            grundlage_der_eintragung: translate_stringorlines(
+                                &v.grundlage_der_eintragung,
+                            ),
+                            bv_nr: translate_stringorlines(&v.bv_nr),
+                            automatisch_geroetet: v.automatisch_geroetet.clone(),
+                            manuell_geroetet: v.manuell_geroetet.clone(),
+                            position_in_pdf: translate_position_in_seite(&v.position_in_pdf),
+                        }),
+                        Abt1Eintrag::V2(v) => gbx::Abt1Eintrag::V2(gbx::Abt1EintragV2 {
+                            lfd_nr: v.lfd_nr.clone(),
+                            version: v.version.clone(),
+                            eigentuemer: translate_stringorlines(&v.eigentuemer),
+                            automatisch_geroetet: v.automatisch_geroetet.clone(),
+                            manuell_geroetet: v.manuell_geroetet.clone(),
+                            position_in_pdf: translate_position_in_seite(&v.position_in_pdf),
+                        }),
+                    })
+                    .collect(),
+                grundlagen_eintragungen: f
+                    .analysiert
+                    .abt1
+                    .grundlagen_eintragungen
+                    .iter()
+                    .map(|k| gbx::Abt1GrundEintragung {
+                        bv_nr: translate_stringorlines(&k.bv_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                veraenderungen: f
+                    .analysiert
+                    .abt1
+                    .veraenderungen
+                    .iter()
+                    .map(|k| gbx::Abt1Veraenderung {
+                        lfd_nr: translate_stringorlines(&k.lfd_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                loeschungen: f
+                    .analysiert
+                    .abt1
+                    .loeschungen
+                    .iter()
+                    .map(|k| gbx::Abt1Loeschung {
+                        lfd_nr: translate_stringorlines(&k.lfd_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+            },
+            abt2: gbx::Abteilung2 {
+                eintraege: f
+                    .analysiert
+                    .abt2
+                    .eintraege
+                    .iter()
+                    .map(|k| gbx::Abt2Eintrag {
+                        lfd_nr: k.lfd_nr.clone(),
+                        bv_nr: translate_stringorlines(&k.bv_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                veraenderungen: f
+                    .analysiert
+                    .abt2
+                    .veraenderungen
+                    .iter()
+                    .map(|k| gbx::Abt2Veraenderung {
+                        lfd_nr: translate_stringorlines(&k.lfd_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+                loeschungen: f
+                    .analysiert
+                    .abt2
+                    .loeschungen
+                    .iter()
+                    .map(|k| gbx::Abt2Loeschung {
+                        lfd_nr: translate_stringorlines(&k.lfd_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                    })
+                    .collect(),
+            },
+            abt3: gbx::Abteilung3 {
+                eintraege: f
+                    .analysiert
+                    .abt3
+                    .eintraege
+                    .iter()
+                    .map(|k| gbx::Abt3Eintrag {
+                        lfd_nr: k.lfd_nr.clone(),
+                        bv_nr: translate_stringorlines(&k.bv_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                        betrag: translate_stringorlines(&k.betrag),
+                    })
+                    .collect(),
+                veraenderungen: f
+                    .analysiert
+                    .abt3
+                    .veraenderungen
+                    .iter()
+                    .map(|k| gbx::Abt3Veraenderung {
+                        lfd_nr: translate_stringorlines(&k.lfd_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                        betrag: translate_stringorlines(&k.betrag),
+                    })
+                    .collect(),
+                loeschungen: f
+                    .analysiert
+                    .abt3
+                    .loeschungen
+                    .iter()
+                    .map(|k| gbx::Abt3Loeschung {
+                        lfd_nr: translate_stringorlines(&k.lfd_nr),
+                        text: translate_stringorlines(&k.text),
+                        automatisch_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
+                        betrag: translate_stringorlines(&k.betrag),
+                    })
+                    .collect(),
+            },
+        },
+    }
 }
 
 pub type DateTime = chrono::DateTime<chrono::Local>;
@@ -98,16 +955,6 @@ impl UploadChangesetData {
             .collect::<Vec<_>>()
             .join("\r\n"))
     }
-    pub fn clear_personal_info(&mut self) {
-        for n in self.neu.iter_mut() {
-            n.clear_personal_info();
-        }
-
-        for g in self.geaendert.iter_mut() {
-            g.alt.clear_personal_info();
-            g.neu.clear_personal_info();
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,10 +967,7 @@ pub enum UploadChangesetResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UploadChangesetResponseOk {
-    pub neu: Vec<PdfFile>,
-    pub geaendert: Vec<PdfFile>,
-}
+pub struct UploadChangesetResponseOk {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadChangesetResponseError {
@@ -132,98 +976,72 @@ pub struct UploadChangesetResponseError {
 }
 
 impl RpcData {
-    pub fn get_aenderungen(&self) -> GbxAenderungen {
-        let mut neue_dateien = BTreeMap::new();
-        let mut geaenderte_dateien = BTreeMap::new();
+    pub fn get_current_remote_state_of_files(
+        local: &BTreeMap<String, PdfFile>,
+        konfiguration: &Konfiguration,
+    ) -> Result<BTreeMap<String, gbx::PdfFile>, Option<String>> {
+        let mut map = BTreeMap::new();
 
-        for (file_name, open_file) in self.loaded_files.iter() {
-            if !open_file.ist_geladen() {
-                continue;
-            }
-
-            let mut open_file = open_file.clone();
-            open_file.clear_personal_info();
-
-            let json = match serde_json::to_string_pretty(&open_file) {
-                Ok(o) => o,
-                Err(_) => continue,
-            };
-
-            match std::fs::read_to_string(
-                Path::new(&Konfiguration::backup_dir())
-                    .join("backup")
-                    .join(&format!("{file_name}.gbx")),
-            ) {
-                Ok(o) => {
-                    let mut o_parsed: PdfFile = match serde_json::from_str(&o) {
-                        Ok(o) => o,
-                        Err(_) => {
-                            neue_dateien.insert(file_name.clone(), open_file.clone());
-                            continue;
-                        }
-                    };
-
-                    o_parsed.clear_personal_info();
-
-                    let o_json = match serde_json::to_string_pretty(&o_parsed) {
-                        Ok(o) => o,
-                        Err(_) => {
-                            neue_dateien.insert(file_name.clone(), open_file.clone());
-                            continue;
-                        }
-                    };
-
-                    if o_json != json {
-                        geaenderte_dateien.insert(
-                            file_name.clone(),
-                            GbxAenderung {
-                                alt: o_parsed,
-                                neu: open_file.clone(),
-                            },
-                        );
-                    }
+        for (k, d) in local {
+            println!("download {k}");
+            let r = try_download_file_database(&d.analysiert.titelblatt, konfiguration);
+            println!("result {r:#?}");
+            match r {
+                Ok(TryDownloadDatabaseResultOk::Ok(d)) => {
+                    map.insert(k.clone(), d);
                 }
-                Err(_) => {
-                    neue_dateien.insert(file_name.clone(), open_file.clone());
+                Ok(TryDownloadDatabaseResultOk::DateiNochNichtVorhanden) => {}
+                Err(TryDownloadDatabaseResultErr::AuthtokenPasswortAbgebrochen) => {
+                    return Err(None);
+                }
+                Err(TryDownloadDatabaseResultErr::Err(e)) => {
+                    return Err(Some(e));
                 }
             }
         }
 
-        GbxAenderungen {
-            neue_dateien,
-            geaenderte_dateien,
-        }
+        println!("get_current_remote_state_of_files done!");
+
+        Ok(map)
     }
 
-    pub fn reset_diff_backup_files(&self, changed_files: &UploadChangesetResponseOk) {
-        let path = Path::new(&Konfiguration::backup_dir()).join("backup");
+    pub fn get_aenderungen(
+        local: &BTreeMap<String, PdfFile>,
+        remote: &BTreeMap<String, gbx::PdfFile>,
+    ) -> Result<GbxAenderungen, Vec<String>> {
+        let mut neue_dateien = BTreeMap::new();
+        let mut geaenderte_dateien = BTreeMap::new();
+        let mut fehler = Vec::new();
 
-        for new_state in changed_files.neu.iter() {
-            if let Ok(json) = serde_json::to_string_pretty(&new_state) {
-                let file_name = format!(
-                    "{}_{}.gbx",
-                    new_state.analysiert.titelblatt.grundbuch_von,
-                    new_state.analysiert.titelblatt.blatt
-                );
-                let _ = fs::write(
-                    path.clone().join(&format!("{file_name}.gbx")),
-                    json.as_bytes(),
+        for (file_name, open_file) in local.iter() {
+            let local = translate_gbx(&open_file);
+            let remote = match remote.get(file_name) {
+                Some(s) => s,
+                None => {
+                    neue_dateien.insert(file_name.clone(), local);
+                    continue;
+                }
+            };
+            let local_json = serde_json::to_string_pretty(&local).unwrap_or_default();
+            let remote_json = serde_json::to_string_pretty(remote).unwrap_or_default();
+            if local_json != remote_json {
+                geaenderte_dateien.insert(
+                    file_name.clone(),
+                    GbxAenderung {
+                        alt: local,
+                        neu: remote.clone(),
+                    },
                 );
             }
         }
 
-        for new_state in changed_files.geaendert.iter() {
-            if let Ok(json) = serde_json::to_string_pretty(&new_state) {
-                let file_name = format!(
-                    "{}_{}.gbx",
-                    new_state.analysiert.titelblatt.grundbuch_von,
-                    new_state.analysiert.titelblatt.blatt
-                );
-                let _ = fs::write(
-                    path.clone().join(&format!("{file_name}.gbx")),
-                    json.as_bytes(),
-                );
-            }
+        if fehler.is_empty() {
+            Ok(GbxAenderungen {
+                neue_dateien,
+                geaenderte_dateien,
+            })
+        } else {
+            Err(fehler)
         }
     }
 
@@ -250,14 +1068,14 @@ impl RpcData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GbxAenderungen {
-    pub neue_dateien: BTreeMap<FileName, PdfFile>,
+    pub neue_dateien: BTreeMap<FileName, gbx::PdfFile>,
     pub geaenderte_dateien: BTreeMap<FileName, GbxAenderung>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GbxAenderung {
-    pub alt: PdfFile,
-    pub neu: PdfFile,
+    pub alt: gbx::PdfFile,
+    pub neu: gbx::PdfFile,
 }
 
 impl GbxAenderungen {
@@ -349,6 +1167,7 @@ impl Default for RpcData {
             open_page: None,
             popover_state: None,
             loaded_files: BTreeMap::new(),
+            loaded_remote_files: BTreeMap::new(),
             commit_title: String::new(),
             commit_msg: String::new(),
             loaded_nb: Vec::new(),
@@ -1562,30 +2381,44 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             let dateien = data.loaded_files.clone();
             let konfiguration = data.konfiguration.clone();
 
-            for (_, d) in dateien {
-                if let Err(e) = try_download_file_database(
-                    konfiguration.clone(),
-                    d.analysiert.titelblatt.clone(),
-                ) {
-                    if let Some(msg) = e {
-                        let msg = msg.replace("\"", "").replace("'", "");
-                        let file_name = format!(
-                            "{}_{}",
-                            d.analysiert.titelblatt.grundbuch_von, d.analysiert.titelblatt.blatt
-                        );
-                        tinyfiledialogs::message_box_ok(
-                            "Fehler beim Synchronisieren mit Datenbank", 
-                            &format!("Der aktuelle Stand von {file_name}.gbx konnte nicht aus der Datenbank geladen werden:\r\n{msg}\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
-                            MessageBoxIcon::Error
-                        );
-                    }
+            let remote_files = match RpcData::get_current_remote_state_of_files(
+                &data.loaded_files,
+                &konfiguration,
+            ) {
+                Ok(o) => o,
+                Err(None) => return,
+                Err(Some(msg)) => {
+                    let msg = msg.replace("\"", "").replace("'", "");
+
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Synchronisieren mit Datenbank", 
+                        &format!("{msg}\r\n\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
+                        MessageBoxIcon::Error
+                    );
                     let _ =
                         std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
                     return;
                 }
-            }
+            };
 
-            let aenderungen = data.get_aenderungen();
+            data.loaded_remote_files = remote_files.clone();
+
+            let aenderungen = match RpcData::get_aenderungen(&data.loaded_files, &remote_files) {
+                Ok(o) => o,
+                Err(msg) => {
+                    let msg = msg.join("\r\n").replace("\"", "").replace("'", "");
+
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Synchronisieren mit Datenbank", 
+                        &format!("{msg}\r\n\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ =
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
+                    return;
+                }
+            };
+
             if aenderungen.ist_leer() {
                 tinyfiledialogs::message_box_ok(
                     "Keine Änderungen zum Hochladen vorhanden", 
@@ -1871,7 +2704,8 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             };
 
             match json {
-                PdfFileOrEmpty::Pdf(mut json) => {
+                PdfFileOrEmpty::Pdf(json) => {
+                    let mut json = untranslate_gbx(&json);
                     let file_name = format!(
                         "{}_{}",
                         json.analysiert.titelblatt.grundbuch_von, json.analysiert.titelblatt.blatt
@@ -1930,7 +2764,45 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            let aenderungen = data.get_aenderungen();
+            let dateien = data.loaded_files.clone();
+            let konfiguration = data.konfiguration.clone();
+
+            let remote_files = match RpcData::get_current_remote_state_of_files(
+                &data.loaded_files,
+                &konfiguration,
+            ) {
+                Ok(o) => o,
+                Err(None) => return,
+                Err(Some(msg)) => {
+                    let msg = msg.replace("\"", "").replace("'", "");
+
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Synchronisieren mit Datenbank", 
+                        &format!("{msg}\r\n\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ =
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
+                    return;
+                }
+            };
+
+            let aenderungen = match RpcData::get_aenderungen(&data.loaded_files, &remote_files) {
+                Ok(o) => o,
+                Err(msg) => {
+                    let msg = msg.join("\r\n").replace("\"", "").replace("'", "");
+
+                    tinyfiledialogs::message_box_ok(
+                        "Fehler beim Synchronisieren mit Datenbank", 
+                        &format!("{msg}\r\n\r\nBitte überprüfen Sie das Passwort oder wenden Sie sich an einen Administrator."), 
+                        MessageBoxIcon::Error
+                    );
+                    let _ =
+                        std::fs::remove_file(std::env::temp_dir().join("dgb").join("auth.json"));
+                    return;
+                }
+            };
+
             if aenderungen.ist_leer() {
                 data.popover_state = None;
                 let _ = webview.evaluate_script(&format!(
@@ -1942,10 +2814,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             let mut d = UploadChangesetData {
                 neu: aenderungen.neue_dateien.values().cloned().collect(),
-                geaendert: aenderungen.geaenderte_dateien.values().cloned().collect(),
+                geaendert: aenderungen
+                    .geaenderte_dateien
+                    .values()
+                    .map(|aenderung| GbxAenderungForUpload {
+                        alt: aenderung.alt.clone(),
+                        neu: aenderung.neu.clone(),
+                    })
+                    .collect(),
             };
-
-            d.clear_personal_info();
 
             let patch = match d.format_patch() {
                 Ok(o) => o,
@@ -1991,7 +2868,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                     hash: signatur.0,
                     pgp_signatur: signatur.1,
                 },
-                data: d,
+                data: d.clone(),
             };
 
             let resp = reqwest::blocking::Client::new()
@@ -2010,7 +2887,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
                     match serde_json::from_str::<UploadChangesetResponse>(&body) {
                         Ok(UploadChangesetResponse::StatusOk(o)) => {
-                            data.reset_diff_backup_files(&o);
                             data.popover_state = None;
                             data.commit_title.clear();
                             data.commit_msg.clear();
@@ -3408,7 +4284,11 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
         }
         Cmd::SwitchAenderungView { i } => {
             data.popover_state = Some(PopoverState::GrundbuchUploadDialog(*i));
-            let aenderungen = data.get_aenderungen();
+            let aenderungen =
+                match RpcData::get_aenderungen(&data.loaded_files, &data.loaded_remote_files) {
+                    Ok(o) => o,
+                    Err(_) => return,
+                };
             let _ = webview.evaluate_script(&format!(
                 "replaceAenderungDateien(`{}`)",
                 ui::render_aenderungen_dateien(&aenderungen, *i)
@@ -5806,7 +6686,7 @@ fn teste_regex(regex_id: &str, text: &str, konfig: &Konfiguration) -> Result<Vec
 #[serde(tag = "status")]
 pub enum PdfFileOrEmpty {
     #[serde(rename = "ok")]
-    Pdf(PdfFile),
+    Pdf(gbx::PdfFile),
     #[serde(rename = "error")]
     NichtVorhanden(PdfFileNichtVorhanden),
 }
@@ -5838,14 +6718,26 @@ pub struct LoginResponseError {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum TryDownloadDatabaseResultOk {
+    Ok(gbx::PdfFile),
+    DateiNochNichtVorhanden,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum TryDownloadDatabaseResultErr {
+    AuthtokenPasswortAbgebrochen,
+    Err(String),
+}
+
 // Versucht eine Synchronisierung von  ~/.config/dgb/backup/XXX.gbx mit der Datenbank
 fn try_download_file_database(
-    konfiguration: Konfiguration,
-    titelblatt: Titelblatt,
-) -> Result<(), Option<String>> {
+    titelblatt: &Titelblatt,
+    konfiguration: &Konfiguration,
+) -> Result<TryDownloadDatabaseResultOk, TryDownloadDatabaseResultErr> {
     let authtoken = match konfiguration.get_authtoken() {
         Some(s) => s,
-        None => return Err(None),
+        None => return Err(TryDownloadDatabaseResultErr::AuthtokenPasswortAbgebrochen),
     };
 
     let server_url = &konfiguration.server_url;
@@ -5859,47 +6751,28 @@ fn try_download_file_database(
         .get(&url)
         .bearer_auth(authtoken)
         .send()
-        .map_err(|e| Some(format!("Fehler beim Downloaden von {url}: {e}")))?;
+        .map_err(|e| {
+            TryDownloadDatabaseResultErr::Err(format!("Fehler beim Downloaden von {url}: {e}"))
+        })?;
 
     let json = resp
         .json::<PdfFileOrEmpty>()
-        .map_err(|e| Some(format!("Ungültige Antwort: {e}")))?;
+        .map_err(|e| TryDownloadDatabaseResultErr::Err(format!("Ungültige Antwort: {e}")))?;
 
     match json {
-        PdfFileOrEmpty::Pdf(mut json) => {
-            let file_name = format!(
-                "{}_{}",
-                json.analysiert.titelblatt.grundbuch_von, json.analysiert.titelblatt.blatt
-            );
-            let target_folder_path = Path::new(&Konfiguration::backup_dir()).join("backup");
-            if json.gbx_datei_pfad.is_some() {
-                json.gbx_datei_pfad = Some(format!("{}", target_folder_path.display()));
-            }
-            if json.datei.is_some() {
-                json.datei = Some(format!(
-                    "{}",
-                    target_folder_path
-                        .join(&format!("{file_name}.pdf"))
-                        .display()
-                ));
-            }
-            let _ = std::fs::write(
-                target_folder_path.join(&format!("{file_name}.gbx")),
-                serde_json::to_string_pretty(&json).unwrap_or_default(),
-            );
-        }
+        PdfFileOrEmpty::Pdf(json) => Ok(TryDownloadDatabaseResultOk::Ok(json)),
         PdfFileOrEmpty::NichtVorhanden(err) => {
             let file_name = format!("{}_{}", titelblatt.grundbuch_von, titelblatt.blatt);
-            konfiguration.create_empty_diff_save_point(&file_name);
             if err.code == 404 {
-                return Ok(());
+                Ok(TryDownloadDatabaseResultOk::DateiNochNichtVorhanden)
             } else {
-                return Err(Some(format!("E{}: {}", err.code, err.text)));
+                Err(TryDownloadDatabaseResultErr::Err(format!(
+                    "E{}: {}",
+                    err.code, err.text
+                )))
             }
         }
     }
-
-    Ok(())
 }
 
 pub enum TesseractMode {

@@ -129,8 +129,11 @@ pub fn render_aenderung_diff(aenderungen: &GbxAenderungen, aktiv: usize) -> Stri
             Err(_) => return String::new(),
         };
 
+        println!("creating diff...");
         let diff = prettydiff::diff_lines(&alt_json, &neu_json);
+        println!("diff lines done");
         let diff = diff.diff();
+        println!("diff lines done 2");
         let mut out = format!("<div>");
         let mut lines = Vec::new();
 
@@ -241,9 +244,19 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     let pc = match rpc_data.popover_state {
         None => return String::new(),
         Some(PopoverState::GrundbuchUploadDialog(i)) => {
-            let upload = rpc_data.get_aenderungen();
+            println!("rendering upload dialog start {i}");
+            let upload = match RpcData::get_aenderungen(
+                &rpc_data.loaded_files,
+                &rpc_data.loaded_remote_files,
+            ) {
+                Ok(o) => o,
+                Err(e) => return String::new(),
+            };
+            println!("render aenderungen dateien...");
             let dateien = render_aenderungen_dateien(&upload, i);
+            println!("render aenderungen diff...");
             let diff = render_aenderung_diff(&upload, i);
+            println!("render aenderungen diff done...");
 
             let commit_title = if rpc_data.commit_title.is_empty() {
                 String::new()
@@ -261,6 +274,8 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     .collect::<Vec<_>>()
                     .join("\r\n")
             };
+
+            println!("rendering upload dialog done!!!");
 
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1200px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
