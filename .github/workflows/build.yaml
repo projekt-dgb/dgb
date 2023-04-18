@@ -67,19 +67,19 @@ jobs:
             ~/.cargo/git
           key: ${{ matrix.build }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}-v1
       - name: Bundle Windows
-        if: ${{ matrix.build }} == 'windows-x64'
+        if: matrix.build == 'windows-x64'
         shell: bash
         run: |
           cargo install cargo-wix
           cargo wix
       - name: Bundle Linux
-        if: ${{ matrix.build }} == 'linux-x64'
+        if: matrix.build == 'linux-x64'
         run: |
           sudo apt install pkg-config
           cargo install cargo-deb
           cargo deb
       - name: Bundle Mac
-        if: ${{ matrix.build }} == 'macos-x64'
+        if: matrix.build == 'macos-x64'
         shell: bash
         run: scripts/mac/dmg.sh
       - name: Upload Artifacts
