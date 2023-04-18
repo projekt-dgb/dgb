@@ -30,7 +30,6 @@ num_cpus = "1.0"
 printpdf = { version = "0.5.2", features = ["svg"] }
 qrcode = "0.12.0"
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"] }
-prettydiff = "0.6.1"
 sequoia-openpgp = { version = "1.8.0", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto", "compression"] }
 git2 = { version = "0.14.4", default-features = false }
 rand = "0.8.5"
@@ -47,6 +46,7 @@ url_open = "0.0.1"
 url = "2.3.1"
 html-escape = "0.2.13"
 gbx = "1.0.0"
+similar = "2.2.1"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"

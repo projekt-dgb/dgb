@@ -81,13 +81,7 @@ pub struct PgpSignatur {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadChangesetData {
     pub neu: Vec<gbx::PdfFile>,
-    pub geaendert: Vec<GbxAenderungForUpload>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GbxAenderungForUpload {
-    pub alt: gbx::PdfFile,
-    pub neu: gbx::PdfFile,
+    pub geaendert: Vec<GbxAenderung>,
 }
 
 fn translate_rect(r: &Rect) -> gbx::Rect {
@@ -377,7 +371,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         bv_nr: untranslate_stringorlines(&k.bv_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -390,7 +384,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         bv_nr: untranslate_stringorlines(&k.bv_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -432,7 +426,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         bv_nr: untranslate_stringorlines(&k.bv_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -445,7 +439,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         lfd_nr: untranslate_stringorlines(&k.lfd_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -458,7 +452,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         lfd_nr: untranslate_stringorlines(&k.lfd_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -474,7 +468,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         bv_nr: untranslate_stringorlines(&k.bv_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -487,7 +481,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         lfd_nr: untranslate_stringorlines(&k.lfd_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -500,7 +494,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         lfd_nr: untranslate_stringorlines(&k.lfd_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -516,7 +510,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         bv_nr: untranslate_stringorlines(&k.bv_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                         betrag: untranslate_stringorlines(&k.betrag),
                     })
@@ -530,7 +524,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         lfd_nr: untranslate_stringorlines(&k.lfd_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                         betrag: untranslate_stringorlines(&k.betrag),
                     })
@@ -544,7 +538,7 @@ fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
                         lfd_nr: untranslate_stringorlines(&k.lfd_nr),
                         text: untranslate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: untranslate_position_in_seite(&k.position_in_pdf),
                         betrag: untranslate_stringorlines(&k.betrag),
                     })
@@ -767,7 +761,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         bv_nr: translate_stringorlines(&k.bv_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -780,7 +774,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         bv_nr: translate_stringorlines(&k.bv_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -822,7 +816,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         bv_nr: translate_stringorlines(&k.bv_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -835,7 +829,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         lfd_nr: translate_stringorlines(&k.lfd_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -848,7 +842,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         lfd_nr: translate_stringorlines(&k.lfd_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -864,7 +858,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         bv_nr: translate_stringorlines(&k.bv_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -877,7 +871,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         lfd_nr: translate_stringorlines(&k.lfd_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -890,7 +884,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         lfd_nr: translate_stringorlines(&k.lfd_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                     })
                     .collect(),
@@ -906,7 +900,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         bv_nr: translate_stringorlines(&k.bv_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                         betrag: translate_stringorlines(&k.betrag),
                     })
@@ -920,7 +914,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         lfd_nr: translate_stringorlines(&k.lfd_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                         betrag: translate_stringorlines(&k.betrag),
                     })
@@ -934,7 +928,7 @@ fn translate_gbx(f: &PdfFile) -> gbx::PdfFile {
                         lfd_nr: translate_stringorlines(&k.lfd_nr),
                         text: translate_stringorlines(&k.text),
                         automatisch_geroetet: k.automatisch_geroetet.clone(),
-                        manuell_geroetet: k.automatisch_geroetet.clone(),
+                        manuell_geroetet: k.manuell_geroetet.clone(),
                         position_in_pdf: translate_position_in_seite(&k.position_in_pdf),
                         betrag: translate_stringorlines(&k.betrag),
                     })
@@ -983,10 +977,7 @@ impl RpcData {
         let mut map = BTreeMap::new();
 
         for (k, d) in local {
-            println!("download {k}");
-            let r = try_download_file_database(&d.analysiert.titelblatt, konfiguration);
-            println!("result {r:#?}");
-            match r {
+            match try_download_file_database(&d.analysiert.titelblatt, konfiguration) {
                 Ok(TryDownloadDatabaseResultOk::Ok(d)) => {
                     map.insert(k.clone(), d);
                 }
@@ -999,8 +990,6 @@ impl RpcData {
                 }
             }
         }
-
-        println!("get_current_remote_state_of_files done!");
 
         Ok(map)
     }
@@ -1028,8 +1017,8 @@ impl RpcData {
                 geaenderte_dateien.insert(
                     file_name.clone(),
                     GbxAenderung {
-                        alt: local,
-                        neu: remote.clone(),
+                        alt: remote.clone(),
+                        neu: local,
                     },
                 );
             }
@@ -2421,9 +2410,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             if aenderungen.ist_leer() {
                 tinyfiledialogs::message_box_ok(
-                    "Keine Änderungen zum Hochladen vorhanden", 
-                    "Es sind noch keine Änderungen zum Hochladen vorhanden.\r\nAlle Dateien sind bereits auf dem neuesten Stand.", 
-                    MessageBoxIcon::Info
+                    "Keine Änderungen zum Hochladen vorhanden",
+                    "Alle Dateien sind bereits auf dem neuesten Stand.",
+                    MessageBoxIcon::Info,
                 );
                 return;
             }
@@ -2812,16 +2801,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 return;
             }
 
-            let mut d = UploadChangesetData {
+            let d = UploadChangesetData {
                 neu: aenderungen.neue_dateien.values().cloned().collect(),
-                geaendert: aenderungen
-                    .geaenderte_dateien
-                    .values()
-                    .map(|aenderung| GbxAenderungForUpload {
-                        alt: aenderung.alt.clone(),
-                        neu: aenderung.neu.clone(),
-                    })
-                    .collect(),
+                geaendert: aenderungen.geaenderte_dateien.values().cloned().collect(),
             };
 
             let patch = match d.format_patch() {
@@ -6860,7 +6842,7 @@ fn main() -> wry::Result<()> {
 
     let webview = WebViewBuilder::new(window)?
         .with_html(app_html)?
-        .with_devtools(false)
+        .with_devtools(true)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
             Ok(o) => {
@@ -6873,6 +6855,7 @@ fn main() -> wry::Result<()> {
         .build()?;
 
     webview.focus();
+    webview.open_devtools();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
