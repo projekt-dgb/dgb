@@ -81,8 +81,8 @@ section = "utility"
 priority = "optional"
 assets = [
     ["target/release/dgb", "usr/local/bin/", "755"],
-    ["dgb.desktop", "usr/local/share/applications/", "755"],
-    ["dgb.xpm", "usr/share/pixmaps/", "755"],
+    ["scripts/linux/dgb.desktop", "usr/local/share/applications/", "755"],
+    ["scripts/linux/dgb.xpm", "usr/share/pixmaps/", "755"],
     ["README.md", "usr/local/share/doc/dgb/README", "644"],
 ]
 
