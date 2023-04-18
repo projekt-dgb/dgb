@@ -1,27 +1,22 @@
 use crate::{
-    RpcData, PdfFile, GrundbuchSucheResponse,
-    Konfiguration, PopoverState, GbxAenderungen,
     digital::{
-        Nebenbeteiligter,
-        BvZuschreibung,
-        BvAbschreibung,
-        Abt1Veraenderung,
-        Abt1Loeschung,
-        Abt2Veraenderung,
-        Abt2Loeschung,
-        Abt3Veraenderung,
-        Abt3Loeschung,
-        TextInputType,
-        FocusType,
-        StringOrLines,
+        Abt1Loeschung, Abt1Veraenderung, Abt2Loeschung, Abt2Veraenderung, Abt3Loeschung,
+        Abt3Veraenderung, BvAbschreibung, BvZuschreibung, FocusType, HocrSeite, Nebenbeteiligter,
+        ParsedHocr, SeiteParsed, StringOrLines, TextInputType,
     },
+    python::PyVm,
+    GbxAenderungen, GrundbuchAnalysiert, GrundbuchSucheResponse, Konfiguration, PdfFile,
+    PopoverState, RpcData,
 };
 
 // render entire <body> node depending on the state of the rpc_data
 pub fn render_entire_screen(rpc_data: &mut RpcData) -> String {
-    normalize_for_js(format!("
+    normalize_for_js(format!(
+        "
             {popover}
-            {ribbon_ui}
+            <div id='__application-ribbon'>
+                {ribbon_ui}
+            </div>
             <div id='__application-main' style='overflow:hidden;'>
                 {main}
             </div>
@@ -33,152 +28,156 @@ pub fn render_entire_screen(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_popover(rpc_data: &RpcData) -> String {
-    
     let should_render_popover = rpc_data.popover_state.is_some();
-        
+
     if !should_render_popover {
-        return normalize_for_js(format!("<div id='__application_popover' style='
+        return normalize_for_js(format!(
+            "<div id='__application_popover' style='
             pointer-events:none;
             width: 100%;
             height: 100%;
             min-height: 100%;
             position: fixed;
             z-index:999;
-        '></div>"));
+        '></div>"
+        ));
     }
-    
-    let popover = format!("<div id='__application_popover' style='
+
+    let popover = format!(
+        "<div id='__application_popover' style='
         pointer-events:none;
         width: 100%;
         height: 100%;
         min-height: 100%;
         position: fixed;
         z-index:999;
-    '>{}</div>", 
+    '>{}</div>",
         render_popover_content(rpc_data)
     );
-    
+
     normalize_for_js(popover)
 }
 
 pub fn render_aenderungen_dateien(aenderungen: &GbxAenderungen, aktiv: usize) -> String {
     let mut out = String::new();
-    
+
     for (i, file_name) in aenderungen.neue_dateien.keys().enumerate() {
         let selected = match aktiv == i {
             true => "class='selected'",
             false => "",
         };
-        out.push_str(&format!("<p {selected} onmousedown='switchAenderungView({i})'>{file_name}.gbx</p>\r\n"));
+        out.push_str(&format!(
+            "<p {selected} onmousedown='switchAenderungView({i})'>{file_name}.gbx</p>\r\n"
+        ));
     }
-    
+
     for (i, file_name) in aenderungen.geaenderte_dateien.keys().enumerate() {
         let i = i + aenderungen.neue_dateien.len();
         let selected = match aktiv == i {
             true => "class='selected'",
             false => "",
         };
-        out.push_str(&format!("<p {selected} onmousedown='switchAenderungView({i})'>{file_name}.gbx</p>\r\n"));
+        out.push_str(&format!(
+            "<p {selected} onmousedown='switchAenderungView({i})'>{file_name}.gbx</p>\r\n"
+        ));
     }
-    
+
     normalize_for_js(out)
 }
 
 pub fn render_aenderung_diff(aenderungen: &GbxAenderungen, aktiv: usize) -> String {
-        
     if aktiv < aenderungen.neue_dateien.len() {
-        
         let neu = match aenderungen.neue_dateien.iter().nth(aktiv) {
             Some((_, file)) => file,
             None => return String::new(),
         };
-        
+
         let neu_json = match serde_json::to_string_pretty(&neu) {
             Ok(o) => o,
             Err(_) => return String::new(),
         };
-        
+
         let mut out = format!("<div>");
         for line in neu_json.lines() {
-            out.push_str(&format!("<span class='insert'><p>+</p><p>{}</p></span>", line.replace(" ", "&nbsp;")))
+            out.push_str(&format!(
+                "<span class='insert'><p>+</p><p>{}</p></span>",
+                line.replace(" ", "&nbsp;")
+            ))
         }
         out.push_str("</div>");
         out
-        
     } else if aktiv < aenderungen.neue_dateien.len() + aenderungen.geaenderte_dateien.len() {
-
         use crate::GbxAenderung;
-        use prettydiff::basic::DiffOp;
-        
-        let (alt, neu) = match aenderungen.geaenderte_dateien.iter().nth(aktiv - aenderungen.neue_dateien.len()) {
+
+        let (alt, neu) = match aenderungen
+            .geaenderte_dateien
+            .iter()
+            .nth(aktiv - aenderungen.neue_dateien.len())
+        {
             Some((_, GbxAenderung { alt, neu })) => (alt, neu),
             None => return String::new(),
         };
-        
+
         let alt_json = match serde_json::to_string_pretty(&alt) {
             Ok(o) => o,
             Err(_) => return String::new(),
         };
-        
+
         let neu_json = match serde_json::to_string_pretty(&neu) {
             Ok(o) => o,
             Err(_) => return String::new(),
         };
-        
-        let diff = prettydiff::diff_lines(&alt_json, &neu_json);
-        let diff = diff.diff();
+
+        let diff = similar::TextDiff::from_lines(&alt_json, &neu_json);
+
         let mut out = format!("<div>");
         let mut lines = Vec::new();
-        
-        for c in diff {
-            let _ = match c {
-                DiffOp::Insert(i) => {
-                    for i in i.iter() {
-                        lines.push(format!("<span class='insert'><p>+</p><p>{}</p></span>", i.replace(" ", "&nbsp;")));
-                    }
-                },
-                DiffOp::Replace(old, new) => {
-                    for old in old.iter() {
-                        lines.push(format!("<span class='remove'><p>-</p><p>{}</p></span>", old.replace(" ", "&nbsp;")));
-                    }
-                    for new in new.iter() {
-                        lines.push(format!("<span class='insert'><p>+</p><p>{}</p></span>", new.replace(" ", "&nbsp;")));
-                    }
-                },
-                DiffOp::Remove(r) => {
-                    for r in r.iter() {
-                        lines.push(format!("<span class='remove'><p>-</p><p>{}</p></span>", r.replace(" ", "&nbsp;")))
-                    }
-                },
-                DiffOp::Equal(e) => {
-                    for e in e.iter() {
-                        lines.push(format!("<span class='equal'><p>&nbsp;</p><p>{}</p></span>", e.replace(" ", "&nbsp;")))
-                    }
-                },
-            };
+
+        for change in diff.iter_all_changes() {
+            let c = change.to_string().replace(" ", "&nbsp;");
+            match change.tag() {
+                similar::ChangeTag::Insert => {
+                    lines.push(format!("<span class='insert'><p>+</p><p>{c}</p></span>"));
+                }
+                similar::ChangeTag::Delete => {
+                    lines.push(format!("<span class='remove'><p>-</p><p>{c}</p></span>"));
+                }
+                similar::ChangeTag::Equal => {
+                    lines.push(format!(
+                        "<span class='equal'><p>&nbsp;</p><p>{c}</p></span>"
+                    ));
+                }
+            }
         }
-        
-        let lines_equal = lines.iter().enumerate().filter_map(|(num, line)| {
-            if line.contains("<span class='equal'>") { Some(num) } else { None }
-        }).collect::<Vec<_>>();
-        
+
+        let lines_equal = lines
+            .iter()
+            .enumerate()
+            .filter_map(|(num, line)| {
+                if line.contains("<span class='equal'>") {
+                    Some(num)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
         let mut ranges = vec![(0, 0)];
         let mut last_l = 0;
-        
+
         for l in lines_equal.iter() {
-            
             if l - last_l > 1 {
-                // start new range 
+                // start new range
                 ranges.push((*l, *l));
             }
-            
+
             last_l = *l;
-            
+
             if let Some((start, end)) = ranges.last_mut() {
-                *end = *l; 
+                *end = *l;
             }
         }
-                
+
         for (start, end) in ranges {
             if end.saturating_sub(start) >= 5 {
                 for i in (start + 1)..(end - 1) {
@@ -187,7 +186,7 @@ pub fn render_aenderung_diff(aenderungen: &GbxAenderungen, aktiv: usize) -> Stri
                 lines[start + 2] = format!("<span class='snip'><p>&nbsp;</p><p>----</p></span>");
             }
         }
-        
+
         out.push_str(&lines.join("\r\n"));
         out.push_str("</div>");
         out
@@ -197,7 +196,6 @@ pub fn render_aenderung_diff(aenderungen: &GbxAenderungen, aktiv: usize) -> Stri
 }
 
 pub fn render_popover_content(rpc_data: &RpcData) -> String {
-
     const ICON_CLOSE: &[u8] = include_bytes!("./img/icons8-close-96.png");
 
     let application_popover_color = if !rpc_data.is_context_menu_open() {
@@ -205,34 +203,44 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
     } else {
         "transparent"
     };
-    
+
     let icon_close_base64 = base64::encode(ICON_CLOSE);
-    
+
     let close_button = format!("
     <div style='position:absolute;top:50px;z-index:9999;right:-25px;background:white;border-radius:10px;box-shadow: 0px 0px 10px #cccccc88;cursor:pointer;' onmouseup='closePopOver()'>
         <img src='data:image/png;base64,{icon_close_base64}' style='width:50px;height:50px;cursor:pointer;' />
     </div>");
-    
+
     let pc = match rpc_data.popover_state {
         None => return String::new(),
         Some(PopoverState::GrundbuchUploadDialog(i)) => {
-            
-            let upload = rpc_data.get_aenderungen();
+            let upload = match RpcData::get_aenderungen(
+                &rpc_data.loaded_files,
+                &rpc_data.loaded_remote_files,
+            ) {
+                Ok(o) => o,
+                Err(e) => return String::new(),
+            };
             let dateien = render_aenderungen_dateien(&upload, i);
             let diff = render_aenderung_diff(&upload, i);
-            
-            let commit_title = if rpc_data.commit_title.is_empty() { 
-                String::new() 
-            } else { 
-                format!("value='{}'", rpc_data.commit_title) 
+
+            let commit_title = if rpc_data.commit_title.is_empty() {
+                String::new()
+            } else {
+                format!("value='{}'", rpc_data.commit_title)
             };
-            
-            let commit_description = if rpc_data.commit_msg.is_empty() { 
-                String::new() 
-            } else { 
-                rpc_data.commit_msg.lines().map(|l| format!("<p>{l}</p>")).collect::<Vec<_>>().join("\r\n")
+
+            let commit_description = if rpc_data.commit_msg.is_empty() {
+                String::new()
+            } else {
+                rpc_data
+                    .commit_msg
+                    .lines()
+                    .map(|l| format!("<p>{l}</p>"))
+                    .collect::<Vec<_>>()
+                    .join("\r\n")
             };
-            
+
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1200px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
@@ -272,7 +280,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>
             </div>
             ")
-        },
+        }
         Some(PopoverState::GrundbuchSuchenDialog) => {
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1000px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
@@ -294,7 +302,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>
             </div>
             ")
-        },
+        }
         Some(PopoverState::CreateNewGrundbuch) => {
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
@@ -344,7 +352,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>
             </div>
             ")
-        },
+        }
         Some(PopoverState::ExportPdf) => {
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
@@ -405,7 +413,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>
             </div>
             ")
-        },
+        }
         Some(PopoverState::Info) => {
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
@@ -421,11 +429,10 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             </div>
             ",version = env!("CARGO_PKG_VERSION"),
             license_base64 = base64::encode(include_bytes!("../licenses.html")))
-        },
-        Some(PopoverState::Help) => {            
-            
+        }
+        Some(PopoverState::Help) => {
             static DOKU: &str = include_str!("../doc/Handbuch.html");
-            
+
             static IMG_1: &[u8] = include_bytes!("../doc/IMG_1.png");
             static IMG_2: &[u8] = include_bytes!("../doc/IMG_2.png");
             static IMG_3: &[u8] = include_bytes!("../doc/IMG_3.png");
@@ -435,17 +442,17 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             static IMG_7: &[u8] = include_bytes!("../doc/IMG_7.png");
             static IMG_8: &[u8] = include_bytes!("../doc/IMG_8.png");
 
-            let base64_dok = base64::encode(DOKU
-                .replace("$$DATA_IMG_1$$", &base64::encode(IMG_1))
-                .replace("$$DATA_IMG_2$$", &base64::encode(IMG_2))
-                .replace("$$DATA_IMG_3$$", &base64::encode(IMG_3))
-                .replace("$$DATA_IMG_4$$", &base64::encode(IMG_4))
-                .replace("$$DATA_IMG_5$$", &base64::encode(IMG_5))
-                .replace("$$DATA_IMG_6$$", &base64::encode(IMG_6))
-                .replace("$$DATA_IMG_7$$", &base64::encode(IMG_7))
-                .replace("$$DATA_IMG_8$$", &base64::encode(IMG_8))
+            let base64_dok = base64::encode(
+                DOKU.replace("$$DATA_IMG_1$$", &base64::encode(IMG_1))
+                    .replace("$$DATA_IMG_2$$", &base64::encode(IMG_2))
+                    .replace("$$DATA_IMG_3$$", &base64::encode(IMG_3))
+                    .replace("$$DATA_IMG_4$$", &base64::encode(IMG_4))
+                    .replace("$$DATA_IMG_5$$", &base64::encode(IMG_5))
+                    .replace("$$DATA_IMG_6$$", &base64::encode(IMG_6))
+                    .replace("$$DATA_IMG_7$$", &base64::encode(IMG_7))
+                    .replace("$$DATA_IMG_8$$", &base64::encode(IMG_8)),
             );
-            
+
             format!("
             <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
 
@@ -457,38 +464,62 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>
 
             </div>")
-        },
+        }
         Some(PopoverState::Configuration(cw)) => {
-        
             use crate::ConfigurationView::*;
-            
-            static IMG_SETTINGS: &[u8] = include_bytes!("./img/icons8-settings-system-daydream-96.png");
+
+            static IMG_SETTINGS: &[u8] =
+                include_bytes!("./img/icons8-settings-system-daydream-96.png");
             let img_settings = base64::encode(IMG_SETTINGS);
-            
+
             static IMG_REGEX: &[u8] = include_bytes!("./img/icons8-select-96.png");
             let img_regex = base64::encode(IMG_REGEX);
-            
+
             static IMG_CLEAN: &[u8] = include_bytes!("./img/icons8-broom-96.png");
             let img_clean = base64::encode(IMG_CLEAN);
-            
+
             static IMG_ABK: &[u8] = include_bytes!("./img/icons8-shortcut-96.png");
             let img_abk = base64::encode(IMG_ABK);
-                        
+
             static IMG_FX: &[u8] = include_bytes!("./img/icons8-formula-fx-96.png");
             let img_fx = base64::encode(IMG_FX);
-            
+
             let active_allgemein = if cw == Allgemein { " active" } else { "" };
             let active_regex = if cw == RegEx { " active" } else { "" };
             let active_text_saubern = if cw == TextSaubern { " active" } else { "" };
             let active_abkuerzungen = if cw == Abkuerzungen { " active" } else { "" };
             let active_flst_auslesen = if cw == FlstAuslesen { " active" } else { "" };
-            let active_klassifizierung_rechteart = if cw == KlassifizierungRechteArt { " active" } else { "" };
-            let active_rechtsinhaber_auslesen_abt2 = if cw == RechtsinhaberAuslesenAbt2 { " active" } else { "" };
-            let active_rangvermerk_auslesen_abt2 = if cw == RangvermerkAuslesenAbt2 { " active" } else { "" };
+            let active_klassifizierung_rechteart = if cw == KlassifizierungRechteArt {
+                " active"
+            } else {
+                ""
+            };
+            let active_rechtsinhaber_auslesen_abt2 = if cw == RechtsinhaberAuslesenAbt2 {
+                " active"
+            } else {
+                ""
+            };
+            let active_rangvermerk_auslesen_abt2 = if cw == RangvermerkAuslesenAbt2 {
+                " active"
+            } else {
+                ""
+            };
             let active_text_kuerzen_abt2 = if cw == TextKuerzenAbt2 { " active" } else { "" };
-            let active_betrag_auslesen_abt3 = if cw == BetragAuslesenAbt3 { " active" } else { "" };
-            let active_klassifizierung_schuldenart_abt3 = if cw == KlassifizierungSchuldenArtAbt3 { " active" } else { "" };
-            let active_rechtsinhaber_auslesen_abt3 = if cw == RechtsinhaberAuslesenAbt3 { " active" } else { "" };
+            let active_betrag_auslesen_abt3 = if cw == BetragAuslesenAbt3 {
+                " active"
+            } else {
+                ""
+            };
+            let active_klassifizierung_schuldenart_abt3 = if cw == KlassifizierungSchuldenArtAbt3 {
+                " active"
+            } else {
+                ""
+            };
+            let active_rechtsinhaber_auslesen_abt3 = if cw == RechtsinhaberAuslesenAbt3 {
+                " active"
+            } else {
+                ""
+            };
             let active_text_kuerzen_abt3 = if cw == TextKuerzenAbt3 { " active" } else { "" };
 
             let sidebar = format!("
@@ -563,7 +594,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     </div>
                 </div>
             ");
-            
+
             let main_content = match cw {
                 Allgemein => format!("
                     <div style='padding:5px 0px;display:flex;flex-direction:column;flex-grow:1;'>
@@ -893,9 +924,9 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     .join("\r\n"),
                 ),
             };
-            
+
             let main = format!("<div style='display:flex;flex-grow:1;padding:0px 20px;line-height: 1.2;'>{main_content}</div>");
-            
+
             format!("
                 <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:1000px;position:relative;display:flex;flex-direction:column;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
                 
@@ -912,7 +943,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             ", 
                 konfig_pfad = Konfiguration::konfiguration_pfad(),
             )
-        },
+        }
         Some(PopoverState::ContextMenu(cm)) => {
             format!("
                 <div style='pointer-events:unset;padding:1px;position:absolute;left:{}px;top:{}px;{}background:white;border-radius:5px;box-shadow:0px 0px 5px #444;'>
@@ -934,11 +965,17 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             <div class='kontextmenü-eintrag' data-seite-neu='bv-vert-zu-und-abschreibungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Bestandsverzeichnis Zu- und Abschreibungen (Hochformat)
                             </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='bv-vert-zu-und-abschreibungen-alt' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Bestandsverzeichnis Zu- und Abschreibungen Variante 2(Hochformat)
+                            </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt1-horz' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 1 (Querformat)
                             </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt1-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 1 (Hochformat)
+                            </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='abt1-vert-typ2' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Abteilung 1 Typ 2 (Hochformat)
                             </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt2-horz-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 2 Veränderungen (Querformat)
@@ -946,11 +983,15 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                             <div class='kontextmenü-eintrag' data-seite-neu='abt2-horz' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 2 (Querformat)
                             </div>
-                            <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
-                                Abteilung 2 Veränderungen (Hochformat)
-                            </div>
+
                             <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 2 (Hochformat)
+                            </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert-typ2' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Abteilung 2 Variante 2 (Hochformat)
+                            </div>
+                            <div class='kontextmenü-eintrag' data-seite-neu='abt2-vert-veraenderungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
+                                Abteilung 2 Veränderungen (Hochformat)
                             </div>
                             <div class='kontextmenü-eintrag' data-seite-neu='abt3-horz-veraenderungen-loeschungen' data-seite='{seite}' onmousedown='klassifiziereSeiteNeu(event);'>
                                 Abteilung 3 Veränderungen / Löschungen (Querformat)
@@ -975,12 +1016,12 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 </div>", 
                 cm.x, 
                 cm.y,
-                if cm.seite_ausgewaehlt > 20 { "transform:translateY(-100%);" } else { "" }, 
+                if cm.seite_ausgewaehlt > 10 { "transform:translateY(-100%);" } else { "" }, 
                 seite = cm.seite_ausgewaehlt
             )
-        },
+        }
     };
-    
+
     let pc = format!("
         <div style='background:{application_popover_color};width: 100%;height: 100%;min-height: 100%;z-index:1001;pointer-events:all;{overflow}' onmouseup='closePopOver()'>
             {pc}
@@ -989,14 +1030,13 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         application_popover_color = application_popover_color,
         pc = pc,
     );
-    
+
     normalize_for_js(pc)
 }
 
 pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
     let pc = match data {
         GrundbuchSucheResponse::StatusOk(ok) => {
-            
             if ok.grundbuecher.is_empty() && ok.aenderungen.is_empty() {
                 return format!("
                     <div class='__application_suchergebnis'>
@@ -1007,7 +1047,7 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
                     </div>
                 ");
             }
-            
+
             ok.grundbuecher.iter().map(|e| {
                 
                 let file_name = format!("{}_{}", e.titelblatt.grundbuch_von, e.titelblatt.blatt);
@@ -1056,19 +1096,20 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
             })
             .collect::<Vec<_>>()
             .join("\r\n")
-        },
+        }
         GrundbuchSucheResponse::StatusErr(err) => {
             let code = &err.code;
             let text = &err.text;
             format!("<div class='__application_suchergebnis'><p style='width: 500px;word-break: break-all;'>E{code}: {text}</p></div>")
         }
     };
-        
+
     normalize_for_js(pc)
 }
 
 pub fn render_schuldenart_select() -> String {
-    format!("
+    format!(
+        "
         <select onchange='copyToClipboardOnSelectChange(event);'>
             <option value='Grundschuld'>Grundschuld</option>
             <option value='Hypothek'>Hypothek</option>
@@ -1083,7 +1124,8 @@ pub fn render_schuldenart_select() -> String {
             <option value='Zwangssicherungshypothek'>Zwangssicherungshypothek</option>
             <option value='NichtDefiniert'>NichtDefiniert</option>
         </select>
-    ")
+    "
+    )
 }
 
 pub fn render_rechteart_select() -> String {
@@ -1190,7 +1232,6 @@ pub fn render_rechteart_select() -> String {
 }
 
 pub fn render_ribbon(rpc_data: &RpcData) -> String {
-
     static ICON_EINSTELLUNGEN: &[u8] = include_bytes!("./img/icons8-settings-48.png");
     static ICON_HELP: &[u8] = include_bytes!("./img/icons8-help-96.png");
     static ICON_INFO: &[u8] = include_bytes!("./img/icons8-info-48.png");
@@ -1211,12 +1252,11 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     static ICON_UPLOAD: &[u8] = include_bytes!("./img/icons8-upload-to-cloud-96.png");
     static ICON_HVM: &[u8] = include_bytes!("./img/icons8-copy-link-96.png");
 
-    #[cfg(not(target_os = "windows"))]
-    let is_windows = false;
-    #[cfg(target_os = "windows")]
-    let is_windows = true;
-    
-    let disabled = if rpc_data.loaded_files.is_empty() { " disabled" } else { "" };
+    let disabled = if rpc_data.loaded_files.is_empty() {
+        " disabled"
+    } else {
+        ""
+    };
     let icon_open_base64 = base64::encode(ICON_GRUNDBUCH_OEFFNEN);
     let icon_neu_base64 = base64::encode(ICON_NEU);
     let icon_back_base64 = base64::encode(ICON_ZURUECK);
@@ -1237,9 +1277,7 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
     let icon_export_lefis = base64::encode(ICON_EXPORT_LEFIS);
     let icon_hvm = base64::encode(ICON_HVM);
 
-    let nebenbet = if is_windows {
-        String::new()
-    } else {
+    let nebenbet = {
         format!("
             <div class='__application-ribbon-section 3'>
                 <div style='display:flex;flex-direction:row;'>
@@ -1282,10 +1320,8 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
             </div>
         ")
     };
-    
-    let export_lefis = if is_windows {
-        String::new()
-    } else {
+
+    let export_lefis = {
         format!("
             <div class='__application-ribbon-section-content'>
                 <label onmouseup='tab_functions.export_lefis(event)' class='__application-ribbon-action-vertical-large'>
@@ -1300,240 +1336,392 @@ pub fn render_ribbon(rpc_data: &RpcData) -> String {
             </div>
         ")
     };
-    
-    let ribbon_body = format!("
-        <div class='__application-ribbon-body'>
-            <div class='__application-ribbon-section 1'>
-                <div style='display:flex;flex-direction:row;'>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.load_new_pdf(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_open_base64}'>
-                            </div>
-                            <div>
-                                <p>Grundbuch</p>
-                                <p>laden</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.create_new_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_neu_base64}'>
-                            </div>
-                            <div>
-                                <p>Neues</p>
-                                <p>Grundbuch</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.search_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_search_base64}'>
-                            </div>
-                            <div>
-                                <p>Grundbuch</p>
-                                <p>suchen</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class='__application-ribbon-section 2'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.undo(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_back_base64}'>
-                            </div>
-                            <div>
-                                <p>Zurück</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.redo(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_forward_base64}'>
-                            </div>
-                            <div>
-                                <p>Vorwärts</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            {nebenbet}
-            
-            <div class='__application-ribbon-section 4'>
-                <div style='display:flex;flex-direction:row;'>
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_rechte_speichern}'>
-                            </div>
-                            <div>
-                                <p>Alle Rechte</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_fehler(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_fehler_speichern}'>
-                            </div>
-                            <div>
-                                <p>Alle Fehler</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_teilbelastungen(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_teilbelastungen}'>
-                            </div>
-                            <div>
-                                <p>Alle Teilbelast.</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_abt1(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_abt1}'>
-                            </div>
-                            <div>
-                                <p>Alle Abt. 1</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.export_alle_hvm(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_hvm}'>
-                            </div>
-                            <div>
-                                <p>Alle HVM</p>
-                                <p>speichern unter</p>
-                            </div>
-                        </label>
-                    </div> 
-                    
-                </div>
-            </div>            
-            
-            <div class='__application-ribbon-section 5'>
-                <div style='display:flex;flex-direction:row;'>
 
-                    {export_lefis}
-                    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_export_pdf(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
-                            </div>
-                            <div>
-                                <p>Export</p>
-                                <p>als PDF</p>
-                            </div>
-                        </label>
-                    </div>   
+    let grundbuch_oeffnen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.load_new_pdf(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_open_base64}'>
                 </div>
-            </div>
-            
-            <div class='__application-ribbon-section 6'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.upload_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon {disabled}' src='data:image/png;base64,{icon_upload_lefis}'>
-                            </div>
-                            <div>
-                                <p>Änderungen</p>
-                                <p>übernehmen</p>
-                            </div>
-                        </label>
-                    </div>
+                <div>
+                    <p>Grundbuch</p>
+                    <p>laden</p>
                 </div>
-            </div>
-            
-            <div class='__application-ribbon-section 7'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_configuration(event);' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_settings_base64}'>
-                            </div>
-                            <div>
-                                <p>Einstellungen</p>
-                                <p>bearbeiten</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div style='display:flex;flex-grow:1;'></div>
-            ´
-            <div class='__application-ribbon-section 6'>
-                <div style='display:flex;flex-direction:row;'>
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_help(event);' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_help_base64}'>
-                            </div>
-                            <div>
-                                <p>Hilfe</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>    
-                    <div class='__application-ribbon-section-content'>
-                        <label onmouseup='tab_functions.open_info(event);' class='__application-ribbon-action-vertical-large'>
-                            <div class='icon-wrapper'>
-                                <img class='icon' src='data:image/png;base64,{icon_info_base64}'>
-                            </div>
-                            <div>
-                                <p>Info</p>
-                                <p>&nbsp;</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
+            </label>
         </div>
-        ");
+        ")
+    };
+
+    let neues_grundbuch = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+                <label onmouseup='tab_functions.create_new_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                    <div class='icon-wrapper'>
+                        <img class='icon' src='data:image/png;base64,{icon_neu_base64}'>
+                    </div>
+                    <div>
+                        <p>Neues</p>
+                        <p>Grundbuch</p>
+                    </div>
+                </label>
+            </div>
+        ")
+    };
+
+    let grundbuch_suchen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.search_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_search_base64}'>
+                </div>
+                <div>
+                    <p>Grundbuch</p>
+                    <p>suchen</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let zurueck = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.undo(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_back_base64}'>
+                </div>
+                <div>
+                    <p>Zurück</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let vorwaerts = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.redo(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_forward_base64}'>
+                </div>
+                <div>
+                    <p>Vorwärts</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let alle_rechte_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_rechte(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_rechte_speichern}'>
+                </div>
+                <div>
+                    <p>Alle Rechte</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_fehler_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_fehler(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_fehler_speichern}'>
+                </div>
+                <div>
+                    <p>Alle Fehler</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_teibelast_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_teilbelastungen(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_export_teilbelastungen}'>
+                </div>
+                <div>
+                    <p>Alle Teilbelast.</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_abt1_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_abt1(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_export_abt1}'>
+                </div>
+                <div>
+                    <p>Alle Abt. 1</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let alle_hvm_speichern = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.export_alle_hvm(event)'  class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_hvm}'>
+                </div>
+                <div>
+                    <p>Alle HVM</p>
+                    <p>speichern unter</p>
+                </div>
+            </label>
+        </div> 
+        ")
+    };
+
+    let export_pdf = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_export_pdf(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_export_pdf}'>
+                </div>
+                <div>
+                    <p>Export</p>
+                    <p>als PDF</p>
+                </div>
+            </label>
+        </div>   
+        ")
+    };
+
+    static RELOAD_PNG: &[u8] = include_bytes!("../src/img/icons8-synchronize-48.png");
+    let icon_reload = base64::encode(&RELOAD_PNG);
+
+    let neu_laden = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='reloadGrundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_reload}'>
+                </div>
+                <div>
+                    <p>Grundbuch</p>
+                    <p>neu laden</p>
+                </div>
+            </label>
+        </div>   
+        ")
+    };
+
+    let aenderungen_uebernehmen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.upload_grundbuch(event)' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon {disabled}' src='data:image/png;base64,{icon_upload_lefis}'>
+                </div>
+                <div>
+                    <p>Änderungen</p>
+                    <p>übernehmen</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let einstellungen = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_configuration(event);' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_settings_base64}'>
+                </div>
+                <div>
+                    <p>Einstellungen</p>
+                    <p>bearbeiten</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let hilfe = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_help(event);' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_help_base64}'>
+                </div>
+                <div>
+                    <p>Hilfe</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>    
+        ")
+    };
+
+    let info = {
+        format!("
+        <div class='__application-ribbon-section-content'>
+            <label onmouseup='tab_functions.open_info(event);' class='__application-ribbon-action-vertical-large'>
+                <div class='icon-wrapper'>
+                    <img class='icon' src='data:image/png;base64,{icon_info_base64}'>
+                </div>
+                <div>
+                    <p>Info</p>
+                    <p>&nbsp;</p>
+                </div>
+            </label>
+        </div>
+        ")
+    };
+
+    let ribbon_body = match rpc_data.konfiguration.tab {
+        0 => {
+            format!(
+                "
+            <div class='__application-ribbon-header'>
+                <p onmouseup='selectTab(0);' class='active'>START</p>
+                <p onmouseup='selectTab(1);'>ÜBERPRÜFUNG</p>
+                <p onmouseup='selectTab(2);'>LEFIS</p>
+            </div>
+            <div class='__application-ribbon-body'>
+                <div class='__application-ribbon-section 1'>
+                    <div style='display:flex;flex-direction:row;'>
+                        
+                        {grundbuch_oeffnen}
+
+                        {neues_grundbuch}
+                        
+                        {grundbuch_suchen}
+                    </div>
+                </div>
+            
+                <div class='__application-ribbon-section 2'>
+                    <div style='display:flex;flex-direction:row;'>
+
+                        {zurueck}
+                        
+                        {vorwaerts}
+                    </div>
+                </div>
+                
+                <div class='__application-ribbon-section 5'>
+                    <div style='display:flex;flex-direction:row;'>
+                        {neu_laden}
+                    </div>
+                </div>
+
+                <div class='__application-ribbon-section 5'>
+                    <div style='display:flex;flex-direction:row;'>
+                        {aenderungen_uebernehmen}
+
+                        {export_pdf}
+                    </div>
+                </div>
+
+                <div style='display:flex;flex-grow:1;'></div>
+                
+                <div class='__application-ribbon-section 6'>
+                    <div style='display:flex;flex-direction:row;'>
+
+                        {einstellungen}
+
+                        {hilfe}
+
+                        {info}
+
+                    </div>
+                </div>
+            </div>
+            "
+            )
+        }
+        1 => {
+            format!(
+                "
+            <div class='__application-ribbon-header'>
+                <p onmouseup='selectTab(0);'>START</p>
+                <p onmouseup='selectTab(1);' class='active'>ÜBERPRÜFUNG</p>
+                <p onmouseup='selectTab(2);'>LEFIS</p>
+            </div>
+            <div class='__application-ribbon-body'>
+                <div class='__application-ribbon-section 4'>
+                    <div style='display:flex;flex-direction:row;'>
+                        
+                        {alle_rechte_speichern}
+                        
+                        {alle_fehler_speichern}
+                        
+                        {alle_teibelast_speichern}
+
+                        {alle_abt1_speichern}
+                        
+                        {alle_hvm_speichern}
+                        
+                    </div>
+                </div>            
+            </div>
+            "
+            )
+        }
+        _ => {
+            format!(
+                "
+            <div class='__application-ribbon-header'>
+                <p onmouseup='selectTab(0);'>START</p>
+                <p onmouseup='selectTab(1);'>ÜBERPRÜFUNG</p>
+                <p onmouseup='selectTab(2);' class='active'>LEFIS</p>
+            </div>
+            <div class='__application-ribbon-body'>
+
+
+                {nebenbet}
+
+                <div style='display:flex;flex-grow:1;'></div>
+
+                <div class='__application-ribbon-section 5'>
+                    <div style='display:flex;flex-direction:row;'>
+                        {export_lefis}
+                    </div>
+                </div>
+            </div>
+        "
+            )
+        }
+    };
 
     normalize_for_js(ribbon_body)
 }
 
 pub fn render_main(rpc_data: &mut RpcData) -> String {
-        
     if rpc_data.loaded_files.is_empty() {
         return String::new();
     }
 
-    normalize_for_js(format!("
-        <div id='__application-file-list'>{file_list}</div>
-        <div id='__application-main-no-files' style='display:flex;width:100%;height:100%;flex-direction:row;'>
+    normalize_for_js(format!(
+        "
+        <div id='__application-file-list' style='position:relative'>{file_list}</div>
             {main_no_files}
         </div>
     ",
@@ -1543,9 +1731,10 @@ pub fn render_main(rpc_data: &mut RpcData) -> String {
 }
 
 pub fn render_application_main_no_files(rpc_data: &mut RpcData) -> String {
-    format!("
+    format!(
+        "
         {page_list}
-        <div style='display:flex;flex-direction:column;flex-grow:1;'>
+        <div id='__application-page-list-after'>
             <div id='__application-main-container' style='{height}'>{main_container}</div>
             {pdf_image}
         </div>
@@ -1553,26 +1742,35 @@ pub fn render_application_main_no_files(rpc_data: &mut RpcData) -> String {
         page_list = if rpc_data.loaded_file_has_no_pdf() {
             String::new()
         } else {
-            format!("<div id='__application-page-list'>{page_list}</div>", page_list = render_page_list(rpc_data))
+            format!(
+                "<div id='__application-page-list'>{page_list}</div>",
+                page_list = render_page_list(rpc_data)
+            )
         },
-        height = if rpc_data.loaded_file_has_no_pdf() { "" } else { "height: 600px;" },
+        height = if rpc_data.loaded_file_has_no_pdf() {
+            ""
+        } else {
+            "height: 600px;"
+        },
         main_container = render_main_container(rpc_data),
         pdf_image = if rpc_data.loaded_file_has_no_pdf() {
             String::new()
         } else {
-            format!("<div id='__application-pdf-page-image'>{pdf_image}</div>", pdf_image = render_pdf_image(rpc_data))
+            format!(
+                "<div id='__application-pdf-page-image'>{pdf_image}</div>",
+                pdf_image = render_pdf_image(rpc_data)
+            )
         }
     )
 }
 
 pub fn render_file_list(rpc_data: &RpcData) -> String {
-
     const CLOSE_PNG: &[u8] = include_bytes!("../src/img/icons8-close-48.png");
     let close_str = format!("data:image/png;base64,{}", base64::encode(&CLOSE_PNG));
-    
+
     normalize_for_js(rpc_data.loaded_files.keys().filter_map(|filename| {
         
-        let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename);
+        let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename.as_str());
         
         let datei = rpc_data.loaded_files.get(filename)?;
 
@@ -1590,7 +1788,7 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
             }
         };
         
-        Some(format!("<div class='{file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
+        Some(format!("<div title='{filename}' class='__application-data-file-div {file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
             {check}
             <p style='flex-grow:0;user-select:none;' data-fileName='{filename}' >{filename}</p>
             <div style='display:flex;flex-grow:1;' data-fileName='{filename}' ></div>
@@ -1613,42 +1811,64 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
 }
 
 pub fn render_page_list(rpc_data: &RpcData) -> String {
-    
-    let open_file = match rpc_data.open_page.as_ref().and_then(|(of, _)| rpc_data.loaded_files.get(of)) {
+    let open_file = match rpc_data
+        .open_page
+        .as_ref()
+        .and_then(|(of, _)| rpc_data.loaded_files.get(of))
+    {
         Some(s) => s,
         None => return String::new(),
     };
-    
+
     if open_file.datei.is_none() {
         return String::new();
     }
-    
-    let pages_div = open_file.seitenzahlen.iter().map(|page_num| {
+
+    let toggle_file_list = if rpc_data.konfiguration.dateiliste_ausblenden {
+        format!(
+            "
+        <div class='__application-toggle-file-list' onclick='toggleDateiliste(false);'>
+            <p>Dateien einblenden</p>
+        </div>
+    "
+        )
+    } else {
+        format!(
+            "
+            <div class='__application-toggle-file-list' onclick='toggleDateiliste(true);'>
+                <p>Dateien ausblenden</p>
+            </div>
+        "
+        )
+    };
+
+    let pages_div = open_file.get_seitenzahlen().iter().map(|page_num| {
     
         use crate::digital::SeitenTyp;
         
-        let page_is_loaded = open_file.geladen.contains_key(&format!("{}", page_num));
+        let page_is_loaded = open_file.hocr.seiten.contains_key(&format!("{}", page_num));
         let page_is_active = rpc_data.open_page.as_ref().map(|s| s.1) == Some(*page_num);
-        let seiten_typ = open_file.klassifikation_neu
-            .get(&format!("{}", page_num)).cloned()
-            .or(open_file.geladen.get(&format!("{}", page_num)).map(|p| p.typ.clone()));
-        
+        let seiten_typ = open_file.get_seiten_typ(&page_num.to_string());
+
         let page_color = seiten_typ.map(|t| match t {
               SeitenTyp::BestandsverzeichnisHorz
             | SeitenTyp::BestandsverzeichnisHorzZuUndAbschreibungen
             | SeitenTyp::BestandsverzeichnisVert
             | SeitenTyp::BestandsverzeichnisVertTyp2
-            | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen => {
+            | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungen 
+            | SeitenTyp::BestandsverzeichnisVertZuUndAbschreibungenAlt => {
                 "rgb(167,224,255)" // blau
             },
               SeitenTyp::Abt1Horz
-            | SeitenTyp::Abt1Vert => {
+            | SeitenTyp::Abt1Vert 
+            | SeitenTyp::Abt1VertTyp2 => {
                 "rgb(167,255,185)" // grün
             },
               SeitenTyp::Abt2HorzVeraenderungen
             | SeitenTyp::Abt2Horz
             | SeitenTyp::Abt2VertVeraenderungen
-            | SeitenTyp::Abt2Vert => {
+            | SeitenTyp::Abt2Vert 
+            | SeitenTyp::Abt2VertTyp2 => {
                 "rgb(255,255,167)" // gelb
             },
               SeitenTyp::Abt3HorzVeraenderungenLoeschungen
@@ -1668,11 +1888,14 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
             extra_style = if !page_is_active { format!("style='background:{}'", page_color) } else { String::new() },
             page_num = page_num
         )
-    }).collect::<Vec<_>>().join("\r\n");    
+    }).collect::<Vec<_>>().join("\r\n");
 
     normalize_for_js(format!("
-        <div><h5>Seite</h5></div>
-        <div style='margin:10px;'>
+
+        {toggle_file_list}
+
+        <div style='margin-left:25px;'><h5>Seite</h5></div>
+        <div style='margin:10px;margin-left:35px;'>
             <div><div style='display:inline-block;width:10px;height:10px;border-radius:50%;background:rgb(167,224,255);'></div><p style='display:inline-block;'>&nbsp;Bestandsverz.</p></div>
             <div><div style='display:inline-block;width:10px;height:10px;border-radius:50%;background:rgb(167,255,185);'></div><p style='display:inline-block;'>&nbsp;Abt. 1</p></div>
             <div><div style='display:inline-block;width:10px;height:10px;border-radius:50%;background:rgb(255,255,167);'></div><p style='display:inline-block;'>&nbsp;Abt. 2</p></div>
@@ -1684,15 +1907,17 @@ pub fn render_page_list(rpc_data: &RpcData) -> String {
 }
 
 pub fn render_main_container(rpc_data: &mut RpcData) -> String {
-    
     let has_no_pdf = rpc_data.loaded_file_has_no_pdf();
 
-    let open_file = match rpc_data.open_page.as_mut().and_then(|of| rpc_data.loaded_files.get_mut(&of.0)) {
+    let open_file = match rpc_data
+        .open_page
+        .as_mut()
+        .and_then(|of| rpc_data.loaded_files.get_mut(&of.0))
+    {
         Some(s) => s,
         None => return String::new(),
     };
-    
-    static RELOAD_PNG: &[u8] = include_bytes!("../src/img/icons8-synchronize-48.png");
+
     static EXPAND_PNG: &[u8] = include_bytes!("../src/img/icons8-double-left-96.png");
     static COLLAPSE_PNG: &[u8] = include_bytes!("../src/img/icons8-double-right-96.png");
 
@@ -1704,20 +1929,12 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             ",
         ))
     } else {
-        let reload_str = format!("data:image/png;base64,{}", base64::encode(&RELOAD_PNG));
-    
-        #[cfg(not(target_os = "windows"))]
-        let is_windows = false;
-        #[cfg(target_os = "windows")]
-        let is_windows = true;
-
         normalize_for_js(format!("
                 <div style='display:flex;flex-direction:row;height:43px;border-bottom: 1px solid #efefef;box-sizing:border-box;'>
                     <div style='display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>Grundbuch</h4>
                             <div style='display:flex;flex-grow:1;'></div>
-                            {reload_grundbuch_button}
                         </div>
                     </div>
                     {lefis_analyse}
@@ -1742,38 +1959,30 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
                 </div>
             ",
             max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-            reload_grundbuch_button = if has_no_pdf { String::new() } else { format!("
-                <div style='padding:6px;'>
-                    <img src='{reload_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='reloadGrundbuch(event);'></img>
-                </div>
-            ", reload_icon = reload_str) },
-            lefis_analyse = if is_windows {
-                String::new()
-            } else {
-                if rpc_data.konfiguration.lefis_analyse_einblenden {
-                    let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
-                    format!("
-                        <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
-                            <div style='display:flex;flex-direction:row;'>
-                                <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
-                                <div style='padding:6px;'>
-                                    <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
-                                </div>
-                            </div>
-                        </div>")
-                } else {
-                    let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
-                    format!("
+            lefis_analyse = 
+            if rpc_data.konfiguration.lefis_analyse_einblenden {
+                let collapse_icon = format!("data:image/png;base64,{}", base64::encode(&COLLAPSE_PNG));
+                format!("
                     <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
                         <div style='display:flex;flex-direction:row;'>
                             <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
-                            <div style='display:flex;flex-grow:1;'></div>
                             <div style='padding:6px;'>
-                                <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                                <img src='{collapse_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
                             </div>
                         </div>
                     </div>")
-                }
+            } else {
+                let expand_icon = format!("data:image/png;base64,{}", base64::encode(&EXPAND_PNG));
+                format!("
+                <div style='height:100%;display:flex;flex-grow:1;min-width:50%;overflow:hidden;'>
+                    <div style='display:flex;flex-direction:row;'>
+                        <h4 style='padding:10px;font-size:16px;'>LEFIS</h4>
+                        <div style='display:flex;flex-grow:1;'></div>
+                        <div style='padding:6px;'>
+                            <img src='{expand_icon}' style='width:24px;height:24px;cursor:pointer;' onmouseup='toggleLefisAnalyse(event);'></img>
+                        </div>
+                    </div>
+                </div>")
             },
             
             bestandsverzeichnis = render_bestandsverzeichnis(open_file, &rpc_data.konfiguration),
@@ -1793,14 +2002,14 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
             abt_3_zuschreibungen = render_abt_3_veraenderungen(open_file),
             abt_3_abschreibungen = render_abt_3_loeschungen(open_file),
             
-            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden && !is_windows {
+            analyse_grundbuch = if rpc_data.konfiguration.lefis_analyse_einblenden {
                 format!("
                     <div id='__application-analyse-grundbuch' style='display:flex;flex-grow:1;min-width:50%;overflow:scroll;{max_height}'>
                         {analyse}
                     </div>
                 ", 
                     max_height = if has_no_pdf { "max-height:calc(100% - 43px);" } else { "max-height:525px;" },
-                    analyse = render_analyse_grundbuch(open_file, &rpc_data.loaded_nb, &rpc_data.konfiguration, false, false)
+                    analyse = render_analyse_grundbuch(&open_file.cache.start_analyzing(&open_file.analysiert, &rpc_data.vm, &rpc_data.loaded_nb, &rpc_data.konfiguration), false, false)
                 )
             } else {
                 format!("")
@@ -1809,8 +2018,11 @@ pub fn render_main_container(rpc_data: &mut RpcData) -> String {
     }
 }
 
-pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], konfiguration: &Konfiguration, fuer_druck: bool, nur_fehlerhafte_rechte: bool) -> String {
-    
+pub fn render_analyse_grundbuch(
+    gb_analysiert: &GrundbuchAnalysiert,
+    fuer_druck: bool,
+    nur_fehlerhafte_rechte: bool,
+) -> String {
     const PFEIL_PNG: &[u8] = include_bytes!("../src/img/icons8-arrow-48.png");
     const WARNUNG_PNG: &[u8] = include_bytes!("../src/img/icons8-warning-48.png");
     const FEHLER_PNG: &[u8] = include_bytes!("../src/img/icons8-high-priority-48.png");
@@ -1819,8 +2031,6 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
     let warnung_str = format!("data:image/png;base64,{}", base64::encode(&WARNUNG_PNG));
     let fehler_str = format!("data:image/png;base64,{}", base64::encode(&FEHLER_PNG));
 
-    let gb_analysiert = crate::analyse::analysiere_grundbuch(&open_file.analysiert, nb, konfiguration);
-    
     normalize_for_js(format!("
         <div style='margin:10px;min-width:600px;'>
             {a2_header}
@@ -1854,7 +2064,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     {warnungen}
                 </div>
                 </div>",
-                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A2/{}",  gb_analysiert.titelblatt.grundbuch_von, gb_analysiert.titelblatt.blatt, a2a.lfd_nr) } else { format!("{}", a2a.lfd_nr) },
                 text_original = if fuer_druck { format!("<p style='margin-top:10px;font-family:sans-serif;'>{}</p>", a2a.text_original) } else { String::new() }, 
                 max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a2a.text_kurz,
@@ -1910,12 +2120,35 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     fehler
                     .iter()
                     .map(|w| {
-                        format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
-                            <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <p style='display:inline-block;margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                        format!("<span title='{alt_text}' style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
+                                <img src='{fehler_icon}' style='width:12px;height:12px;'/>
+                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            text = w,
+                            text = normalize_for_js(w.text.clone()),
+                            alt_text = match w.traceback.as_ref() {
+                                Some(s) => s.iter().map(|s| html_escape::encode_safe(&s).to_string()).collect::<Vec<_>>().join("&#013;"),
+                                None => String::new()
+                            },
+                            opt_button = match w.py_script.as_deref() {
+                                None => String::new(),
+                                Some(s) => {
+                                    let json = s.join("⠀")
+                                    .replace("\"", "⠁")
+                                    .replace("'", "⠂")
+                                    .replace('`', "⠇")
+                                    .replace("\\\"", "⠉")
+                                    .replace("\\", "⠊")
+                                    .replace(">", "⠍")
+                                    .replace("<", "⠎")
+                                    .replace(")", "⠏")
+                                    .replace("(", "⠑")
+                                    .replace("{", "⠟")
+                                    .replace("}", "⠠");
+                                    format!("<div style='display:flex;flex-grow:1;'></div><button class='__application-view-script' onmouseup='openScript(\"{json}\")' >Script ansehen</button>")
+                                },
+                            },
                         )
                     })
                     .collect::<Vec<_>>()
@@ -1969,7 +2202,7 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                         {warnungen}
                     </div>
                 </div>",
-                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  open_file.analysiert.titelblatt.grundbuch_von, open_file.analysiert.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
+                lfd_nr = if fuer_druck { format!("{} Bl. {} A3/{}",  gb_analysiert.titelblatt.grundbuch_von, gb_analysiert.titelblatt.blatt, a3a.lfd_nr) } else { format!("{}", a3a.lfd_nr) },
                 text_original = if fuer_druck { format!("<p style='margin-top:10px;font-family:sans-serif;'>{}</p>", a3a.text_original) } else { String::new() }, 
                 max_width = if fuer_druck { "600px" } else { "380px" },
                 text_kurz = a3a.text_kurz,
@@ -2013,12 +2246,36 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
                     fehler.dedup();
                     
                     fehler.iter().map(|w| {
-                        format!("<span style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
-                            <img src='{fehler_icon}' style='width:12px;height:12px;'/>
-                                <p style='display:inline-block;margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                        format!("
+                            <span title='{alt_text}' style='display:flex;margin-top:5px;padding: 4px 8px; background:rgb(255,195,195);'>
+                                <img src='{fehler_icon}' style='width:12px;height:12px;'/>
+                                <p style='margin-left:10px;color:rgb(129,8,8);'>{text}</p>
+                                {opt_button}
                             </span>", 
                             fehler_icon = fehler_str,
-                            text = w,
+                            text = normalize_for_js(w.text.clone()),
+                            alt_text = match w.traceback.as_ref() {
+                                Some(s) => s.iter().map(|s| html_escape::encode_safe(&s).to_string()).collect::<Vec<_>>().join("&#013;"),
+                                None => String::new()
+                            },
+                            opt_button = match w.py_script.as_deref() {
+                                None => String::new(),
+                                Some(s) => {
+                                    let json = s.join("⠀")
+                                    .replace("\"", "⠁")
+                                    .replace("'", "⠂")
+                                    .replace('`', "⠇")
+                                    .replace("\\\"", "⠉")
+                                    .replace("\\", "⠊")
+                                    .replace(">", "⠍")
+                                    .replace("<", "⠎")
+                                    .replace(")", "⠏")
+                                    .replace("(", "⠑")
+                                    .replace("{", "⠟")
+                                    .replace("}", "⠠");
+                                    format!("<div style='display:flex;flex-grow:1;'></div><button class='__application-view-script' onmouseup='openScript(\"{json}\")' >Script ansehen</button>")
+                                },
+                            },
                         )
                     }).collect::<Vec<_>>().join("\r\n")
                 },
@@ -2045,18 +2302,16 @@ pub fn render_analyse_grundbuch(open_file: &PdfFile, nb: &[Nebenbeteiligter], ko
             )
         }).collect::<Vec<String>>().join("\r\n"),
     ))
-
 }
 
 pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfiguration) -> String {
-    
     use crate::digital::BvEintrag;
 
     let mut bestandsverzeichnis = open_file.analysiert.bestandsverzeichnis.clone();
     if bestandsverzeichnis.eintraege.is_empty() {
         bestandsverzeichnis.eintraege = vec![BvEintrag::neu(1)];
     }
-    
+
     let bv = bestandsverzeichnis.eintraege.iter().enumerate().map(|(zeile_nr, bve)| {
                 
         let bv_geroetet = if bve.ist_geroetet() { 
@@ -2229,7 +2484,7 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
             },
         }
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis</h4>
         
@@ -2257,12 +2512,15 @@ pub fn render_bestandsverzeichnis(open_file: &PdfFile, konfiguration: &Konfigura
 }
 
 pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String {
-
-    let mut bv_zuschreibungen = open_file.analysiert.bestandsverzeichnis.zuschreibungen.clone();
+    let mut bv_zuschreibungen = open_file
+        .analysiert
+        .bestandsverzeichnis
+        .zuschreibungen
+        .clone();
     if bv_zuschreibungen.is_empty() {
         bv_zuschreibungen = vec![BvZuschreibung::default()];
     }
-    
+
     let bv = bv_zuschreibungen.iter().enumerate().map(|(zeile_nr, bvz)| {
         
         let bv_geroetet = if bvz.ist_geroetet() { 
@@ -2305,7 +2563,7 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis - Zuschreibungen</h4>
         
@@ -2319,12 +2577,15 @@ pub fn render_bestandsverzeichnis_zuschreibungen(open_file: &PdfFile) -> String 
 }
 
 pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String {
-
-    let mut bv_abschreibungen = open_file.analysiert.bestandsverzeichnis.abschreibungen.clone();
+    let mut bv_abschreibungen = open_file
+        .analysiert
+        .bestandsverzeichnis
+        .abschreibungen
+        .clone();
     if bv_abschreibungen.is_empty() {
         bv_abschreibungen = vec![BvAbschreibung::default()];
     }
-    
+
     let bv = bv_abschreibungen.iter().enumerate().map(|(zeile_nr, bva)| {
         
         let bv_geroetet = if bva.ist_geroetet() { 
@@ -2367,7 +2628,7 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Bestandsverzeichnis - Abschreibungen</h4>
         
@@ -2382,12 +2643,12 @@ pub fn render_bestandsverzeichnis_abschreibungen(open_file: &PdfFile) -> String 
 
 pub fn render_abt_1(open_file: &PdfFile) -> String {
     use crate::digital::Abt1Eintrag;
-    
+
     let mut abt1_eintraege = open_file.analysiert.abt1.eintraege.clone();
     if abt1_eintraege.is_empty() {
         abt1_eintraege = vec![Abt1Eintrag::new(1)];
     }
-    
+
     let abt1 = abt1_eintraege
     .iter()
     .enumerate()
@@ -2440,8 +2701,9 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
     })
     .collect::<Vec<String>>()
     .join("\r\n");
-    
-    normalize_for_js(format!("
+
+    normalize_for_js(format!(
+        "
     <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1</h4>
     
     <div class='__application-table-header' style='display:flex;flex-grow:1;'>
@@ -2449,18 +2711,19 @@ pub fn render_abt_1(open_file: &PdfFile) -> String {
     <p style='display:flex;flex-grow:1'>Eigentümer</p>
     </div>
     
-    {abt1}", abt1 = abt1))
+    {abt1}",
+        abt1 = abt1
+    ))
 }
 
 pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
-    
     use crate::digital::Abt1GrundEintragung;
-    
+
     let mut abt1_eintraege = open_file.analysiert.abt1.grundlagen_eintragungen.clone();
     if abt1_eintraege.is_empty() {
         abt1_eintraege = vec![Abt1GrundEintragung::new()];
     }
-    
+
     let abt1 = abt1_eintraege
     .iter()
     .enumerate()
@@ -2512,7 +2775,7 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
     
     .collect::<Vec<String>>()
     .join("\r\n");
-    
+
     normalize_for_js(format!("
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Grundlagen der Eintragungen</h4>
           
@@ -2525,12 +2788,11 @@ pub fn render_abt_1_grundlagen_eintragungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
-
     let mut abt1_veraenderungen = open_file.analysiert.abt1.veraenderungen.clone();
     if abt1_veraenderungen.is_empty() {
         abt1_veraenderungen = vec![Abt1Veraenderung::default()];
     }
-    
+
     let abt1_veraenderungen = abt1_veraenderungen.iter().enumerate().map(|(zeile_nr, abt1_a)| {
         
         let bv_geroetet = if abt1_a.ist_geroetet() { 
@@ -2573,7 +2835,7 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Veränderungen</h4>
         
@@ -2587,7 +2849,6 @@ pub fn render_abt_1_veraenderungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
-
     let mut abt1_loeschungen = open_file.analysiert.abt1.loeschungen.clone();
     if abt1_loeschungen.is_empty() {
         abt1_loeschungen = vec![Abt1Loeschung::default()];
@@ -2635,7 +2896,7 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 1 - Löschungen</h4>
         
@@ -2650,12 +2911,12 @@ pub fn render_abt_1_loeschungen(open_file: &PdfFile) -> String {
 
 pub fn render_abt_2(open_file: &PdfFile) -> String {
     use crate::digital::Abt2Eintrag;
-    
+
     let mut abt2_eintraege = open_file.analysiert.abt2.eintraege.clone();
     if abt2_eintraege.is_empty() {
         abt2_eintraege = vec![Abt2Eintrag::new(1)];
     }
-    
+
     let abt2 = abt2_eintraege.iter().enumerate().map(|(zeile_nr, abt2)| {
     
         let bv_geroetet = if abt2.ist_geroetet() { 
@@ -2709,8 +2970,9 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
     })
     .collect::<Vec<String>>()
     .join("\r\n");
-    
-    normalize_for_js(format!("
+
+    normalize_for_js(format!(
+        "
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2</h4>
           
           <div class='__application-table-header' style='display:flex;flex-grow:1;'>
@@ -2719,16 +2981,17 @@ pub fn render_abt_2(open_file: &PdfFile) -> String {
             <p style='flex-grow:1;'>Recht</p>
           </div>
           
-          {abt2}", abt2 = abt2))
+          {abt2}",
+        abt2 = abt2
+    ))
 }
 
 pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
-
     let mut abt2_veraenderungen = open_file.analysiert.abt2.veraenderungen.clone();
     if abt2_veraenderungen.is_empty() {
         abt2_veraenderungen = vec![Abt2Veraenderung::default()];
     }
-    
+
     let abt2_veraenderungen = abt2_veraenderungen.iter().enumerate().map(|(zeile_nr, abt2_a)| {
         
         let bv_geroetet = if abt2_a.ist_geroetet() { 
@@ -2773,7 +3036,7 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2 - Veränderungen</h4>
         
@@ -2787,7 +3050,6 @@ pub fn render_abt_2_veraenderungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
-
     let mut abt2_loeschungen = open_file.analysiert.abt2.loeschungen.clone();
     if abt2_loeschungen.is_empty() {
         abt2_loeschungen = vec![Abt2Loeschung::default()];
@@ -2835,7 +3097,7 @@ pub fn render_abt_2_loeschungen(open_file: &PdfFile) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 2 - Löschungen</h4>
         
@@ -2855,7 +3117,7 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
     if abt3_eintraege.is_empty() {
         abt3_eintraege = vec![Abt3Eintrag::new(1)];
     }
-    
+
     let abt3 = abt3_eintraege.iter().enumerate().map(|(zeile_nr, abt3)| {
             
         let bv_geroetet = if abt3.ist_geroetet() { 
@@ -2919,8 +3181,9 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
-    normalize_for_js(format!("
+
+    normalize_for_js(format!(
+        "
            <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 3</h4>
           
           <div class='__application-table-header'>
@@ -2930,16 +3193,17 @@ pub fn render_abt_3(open_file: &PdfFile, show_lefis: bool) -> String {
             <p style='width: 160px;'>Text</p>
           </div>
           
-          {abt3}", abt3 = abt3))
+          {abt3}",
+        abt3 = abt3
+    ))
 }
 
 pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
-
     let mut abt3_veraenderungen = open_file.analysiert.abt3.veraenderungen.clone();
     if abt3_veraenderungen.is_empty() {
         abt3_veraenderungen = vec![Abt3Veraenderung::default()];
     }
-    
+
     let abt3_veraenderungen = abt3_veraenderungen.iter().enumerate().map(|(zeile_nr, abt3_a)| {
         
         let bv_geroetet = if abt3_a.ist_geroetet() { 
@@ -2994,7 +3258,7 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 3 - Veränderungen</h4>
         
@@ -3009,7 +3273,6 @@ pub fn render_abt_3_veraenderungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
-
     let mut abt3_loeschungen = open_file.analysiert.abt3.loeschungen.clone();
     if abt3_loeschungen.is_empty() {
         abt3_loeschungen = vec![Abt3Loeschung::default()];
@@ -3022,7 +3285,6 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
         } else { 
             "background:white;" 
         };
-        
         format!("
         <div class='__application-bestandsverzeichnis-eintrag' style='display:flex;'>
 
@@ -3048,7 +3310,6 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 TextInputType::Text,
                 FocusType::Focus,
             ),
-            
             betrag_textfield = abt3_l.betrag.get_html_editable_textfield(
                 120, // px width
                 abt3_l.ist_geroetet(),
@@ -3057,7 +3318,6 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
                 TextInputType::Text,
                 FocusType::Focus,
             ),
-            
             recht_textfield = abt3_l.text.get_html_editable_textfield(
                 320, // px width
                 abt3_l.ist_geroetet(),
@@ -3068,7 +3328,7 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
             ),
         )
     }).collect::<Vec<String>>().join("\r\n");
-    
+
     normalize_for_js(format!("
         <h4 style='position:sticky;top:0;background:white;padding:10px 0px;'>Abteilung 3 - Löschungen</h4>
         
@@ -3083,184 +3343,200 @@ pub fn render_abt_3_loeschungen(open_file: &PdfFile) -> String {
 }
 
 pub fn render_pdf_image(rpc_data: &RpcData) -> String {
-
     let open_file = match rpc_data.open_page.clone() {
         Some(s) => s,
-        None => { return String::new() },
+        None => return String::new(),
     };
-    
+
     let file = match rpc_data.loaded_files.get(&open_file.0) {
         Some(s) => s,
-        None => { return String::new() },
+        None => return String::new(),
     };
-    
+
     if file.datei.is_none() {
         return String::new();
     }
-    
-    let max_seitenzahl = file.seitenzahlen.iter().copied().max().unwrap_or(0);
-    
+
     let temp_ordner = std::env::temp_dir()
-    .join(&format!("{gemarkung}/{blatt}", gemarkung = file.analysiert.titelblatt.grundbuch_von, blatt = file.analysiert.titelblatt.blatt));
-    
-    let temp_pdf_pfad = temp_ordner.clone().join("temp.pdf");
-    let pdftoppm_output_path = if rpc_data.konfiguration.vorschau_ohne_geroetet {
-        temp_ordner.clone().join(format!("page-clean-{}.png", crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
-    } else {
-        temp_ordner.clone().join(format!("page-{}.png", crate::digital::formatiere_seitenzahl(open_file.1, max_seitenzahl)))
-    };
-    
+        .join(&file.analysiert.titelblatt.grundbuch_von)
+        .join(file.analysiert.titelblatt.blatt.to_string());
+
+    let pdftoppm_output_path = temp_ordner
+        .clone()
+        .join(format!("page-clean-{}.png", open_file.1));
+
     let pdf_to_ppm_bytes = match std::fs::read(&pdftoppm_output_path) {
         Ok(o) => o,
         Err(_) => return String::new(),
     };
 
-    let (im_width, im_height, page_width, page_height) = match file.pdftotext_layout.seiten.get(&format!("{}", open_file.1)) {
-        Some(o) => (o.breite_mm as f32 / 25.4 * 600.0, o.hoehe_mm as f32 / 25.4 * 600.0, o.breite_mm, o.hoehe_mm),
+    let hocr = match file.hocr.seiten.get(&format!("{}", open_file.1)) {
+        Some(s) => s,
         None => return String::new(),
     };
-    
+
+    let (im_width, im_height, page_width, page_height) = (
+        hocr.parsed.bounds.max_x,
+        hocr.parsed.bounds.max_y,
+        hocr.breite_mm,
+        hocr.hoehe_mm,
+    );
+
     let img_ui_width = 1200.0; // px
     let aspect_ratio = im_height / im_width;
     let img_ui_height = img_ui_width * aspect_ratio;
-    
-    let columns = match file.geladen.get(&format!("{}", open_file.1)) {
-        Some(page) =>  {
+
+    let (columns, textbloecke) = file
+        .get_seiten_typ(&open_file.1.to_string())
+        .map(|seitentyp| {
+            let columns = seitentyp
+                .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
+                .into_iter()
+                .map(|col| {
+                    let x = col.min_x / page_width * img_ui_width;
+                    let y = col.min_y / page_height * img_ui_height;
+                    let width = (col.max_x - col.min_x) / page_width * img_ui_width;
+                    let height = (col.max_y - col.min_y) / page_height * img_ui_height;
+
+                    format!(
+                        "
+        <div class='__application_spalte' id='__application_spalte_{id}' style='
+            position:absolute;
+            width:{width}px;
+            height:{height}px;
+            opacity: 0.5;
+            background:none;
+            border: 3px solid blue;
+            top: 0px;
+            transform-origin: top left;
+            left: 0px;
+            transform: translate({x}px, {y}px);
+            pointer-events:none;
+        '>
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                top:-7.5px;
+                left:-7.5px;
+                cursor:nw-resize;
+                z-index:1;
+                pointer-events: initial;
+            '   
+                data-columnId = '{id}' 
+                data-direction='nw' 
+                onmousedown='resizeColumnOnMouseDown(event);' 
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'></div>
             
-            let seitentyp = match file.klassifikation_neu.get(&format!("{}", open_file.1)) {
-                Some(s) => *s,
-                None => page.typ,
-            };
-                                                    
-            seitentyp
-            .get_columns(file.anpassungen_seite.get(&format!("{}", open_file.1)))
-            .into_iter()
-            .map(|col| {
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                top:-7.5px;
+                right:-7.5px;
+                cursor:ne-resize;
+                z-index:1;
+                pointer-events: initial;
+            ' 
+                data-columnId = '{id}' 
+                data-direction='ne' 
+                onmousedown='resizeColumnOnMouseDown(event);' 
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'></div>
             
-                let x = col.min_x / page_width * img_ui_width;
-                let y = col.min_y / page_height * img_ui_height;
-                let width = (col.max_x - col.min_x) / page_width * img_ui_width;
-                let height = (col.max_y - col.min_y) / page_height * img_ui_height;
-                
-                format!("
-                    <div class='__application_spalte' id='__application_spalte_{id}' style='
-                        position:absolute;
-                        width:{width}px;
-                        height:{height}px;
-                        opacity: 0.5;
-                        background:none;
-                        border: 3px solid blue;
-                        top: 0px;
-                        transform-origin: top left;
-                        left: 0px;
-                        transform: translate({x}px, {y}px);
-                        pointer-events:none;
-                    '>
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            top:-7.5px;
-                            left:-7.5px;
-                            cursor:nw-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        '   
-                            data-columnId = '{id}' 
-                            data-direction='nw' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            top:-7.5px;
-                            right:-7.5px;
-                            cursor:ne-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' 
-                            data-columnId = '{id}' 
-                            data-direction='ne' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            bottom:-7.5px;
-                            right:-7.5px;
-                            cursor:se-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' 
-                        data-columnId = '{id}' 
-                        data-direction='se' 
-                            onmousedown='resizeColumnOnMouseDown(event);' 
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'></div>
-                        
-                        <div style='
-                            position:absolute;
-                            width:15px;
-                            height:15px;
-                            background:none;
-                            bottom:-7.5px;
-                            left:-7.5px;
-                            cursor:sw-resize;
-                            z-index:1;
-                            pointer-events: initial;
-                        ' 
-                            data-columnId = '{id}' 
-                            data-direction='sw' 
-                            onmousedown='resizeColumnOnMouseDown(event);'
-                            onmouseup='resizeColumnOnMouseUp(event);'
-                            onmouseout='resizeColumnOnMouseUp(event);'
-                            onmousemove='resizeColumn(event);'
-                        ></div>
-                    </div>
-                ",
-                    id = col.id,
-                    x = x,
-                    y = y,
-                    width = width.abs(),
-                    height = height.abs(),
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\r\n")
-        },
-        None => { String::new() },
-    };
-    
-    let zeilen = file.anpassungen_seite
-    .get(&format!("{}", open_file.1))
-    .map(|ap| ap.zeilen.clone())
-    .unwrap_or_default();
-    
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                bottom:-7.5px;
+                right:-7.5px;
+                cursor:se-resize;
+                z-index:1;
+                pointer-events: initial;
+            ' 
+            data-columnId = '{id}' 
+            data-direction='se' 
+                onmousedown='resizeColumnOnMouseDown(event);' 
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'></div>
+            
+            <div style='
+                position:absolute;
+                width:15px;
+                height:15px;
+                background:none;
+                bottom:-7.5px;
+                left:-7.5px;
+                cursor:sw-resize;
+                z-index:1;
+                pointer-events: initial;
+            ' 
+                data-columnId = '{id}' 
+                data-direction='sw' 
+                onmousedown='resizeColumnOnMouseDown(event);'
+                onmouseup='resizeColumnOnMouseUp(event);'
+                onmouseout='resizeColumnOnMouseUp(event);'
+                onmousemove='resizeColumn(event);'
+            ></div>
+        </div>
+    ",
+                        id = col.id,
+                        x = x,
+                        y = y,
+                        width = width.abs(),
+                        height = height.abs(),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\r\n");
+
+            let textbloecke =
+                hocr.get_textbloecke(&open_file.1.to_string(), seitentyp, &file.anpassungen_seite);
+
+            let textbloecke =
+                render_pdf_image_textbloecke(img_ui_width, img_ui_height, &hocr, &textbloecke);
+
+            (columns, textbloecke)
+        })
+        .unwrap_or((String::new(), String::new()));
+
+    let zeilen = file
+        .anpassungen_seite
+        .get(&format!("{}", open_file.1))
+        .map(|ap| {
+            ap.get_zeilen()
+                .iter()
+                .map(|(a, b)| (*a, *b))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
     let zeilen = render_pdf_image_zeilen(&zeilen, page_height, img_ui_height);
-    
+
+    let hocr_lines = render_pdf_image_hocr(img_ui_width, img_ui_height, &hocr);
+
+    let rote_linien = if rpc_data.konfiguration.vorschau_ohne_geroetet {
+        String::new()
+    } else {
+        render_pdf_rote_linien(img_ui_width, img_ui_height, &hocr)
+    };
+
     normalize_for_js(format!("
         <div style='padding:20px;user-select:none;-webkit-user-select:none;'>
             <div data-fileName='{file_name}' data-pageNumber='{page_number}' style='position:relative;user-select:none;-webkit-user-select:none;margin:0 auto;'>
                 
                 <img id='__application_page_img_inner' 
                 src='data:image/png;base64,{img_src}'
-                onmousedown='onOcrSelectionDragStart(event);'
-                onmousemove='onOcrSelectionDrag(event);' 
-                onmouseup='onOcrSelectionDragStop(event);' 
-                onmouseout='onOcrSelectionDragStop(event);' 
                 style='
+                    -webkit-user-drag: none;
+                    user-drag: none;
                     user-select:none;
                     width:1200px;
                     height:{img_ui_height}px;
@@ -3268,8 +3544,10 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                     cursor:crosshair;
                 ' />            
             
+                {rote_linien}
+
                 {spalten}
-                
+
                 <div id='__application_page_lines' style='
                     height:{img_ui_height}px;
                     position:absolute;
@@ -3285,7 +3563,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 onmouseover='zeilePreviewMove(event);'
                 onmousemove='zeilePreviewMove(event);'
                 onmouseup='zeileNeu(event);'>{zeilen}</div>
-                
+
                 <div id='__application_ocr_selection' style='
                     position:absolute;
                     width:1px;
@@ -3299,6 +3577,22 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                     pointer-events:none;
                 '></div>
                 
+                <div onmouseup='onOcrSelectionDragStart(event);'
+                    onmousemove='onOcrSelectionDrag(event);' 
+                    onmouseout='onOcrSelectionDragStop(event);' 
+                    
+                    style='
+                    position:absolute;
+                    top: 0px;
+                    user-select:none;
+                    -webkit-user-select:none;
+                    width:1200px;
+                    height:{img_ui_height}px;
+                    -webkit-user-select:none;
+                    cursor:crosshair;
+                ' >
+                </div>
+
             </div>
         </div>", 
             file_name = open_file.0,
@@ -3319,7 +3613,7 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
                 '  data-fileName='{file_name}' data-pageNumber='{page_number}'>
                     {zeilen}
                 </div>", 
-                    zeilen = zeilen, 
+                    zeilen = zeilen,
                     file_name = open_file.0,
                     page_number = open_file.1,
                 ),
@@ -3344,9 +3638,149 @@ pub fn render_pdf_image(rpc_data: &RpcData) -> String {
         ))
 }
 
-pub fn render_pdf_image_zeilen(zeilen: &[f32], page_height: f32, img_ui_height: f32) -> String {
-    
-    let mut z1 = zeilen.iter().enumerate().map(|(zeile_id, y)| format!("
+fn render_pdf_rote_linien(img_ui_width: f32, img_ui_height: f32, hocr: &HocrSeite) -> String {
+    use crate::digital::{Linie, Punkt};
+
+    let page_width_mm = hocr.breite_mm;
+    let page_height_mm = hocr.hoehe_mm;
+
+    let paths = hocr
+        .rote_linien
+        .iter()
+        .filter_map(|l| {
+            let startx = l.punkte.get(0)?.x / page_width_mm * img_ui_width;
+            let starty = l.punkte.get(0)?.y / page_height_mm * img_ui_height;
+            let punkte = l
+                .punkte
+                .iter()
+                .skip(1)
+                .map(|p| {
+                    format!(
+                        "L{},{}",
+                        p.x / page_width_mm * img_ui_width,
+                        p.y / page_height_mm * img_ui_height
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            Some(format!(
+                "<path stroke='#f00' stroke-width='3' d='M{startx},{starty} {punkte} Z'></path>"
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n");
+
+    format!(
+        "<div style='
+    -webkit-user-drag: none;
+    user-drag: none;
+    position:absolute;
+    top:0px;
+    user-select:none;
+    width:1200px;
+    height:{img_ui_height}px;
+    -webkit-user-select:none;
+    '>
+    <svg width='1200px' height='{img_ui_height}px'
+        {paths}
+    </svg>
+    </div>
+    "
+    )
+}
+
+fn render_pdf_image_hocr(img_ui_width: f32, img_ui_height: f32, hocr: &HocrSeite) -> String {
+    let all_words = hocr
+        .parsed
+        .careas
+        .iter()
+        .flat_map(|ca| {
+            ca.paragraphs
+                .iter()
+                .flat_map(|pa| pa.lines.iter().flat_map(|li| li.words.iter()))
+        })
+        .collect::<Vec<_>>();
+
+    let page_width_px = hocr.parsed.bounds.max_x;
+    let page_height_px = hocr.parsed.bounds.max_y;
+
+    all_words
+        .iter()
+        .map(|word| {
+            let width = (word.bounds.max_x - word.bounds.min_x) / page_width_px * img_ui_width;
+            let height = (word.bounds.max_y - word.bounds.min_y) / page_height_px * img_ui_height;
+            let x = word.bounds.min_x / page_width_px * img_ui_width;
+            let y = word.bounds.min_y / page_height_px * img_ui_height;
+
+            let title = normalize_for_js(word.text.clone());
+            format!(
+                "
+            <div style='
+                position:absolute;
+                width:{width}px;
+                height:{height}px;
+                opacity: 0.8;
+                background:none;
+                border: 0.5px solid green;
+                top: 0px;
+                transform-origin: top left;
+                left: 0px;
+                transform: translate({x}px, {y}px);
+                pointer-events:auto;
+            ' title = '{title}'></div>"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+fn render_pdf_image_textbloecke(
+    img_ui_width: f32,
+    img_ui_height: f32,
+    hocr: &HocrSeite,
+    textbloecke: &SeiteParsed,
+) -> String {
+    let page_width_mm = hocr.breite_mm;
+    let page_height_mm = hocr.hoehe_mm;
+
+    textbloecke
+        .texte
+        .iter()
+        .flat_map(|col| {
+            col.iter().map(|tb| {
+                let width = (tb.end_x - tb.start_x) / page_width_mm * img_ui_width;
+                let height = (tb.end_y - tb.start_y) / page_height_mm * img_ui_height;
+                let x = tb.start_x / page_width_mm * img_ui_width;
+                let y = tb.start_y / page_height_mm * img_ui_height;
+
+                let title = normalize_for_js(tb.text.clone());
+                format!(
+                    "
+            <div style='
+                position:absolute;
+                width:{width}px;
+                height:{height}px;
+                opacity: 0.8;
+                background:none;
+                top: 0px;
+                transform-origin: top left;
+                left: 0px;
+                transform: translate({x}px, {y}px);
+                pointer-events:auto;
+            ' title = '{title}'></div>"
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+pub fn render_pdf_image_zeilen(
+    zeilen: &[(u32, f32)],
+    page_height: f32,
+    img_ui_height: f32,
+) -> String {
+    let mut z1 = zeilen.iter().map(|(zeile_id, y)| format!("
         <div class='__application_zeile' id='__application_zeile_{id}' style='
             position:absolute;
             width:50px;
@@ -3363,8 +3797,7 @@ pub fn render_pdf_image_zeilen(zeilen: &[f32], page_height: f32, img_ui_height: 
     ", id = zeile_id, y = (y / page_height * img_ui_height) - 10.0))
     .collect::<Vec<_>>()
     .join("\r\n");
-    
-    
+
     z1.push_str("
         <div class='__application_zeile' id='__application_zeile_preview' style='
             position:absolute;
@@ -3382,11 +3815,13 @@ pub fn render_pdf_image_zeilen(zeilen: &[f32], page_height: f32, img_ui_height: 
             <div style='pointer-events:none;width:1195px;position:absolute;height:2px;background:blue;opacity:0.5;left:50px;top:9px;'></div>
         </div>
     ");
-    
+
     normalize_for_js(z1)
 }
 
 pub fn normalize_for_js(s: String) -> String {
-    s.lines().map(|s| s.trim()).collect::<Vec<_>>().join("")
+    s.lines()
+        .map(|s| s.trim().replace('`', "'"))
+        .collect::<Vec<_>>()
+        .join("")
 }
-

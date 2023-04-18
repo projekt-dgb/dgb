@@ -15,33 +15,52 @@ serde = "1"
 serde_derive = "1" 
 itertools = "0.7.7"
 lopdf = { version = "0.26.0", features = ["nom_parser"] }
-flate2 = "*"
 serde_json = "1"
 base64 = "0.13"
 regex = "1"
 lazy_static = "1"
-image = "0.23.14"
+image = { version = "0.23.14", features = ["pnm", "bmp"] }
 rayon = "1.5.1"
 kuchiki = "0.8.1"
 tinyfiledialogs = "3.8.3"
-chrono = { version = "0.4.19", features = ["serde"] }
+chrono = { version = "0.4.19", default-features = false, features = ["alloc", "std", "clock", "serde"] }
 toml = "0.5"
 dirs = "4.0"
 num_cpus = "1.0"
 printpdf = { version = "0.5.2", features = ["svg"] }
 qrcode = "0.12.0"
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"] }
-prettydiff = "0.6.1"
 sequoia-openpgp = { version = "1.8.0", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto", "compression"] }
 git2 = { version = "0.14.4", default-features = false }
 rand = "0.8.5"
 hyphenation = { version = "0.8.4", features = ["embed_all", "nfc"] }
 textwrap = { version = "0.15.0", features = ["smawk", "hyphenation"] }
 zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzip2", "zstd", "time"] }
+flate2 = "1.0.24"
+tar = "0.4.38"
+sha2 = "0.10.6"
+tesseract-static = "0.1.0"
+euclid = "0.22.9"
+hex = "0.4.3"
+url_open = "0.0.1"
+url = "2.3.1"
+html-escape = "0.2.13"
+gbx = "1.0.0"
+similar = "2.2.1"
 
-[dependencies.pyo3]
-version = "0.15.1"
-features = ["auto-initialize"]
+[dependencies.wasmer]
+git = "https://github.com/wasmerio/wasmer"
+rev = "05d74ea3fbabc0adcb0098d4896a623cc5a34ed5"
+
+[dependencies.wasmer_wasi]
+git = "https://github.com/wasmerio/wasmer"
+rev = "05d74ea3fbabc0adcb0098d4896a623cc5a34ed5"
+package = "wasmer-wasi"
+
+[dependencies.wasmer_vfs]
+git = "https://github.com/wasmerio/wasmer"
+rev = "05d74ea3fbabc0adcb0098d4896a623cc5a34ed5"
+package = "wasmer-vfs"
 
 [profile.release]
 opt-level = 3
@@ -57,7 +76,7 @@ strip = true
 
 [package.metadata.deb]
 maintainer = "Felix Schütt <Felix.Schuett@vlf-brandenburg.de>"
-depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), python3 (>=3.8.2), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
+depends = "$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"
 section = "utility"
 priority = "optional"
 assets = [
@@ -66,3 +85,18 @@ assets = [
     ["dgb.xpm", "usr/share/pixmaps/", "755"],
     ["README.md", "usr/local/share/doc/dgb/README", "644"],
 ]
+
+[package.metadata.bundle]
+name = "Digitales Grundbuch"
+identifier = "eu.grundbuch.dgb"
+# icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
+version = "1.0.0"
+resources = ["assets", "images/**/*.png", "secrets/public_key.txt"]
+copyright = "GPL-3.0 Felix Schütt 2022"
+category = "Developer Tool"
+short_description = "Digitales Grundbuch"
+long_description = """
+Anwendung zum Bearbeiten und Digitalisieren vom digitalen Grundbuch
+"""
+deb_depends = ["$auto, tesseract-ocr (>= 4.1.1), poppler-utils (>= 0.86.1), libpodofo-utils (>= 0.9.6), git (>= 2.25.1), qpdf (>= 9.1.1-1ubuntu0.1)"]
+osx_frameworks = []

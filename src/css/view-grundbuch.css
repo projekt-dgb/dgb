@@ -1,21 +1,29 @@
 #__application-main {
 	display: flex;
 	flex-grow: 1;
-	height:100%;
+	height: 100%;
 }
 
 #__application-main #__application-file-list {
-  max-width: 200px;
+  display: flex;
+  flex-grow:1;
+  flex-direction: column;
   min-width: 200px;
+  max-width: 200px;
   width: 200px;
-  display: block;
+  position: relative;
   background: #efefef;
   overflow-y: auto;
   box-shadow: 0px 0px 3px black;
-  height: 100%;
   user-select: none;
   -webkit-user-select: none;
-  max-height:1000px;
+}
+
+#__application-page-list-after {
+    width: calc(100vw - 360px);
+    display:flex;
+    flex-direction:column;
+    flex-grow:1;
 }
 
 img {
@@ -23,33 +31,84 @@ img {
     -webkit-user-select: none;
 }
 
-#__application-main #__application-file-list > div {
+#__application-ribbon {
+    flex-direction: column;
+    min-height: 120px;
+    height: 120px;
+}
+
+.__application-ribbon-header {
+    display: flex;
+}
+
+.__application-ribbon-header > p {
+    padding: 7px 12px;
+    color: rgb(48, 48, 48);
+    -webkit-user-select: none;
+    cursor: pointer;
+}
+
+.__application-ribbon-header > p:hover {
+    background: rgb(47, 79, 61);
+    color: white;
+}
+
+.__application-ribbon-header > p.active {
+    background: rgb(10, 67, 35);
+    color: white;
+}
+
+.__application-toggle-file-list {
+    position:absolute;
+    cursor: pointer;
+    user-select:none;
+    -webkit-user-select: none;
+    background: white;
+    border-radius: 3px 3px 0px 0px;
+    padding: 5px;
+    border: 1px solid rgb(193, 193, 193);
+    border-bottom: none;
+    transform: rotate(90deg) translateX(-20px);
+    transform-origin: 0px 25px;
+}
+
+.__application-toggle-file-list p {
+    cursor: pointer;
+    user-select:none;
+    -webkit-user-select: none;
+    font-size: 12px;
+}
+
+#__application-main #__application-file-list .__application-data-file-div {
   font-size: 12px;
   font-family: monospace;
   padding: 5px 10px;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  max-width: 200px;
+  overflow-x: hidden;
 }
 
-#__application-main #__application-file-list > div.active {
+#__application-main #__application-file-list .__application-data-file-div.active {
   background: antiquewhite;
 }
 
-#__application-main #__application-file-list > div:hover {
+#__application-main #__application-file-list .__application-data-file-div:hover {
   background: #ccc;
 }
 
-#__application-main #__application-file-list > div:active {
+#__application-main #__application-file-list .__application-data-file-div:active {
   background: #aaa;
 }
 
 #__application-main #__application-page-list {
-  width: 200px;
-  min-width: 200px;
-  max-width: 200px;
+  display: flex;
+  flex-direction: column;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
   max-height:1000px;
-  display: block;
   background: white;
   overflow-y: auto;
   user-select: none;
@@ -109,6 +168,7 @@ img {
 #__application-analyse-grundbuch {
     user-select: initial;
     -webkit-user-select: initial;
+    flex-direction: column;
 }
 
 #__application-main #__application-main-container:hover {
@@ -169,7 +229,8 @@ img {
   background: #444;
   display:flex;
   flex-grow:1;
-  overflow: scroll;
+  overflow-y: scroll;
+  overflow-x: hidden;
   max-height:400px;
   user-select: none;
   -webkit-user-select: none;
@@ -487,3 +548,19 @@ img {
     text-decoration: none;
 }
         
+.__application-view-script {
+    font-size: 10px;
+    color: black;
+    background: white;
+    border: 1px solid rgb(22, 99, 162);
+    outline:none;
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+.__application-view-script:hover {
+    background: rgb(22, 99, 162);
+    color: white;
+    border: 1px solid rgb(22, 52, 76);
+}

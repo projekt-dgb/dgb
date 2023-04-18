@@ -1,6 +1,9 @@
 
 "use strict";
 
+// INJECT_PDFJS_WORKER_SCRIPT
+// INJECT_PDFJS_SCRIPT
+
 let rpc = {
     
   invoke : function(arg) { window.ipc.postMessage(JSON.stringify(arg)); },
@@ -34,13 +37,18 @@ let rpc = {
   upload_gbx: function() { rpc.invoke({ cmd : 'upload_gbx' }); },
   download_gbx: function(download_id) { rpc.invoke({ cmd : 'download_gbx', download_id: download_id }); },
   grundbuch_abonnieren: function(download_id) { rpc.invoke({ cmd : 'grundbuch_abonnieren', download_id: download_id }); },
-  
+  open_script: function(lines) { rpc.invoke({ cmd : 'open_script', lines: lines }); },
+
   export_alle_rechte: function() { rpc.invoke({ cmd : 'export_alle_rechte' }); },
   export_alle_fehler: function() { rpc.invoke({ cmd : 'export_alle_fehler' }); },
   export_alle_abt1: function() { rpc.invoke({ cmd : 'export_alle_abt1' }); },
   export_alle_teilbelastungen: function() { rpc.invoke({ cmd : 'export_alle_teilbelastungen' }); },
+  export_alle_hvm: function() { rpc.invoke({ cmd : 'export_alle_hvm' }); },
+
   check_pdf_image_sichtbar: function() { rpc.invoke({ cmd : 'check_pdf_image_sichtbar' }); },
   toggle_lefis_analyse: function() { rpc.invoke({ cmd : 'toggle_lefis_analyse' }); },
+  toggle_dateiliste: function(arg) { rpc.invoke({ cmd : 'toggle_dateiliste', toggle: arg }) },
+  select_tab: function(arg) { rpc.invoke({ cmd: 'select_tab', tab: arg }) },
   check_pdf_for_errors: function() { rpc.invoke({ cmd : 'check_pdf_for_errors' }); },
 
   open_grundbuch_suchen_dialog: function()  { rpc.invoke({ cmd : 'open_grundbuch_suchen_dialog' }); },
@@ -56,7 +64,8 @@ let rpc = {
   open_configuration: function() { rpc.invoke({ cmd : 'open_configuration' }); },
   set_configuration_view: function(section_id) { rpc.invoke({ cmd : 'set_configuration_view', section_id: section_id }); },
   save_state: function() { rpc.invoke({ cmd : 'save_state' }); },
-  
+  check_for_grundbuch_loaded: function() { rpc.invoke({ cmd : 'check_for_grundbuch_loaded' }); },
+
   reset_ocr_selection: function() { rpc.invoke({ cmd : 'reset_ocr_selection' }); },
   select_ocr: function(file_name, page, min_x, min_y, max_x, max_y, page_width, page_height) { rpc.invoke({ 
       cmd : 'select_ocr', 
@@ -71,7 +80,7 @@ let rpc = {
     });
   },
 
-  check_for_pdf_loaded: function(arg, arg2) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2 }); },
+  check_for_pdf_loaded: function(arg, arg2, arg3, reload_hocr) { rpc.invoke({ cmd : 'check_for_pdf_loaded', file_path: arg, file_name: arg2, pdf_path: arg3, reload_hocr: reload_hocr }); },
   edit_text: function(arg, arg2) { rpc.invoke({ cmd : 'edit_text', path: arg, new_value: arg2 }); },
   eintrag_neu: function(arg) { rpc.invoke({ cmd : 'eintrag_neu', path: arg }); },
   eintrag_loeschen: function(arg) { rpc.invoke({ cmd : 'eintrag_loeschen', path: arg }); },
@@ -122,6 +131,24 @@ let rpc = {
   set_active_ribbon_tab: function(arg) { rpc.invoke({ cmd : 'set_active_ribbon_tab', new_tab: arg }); },
   set_open_file: function(arg) { rpc.invoke({ cmd : 'set_open_file', new_file: arg }); },
   set_open_page: function(arg) { rpc.invoke({ cmd : 'set_open_page', active_page: arg }); },
+  signal_pdf_page_rendered: function(
+    pdf_amtsgericht, 
+    pdf_grundbuch_von,
+    pdf_blatt,
+    seite,
+    image_data_base64,
+    render_hocr,
+    ) { 
+        rpc.invoke({ 
+        cmd : 'signal_pdf_page_rendered', 
+        pdf_amtsgericht: pdf_amtsgericht,
+        pdf_grundbuch_von: pdf_grundbuch_von,
+        pdf_blatt: pdf_blatt,
+        seite: seite, 
+        image_data_base64: image_data_base64, 
+        render_hocr: render_hocr,
+        }); 
+    },
 };
 
 let tab_functions = {
@@ -138,6 +165,7 @@ let tab_functions = {
     export_alle_fehler: function(event) { rpc.export_alle_fehler() },
     export_alle_teilbelastungen: function(event) { rpc.export_alle_teilbelastungen() },
     export_alle_abt1: function(event) { rpc.export_alle_abt1() },
+    export_alle_hvm: function(event) { rpc.export_alle_hvm() },
     export_lefis: function(event) { rpc.export_lefis() },
     export_pdf: function(event) { rpc.export_pdf() },
     open_configuration: function(event) { rpc.open_configuration() },
@@ -150,12 +178,21 @@ let files_to_check = {};
 
 setInterval(function(){
     for (const [key, value] of Object.entries(files_to_check)) {
-        rpc.check_for_pdf_loaded(key, value);
+        rpc.check_for_pdf_loaded(key, value.filename, value.pdf_file_name, value.reload_hocr);
     }
 }, 1000);
 
-function startCheckingForPageLoaded(filepath, filename) {
-    files_to_check[filepath] = filename;
+
+setInterval(function(){
+    rpc.check_for_grundbuch_loaded();
+}, 2594);
+
+function startCheckingForPageLoaded(filepath, filename, pdf_file_name, reload_hocr) {
+    files_to_check[filepath] = {
+        filename: filename, 
+        pdf_file_name: pdf_file_name, 
+        reload_hocr: reload_hocr
+    };
 }
 
 function stopCheckingForPageLoaded(filename) {
@@ -169,6 +206,54 @@ setInterval(function(){
         rpc.check_pdf_image_sichtbar();
     }
 }, 100);
+
+// Renders a PDF page to an image using PdfJS, calls signal_pdf_page_rendered on finish
+async function renderPdfPage(
+    pdf_base64,
+    pdf_amtsgericht, 
+    pdf_grundbuch_von,
+    pdf_blatt,
+    seite,
+    skip_hocr,
+) {
+  
+  var pdf_bytes = atob(pdf_base64);
+  var loadingTask = pdfjsLib.getDocument({data: pdf_bytes});
+
+  await loadingTask.promise.then(function(pdf) {
+
+    var firstpage = pdf.getPage(seite);
+
+    firstpage.then(function(firstpage) {
+        var viewport = firstpage.getViewport(10);
+        var canvasorig = document.createElement('canvas');
+        var resolution = 2;
+        canvasorig.width = viewport.viewBox[2] * 2;
+        canvasorig.height = viewport.viewBox[3] * 2;
+        var offctx = canvasorig.getContext('2d');
+        var rendertask = firstpage.render({
+            canvasContext: offctx,
+            viewport: viewport,
+            transform: [resolution, 0, 0, resolution, 0, 0]
+        });
+        rendertask.promise.then(function() {
+            var dataURL = canvasorig.toDataURL("image/png");
+            rpc.signal_pdf_page_rendered(
+                pdf_amtsgericht, 
+                pdf_grundbuch_von,
+                pdf_blatt,
+                seite,
+                dataURL,
+                skip_hocr,
+            )
+        });
+    });
+  });
+}
+
+function openScript(script) {
+    rpc.open_script(script.split('⠀'));
+}
 
 function editCommitTitle(event) {
     rpc.edit_commit_title(event.target.value);
@@ -193,6 +278,10 @@ function switchAenderungView(i) {
     rpc.switch_aenderung_view(i);
 }
 
+function selectTab(i) {
+    rpc.select_tab(i);
+}
+
 function stopCheckingForImageLoaded(filename) {
     if (images_to_load.hasOwnProperty(filename)) {
         delete images_to_load[filename];
@@ -202,7 +291,11 @@ function stopCheckingForImageLoaded(filename) {
 let ocr_selection_rect = null;
 
 function onOcrSelectionDragStart(event) {
-        
+    
+    if (ocr_selection_rect) {
+        return onOcrSelectionDragStop(event);
+    }
+
     let selection_rect = document.getElementById("__application_ocr_selection");
     if (!selection_rect)
         return;
@@ -243,7 +336,10 @@ function onOcrSelectionDragStart(event) {
 }
 
 function onOcrSelectionDrag(event) {
-        
+    
+    if (!ocr_selection_rect)
+        return;
+
     let selection_rect = document.getElementById("__application_ocr_selection");
     if (!selection_rect)
         return;
@@ -615,7 +711,6 @@ function closePopOver(s) {
 function activateSelectedFile(event) {
     var file = event.target.getAttribute("data-fileName");
     if (!file) {
-        console.log(event.target);
         return;
     }
     rpc.set_open_file(file);
@@ -1260,6 +1355,19 @@ function toggleCheckbox(event) {
     rpc.toggle_checkbox(checkbox_id);
 }
 
+function toggleDateiliste(n) {
+    if (n) {
+        document.getElementById("__application-file-list").style.minWidth = "0px";
+        document.getElementById("__application-file-list").style.maxWidth = "0px";
+        document.getElementById("__application-file-list").style.width = "0px";
+    } else {
+        document.getElementById("__application-file-list").style.minWidth = "200px";
+        document.getElementById("__application-file-list").style.maxWidth = "200px";
+        document.getElementById("__application-file-list").style.width = "200px";
+    }
+    rpc.toggle_dateiliste(n);
+}
+
 function reloadGrundbuch(event) {
     rpc.reload_grundbuch();
 }
@@ -1270,7 +1378,9 @@ function zeileNeu(event) {
         return;
     }
     
-    if (event.which !== 1) {
+    var event_ok = event.which === 1 && !event.metaKey;
+    
+    if (!event_ok) {
         return;
     }
     
@@ -1302,7 +1412,8 @@ function zeileLoeschen(event) {
     
     event.stopPropagation();
     
-    if (event.which !== 3) {
+    let event_ok = event.which === 3 || event.which === 2 || event.metaKey;
+    if (!event_ok) {
         return;
     }
     
@@ -1428,7 +1539,7 @@ function grundbuchAnlegen(event) {
     if (!blatt)
         return;
     
-    rpc.grundbuch_anlegen(land.value, grundbuch_von.value, amtsgericht.value, parseInt(blatt.value));
+    rpc.grundbuch_anlegen(land.value, grundbuch_von.value, amtsgericht.value, blatt.value);
     
     return false;
 }
