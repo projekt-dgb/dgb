@@ -4569,8 +4569,7 @@ dependencies = [
 [[package]]
 name = "tesseract-static"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae24c396e79ea3f3ad74b1a80500cc8eca4e9758aaca08b3509a6554d87685a1"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=c07ef9b41739b02aaa57a0755dd19b5a5cc0c861#c07ef9b41739b02aaa57a0755dd19b5a5cc0c861"
 dependencies = [
  "cmake",
  "flate2",

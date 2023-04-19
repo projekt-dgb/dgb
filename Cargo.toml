@@ -39,7 +39,6 @@ zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzi
 flate2 = "1.0.24"
 tar = "0.4.38"
 sha2 = "0.10.6"
-tesseract-static = "0.1.0"
 euclid = "0.22.9"
 hex = "0.4.3"
 url_open = "0.0.1"
@@ -47,6 +46,10 @@ url = "2.3.1"
 html-escape = "0.2.13"
 gbx = "1.0.1"
 similar = "2.2.1"
+
+[dependencies.tesseract-static]
+git = "https://github.com/fschutt/tesseract-static-rs"
+rev = "c07ef9b41739b02aaa57a0755dd19b5a5cc0c861"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"
