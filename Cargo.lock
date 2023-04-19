@@ -4569,7 +4569,7 @@ dependencies = [
 [[package]]
 name = "tesseract-static"
 version = "0.1.0"
-source = "git+https://github.com/fschutt/tesseract-static-rs?rev=c07ef9b41739b02aaa57a0755dd19b5a5cc0c861#c07ef9b41739b02aaa57a0755dd19b5a5cc0c861"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=3b94b144d66be833b021bf3db1439030f3ec829d#3b94b144d66be833b021bf3db1439030f3ec829d"
 dependencies = [
  "cmake",
  "flate2",

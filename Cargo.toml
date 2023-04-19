@@ -49,7 +49,7 @@ similar = "2.2.1"
 
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
-rev = "c07ef9b41739b02aaa57a0755dd19b5a5cc0c861"
+rev = "3b94b144d66be833b021bf3db1439030f3ec829d"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"
