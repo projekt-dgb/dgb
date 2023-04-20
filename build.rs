@@ -157,8 +157,6 @@ const RIBBON_CSS: &'static str = r#"
 
 fn main() {
 
-    println!("cargo:rustc-link-lib=static:-bundle=c++"); // link libstdc++ for tesseract
-
     let mut main_css = include_str!("src/css/webkit-normalize.css").to_string();
     main_css.push_str(BODY_CSS);
     main_css.push_str(RIBBON_CSS);
