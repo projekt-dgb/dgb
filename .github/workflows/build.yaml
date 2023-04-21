@@ -76,6 +76,7 @@ jobs:
           cargo wix
       - name: Bundle Linux
         if: matrix.build == 'linux-x64'
+        shell: bash
         run: |
           sudo apt install pkg-config libgtk-3-dev libssl-dev cmake libsoup2.4-dev libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev libayatana-appindicator3-dev
           sudo apt-get update -y
@@ -83,6 +84,7 @@ jobs:
           sudo apt-get install --reinstall g++ gcc
           sudo apt-get update -y
           cargo install cargo-deb
+          export CC=g++
           cargo deb
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
