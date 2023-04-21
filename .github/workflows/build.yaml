@@ -74,15 +74,6 @@ jobs:
         run: |
           cargo install cargo-wix
           cargo build --release
-      - name: Run UPX
-        if: matrix.build == 'windows-x64'
-        uses: crazy-max/ghaction-upx@v2
-        with:
-          version: latest
-          files: |
-            target/release/dgb.exe
-          args: --best
-          strip: true
       - name: cargo wix
         if: matrix.build == 'windows-x64'
         run: cargo wix --no-build

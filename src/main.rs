@@ -6855,8 +6855,6 @@ fn main() -> wry::Result<()> {
         })
         .build()?;
 
-    webview.focus();
-
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -6872,12 +6870,6 @@ fn main() -> wry::Result<()> {
                 if let Ok(original_value) = original_value.as_ref() {
                     env::set_var(GTK_OVERLAY_SCROLLING, original_value);
                 }
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(_),
-                ..
-            } => {
-                let _ = webview.resize();
             }
             Event::UserEvent(cmd) => {
                 webview_cb(&webview, &cmd, &mut userdata);

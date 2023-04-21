@@ -742,7 +742,7 @@ pub(crate) fn read_png_and_convert_to_bmp(path: &Path) -> Option<Vec<u8>> {
 
     let mut grayscale_bytes = fs::read(path).ok()?;
     let mut c = Cursor::new(&mut grayscale_bytes);
-    let grayscale = image::png::PngDecoder::new(&mut c).ok()?;
+    let grayscale = image::codecs::png::PngDecoder::new(&mut c).ok()?;
     let grayscale = image::DynamicImage::from_decoder(grayscale).ok()?;
     let mut pnm_bytes: Vec<u8> = Vec::new();
     let _ = grayscale.write_to(

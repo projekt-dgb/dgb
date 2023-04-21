@@ -9,20 +9,19 @@ build = "build.rs"
 readme = "README.md"
 
 [dependencies]
-wry = { version = "0.16.2", features = ["devtools"] }
-urlencoding = "1.0.0"
+urlencoding = "2.1.2"
 serde = "1" 
 serde_derive = "1" 
-itertools = "0.7.7"
+itertools = "0.10.5"
 lopdf = { version = "0.26.0", features = ["nom_parser"] }
 serde_json = "1"
-base64 = "0.13"
+base64 = "0.21.0"
 regex = "1"
 lazy_static = "1"
-image = { version = "0.23.14", features = ["pnm", "bmp"] }
-rayon = "1.5.1"
+image = { version = "0.24.6", features = ["pnm", "bmp"] }
+rayon = "1.7.0"
 kuchiki = "0.8.1"
-tinyfiledialogs = "3.8.3"
+tinyfiledialogs = "3.9.1"
 chrono = { version = "0.4.19", default-features = false, features = ["alloc", "std", "clock", "serde"] }
 toml = "0.5"
 dirs = "4.0"
@@ -46,6 +45,7 @@ url = "2.3.1"
 html-escape = "0.2.13"
 gbx = "1.0.1"
 similar = "2.2.1"
+wry = "0.22.0"
 
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
