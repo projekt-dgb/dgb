@@ -45,7 +45,7 @@ url = "2.3.1"
 html-escape = "0.2.13"
 gbx = "1.0.1"
 similar = "2.2.1"
-wry = "0.28.0"
+wry = { git = "https://github.com/fschutt/wry", branch = "wrydebug" }
 
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
