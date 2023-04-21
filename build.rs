@@ -185,14 +185,10 @@ fn find_lib(target_filenames: &[&str]) -> std::path::PathBuf {
 }
 
 fn main() {
-    let tesseract = find_lib(&["libtesseract.a", "tesseract53.lib"]);
-    let leptonica = find_lib(&["libleptonica.a", "leptonica-1.84.0.lib"]);
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        println!("cargo:rustc-link-arg={}", tesseract.display());
-        println!("cargo:rustc-link-arg={}", leptonica.display());
-    }
+    let (leptonica_lib, _leptonica_includes) = tesseract_static::compile_leptonica(&tesseract_static::download_leptonica());
+    let (tesseract_lib, _tesseract_includes) = tesseract_static::compile_tesseract(&tesseract_static::download_tesseract());
+    tesseract_static::print_cargo_link_includes(&leptonica_lib, &tesseract_lib);
 
     let mut main_css = include_str!("src/css/webkit-normalize.css").to_string();
     main_css.push_str(BODY_CSS);

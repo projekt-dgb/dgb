@@ -52,7 +52,11 @@ walkdir = "2.3.3"
 
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
-rev = "1cd200d54c83ed42f3d7def990f8c3c80927a4ac"
+rev = "81d31ae062992dc260c1e4e53dd5bbac73b0565b"
+
+[build-dependencies.tesseract-static]
+git = "https://github.com/fschutt/tesseract-static-rs"
+rev = "81d31ae062992dc260c1e4e53dd5bbac73b0565b"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"
