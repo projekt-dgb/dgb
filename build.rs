@@ -155,7 +155,44 @@ const RIBBON_CSS: &'static str = r#"
     }
 "#;
 
+// leptonica + tesseract have to be linked from the top-level crate
+// via rustc-link-args (rustc-link-args are not transitive for dependencies)
+fn find_lib(target_filenames: &[&str]) -> std::path::PathBuf {
+    use walkdir::WalkDir;
+
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let out_dir = std::path::Path::new(&out_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+
+    for entry in WalkDir::new(&out_dir) {
+        let path = entry.unwrap();
+        let path = path.path();
+        for t in target_filenames.iter() {
+            if path.file_name().and_then(|s| s.to_str()) == Some(t) {
+                return path.to_path_buf();
+            }
+        }
+    }
+
+    panic!(
+        "library {:?} not found in {}",
+        target_filenames,
+        out_dir.display()
+    )
+}
+
 fn main() {
+    let tesseract = find_lib(&["libtesseract.a", "tesseract53.lib"]);
+    let leptonica = find_lib(&["libleptonica.a", "leptonica-1.84.0.lib"]);
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        println!("cargo:rustc-link-arg={}", tesseract.display());
+        println!("cargo:rustc-link-arg={}", leptonica.display());
+    }
 
     let mut main_css = include_str!("src/css/webkit-normalize.css").to_string();
     main_css.push_str(BODY_CSS);

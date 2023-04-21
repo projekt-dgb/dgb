@@ -1090,6 +1090,7 @@ dependencies = [
  "url",
  "url_open",
  "urlencoding",
+ "walkdir",
  "wasmer",
  "wasmer-vfs",
  "wasmer-wasi",
@@ -4558,12 +4559,13 @@ dependencies = [
 [[package]]
 name = "tesseract-static"
 version = "0.1.0"
-source = "git+https://github.com/fschutt/tesseract-static-rs?rev=b356725fa7dfaf9c71c1bc3385a3240e6ac29a82#b356725fa7dfaf9c71c1bc3385a3240e6ac29a82"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=1cd200d54c83ed42f3d7def990f8c3c80927a4ac#1cd200d54c83ed42f3d7def990f8c3c80927a4ac"
 dependencies = [
  "cmake",
  "flate2",
  "fs_extra",
  "libc",
+ "link-cplusplus",
  "rayon",
  "reqwest",
  "tar",

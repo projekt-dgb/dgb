@@ -47,6 +47,9 @@ html-escape = "0.2.13"
 gbx = "1.0.1"
 similar = "2.2.1"
 
+[build-dependencies]
+walkdir = "2.3.3"
+
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
 rev = "1cd200d54c83ed42f3d7def990f8c3c80927a4ac"
