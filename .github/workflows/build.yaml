@@ -72,8 +72,7 @@ jobs:
         if: matrix.build == 'windows-x64'
         shell: bash
         run: |
-          cargo install cargo-wix
-          cargo wix --nocapture
+          cargo build --release
       - name: Bundle Linux
         if: matrix.build == 'linux-x64'
         run: |
