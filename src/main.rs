@@ -6838,11 +6838,10 @@ fn main() -> wry::Result<()> {
     let proxy = event_loop.create_proxy();
     let window = WindowBuilder::new()
         .with_title(APP_TITLE)
-        .with_maximized(true)
         .build(&event_loop)?;
 
     let webview = WebViewBuilder::new(window)?
-        .with_html(app_html)?
+        .with_html("<html><body><p>hello</p></body></html>")?
         .with_devtools(false)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
@@ -6853,6 +6852,10 @@ fn main() -> wry::Result<()> {
                 println!("{e}");
             }
         })
+        .with_clipboard(true)
+        .with_hotkeys_zoom(false)
+        .with_back_forward_navigation_gestures(false)
+        .with_incognito(true)
         .build()?;
 
     event_loop.run(move |event, _, control_flow| {
