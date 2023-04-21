@@ -91,14 +91,15 @@ jobs:
         shell: bash
         run: |
           sudo apt install pkg-config libgtk-3-dev libssl-dev cmake libsoup2.4-dev libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev libayatana-appindicator3-dev
-          sudo apt install --reinstall g++ gcc
+          sudo apt --purge remove gcc
           sudo apt install -y libstdc++6
           sudo apt update -y
           sudo apt upgrade
-          export CC=gcc
-          echo "GCC VERSION"
-          which gcc
-          gcc --version
+          sudo apt install -y clang-14
+          export CC=clang
+          echo "CLANG VERSION"
+          which clang
+          clang --version
           cargo install cargo-deb
           cargo deb
       - name: Bundle Mac
