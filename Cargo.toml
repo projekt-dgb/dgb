@@ -47,16 +47,13 @@ html-escape = "0.2.13"
 gbx = "1.0.1"
 similar = "2.2.1"
 
-[build-dependencies]
-walkdir = "2.3.3"
-
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
-rev = "81d31ae062992dc260c1e4e53dd5bbac73b0565b"
+rev = "4af219bfa142cd710408cd0411b96a83c680e319"
 
-[build-dependencies.tesseract-static]
+[build-dependencies.tesseract-static-build]
 git = "https://github.com/fschutt/tesseract-static-rs"
-rev = "81d31ae062992dc260c1e4e53dd5bbac73b0565b"
+rev = "4af219bfa142cd710408cd0411b96a83c680e319"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"

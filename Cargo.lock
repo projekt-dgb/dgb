@@ -1084,13 +1084,13 @@ dependencies = [
  "similar",
  "tar",
  "tesseract-static",
+ "tesseract-static-build",
  "textwrap",
  "tinyfiledialogs",
  "toml 0.5.11",
  "url",
  "url_open",
  "urlencoding",
- "walkdir",
  "wasmer",
  "wasmer-vfs",
  "wasmer-wasi",
@@ -4559,17 +4559,24 @@ dependencies = [
 [[package]]
 name = "tesseract-static"
 version = "0.1.0"
-source = "git+https://github.com/fschutt/tesseract-static-rs?rev=81d31ae062992dc260c1e4e53dd5bbac73b0565b#81d31ae062992dc260c1e4e53dd5bbac73b0565b"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=4af219bfa142cd710408cd0411b96a83c680e319#4af219bfa142cd710408cd0411b96a83c680e319"
+dependencies = [
+ "libc",
+ "link-cplusplus",
+ "rayon",
+ "thiserror",
+]
+
+[[package]]
+name = "tesseract-static-build"
+version = "0.1.0"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=4af219bfa142cd710408cd0411b96a83c680e319#4af219bfa142cd710408cd0411b96a83c680e319"
 dependencies = [
  "cmake",
  "flate2",
  "fs_extra",
- "libc",
- "link-cplusplus",
- "rayon",
  "reqwest",
  "tar",
- "thiserror",
 ]
 
 [[package]]

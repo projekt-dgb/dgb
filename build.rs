@@ -155,40 +155,12 @@ const RIBBON_CSS: &'static str = r#"
     }
 "#;
 
-// leptonica + tesseract have to be linked from the top-level crate
-// via rustc-link-args (rustc-link-args are not transitive for dependencies)
-fn find_lib(target_filenames: &[&str]) -> std::path::PathBuf {
-    use walkdir::WalkDir;
-
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    let out_dir = std::path::Path::new(&out_dir)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-
-    for entry in WalkDir::new(&out_dir) {
-        let path = entry.unwrap();
-        let path = path.path();
-        for t in target_filenames.iter() {
-            if path.file_name().and_then(|s| s.to_str()) == Some(t) {
-                return path.to_path_buf();
-            }
-        }
-    }
-
-    panic!(
-        "library {:?} not found in {}",
-        target_filenames,
-        out_dir.display()
-    )
-}
-
 fn main() {
-
-    let (leptonica_lib, _leptonica_includes) = tesseract_static::compile_leptonica(&tesseract_static::download_leptonica());
-    let (tesseract_lib, _tesseract_includes) = tesseract_static::compile_tesseract(&tesseract_static::download_tesseract());
-    tesseract_static::print_cargo_link_includes(&leptonica_lib, &tesseract_lib);
+    let (leptonica_lib, _leptonica_includes) =
+        tesseract_static_build::compile_leptonica(&tesseract_static_build::download_leptonica());
+    let (tesseract_lib, _tesseract_includes) =
+        tesseract_static_build::compile_tesseract(&tesseract_static_build::download_tesseract());
+    tesseract_static_build::print_cargo_link_includes(&leptonica_lib, &tesseract_lib);
 
     let mut main_css = include_str!("src/css/webkit-normalize.css").to_string();
     main_css.push_str(BODY_CSS);
