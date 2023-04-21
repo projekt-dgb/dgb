@@ -5957,7 +5957,7 @@ dependencies = [
 [[package]]
 name = "wry"
 version = "0.28.0"
-source = "git+https://github.com/fschutt/wry?branch=wrydebug#4e2b43a038aeb6fef14bcac0f2098d5c488b76e5"
+source = "git+https://github.com/fschutt/wry?rev=fcb9dbded8234bba35f33d97d7d8b5f47c6c6c40#fcb9dbded8234bba35f33d97d7d8b5f47c6c6c40"
 dependencies = [
  "base64 0.13.1",
  "block",
