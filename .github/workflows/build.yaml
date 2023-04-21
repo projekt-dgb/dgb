@@ -72,7 +72,7 @@ jobs:
         if: matrix.build == 'windows-x64'
         shell: bash
         run: |
-          cargo build --release
+          cargo build --release --verbose
       - name: Bundle Linux
         if: matrix.build == 'linux-x64'
         run: |
