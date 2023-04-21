@@ -84,7 +84,7 @@ jobs:
           sudo apt-get install --reinstall g++ gcc
           sudo apt-get update -y
           cargo install cargo-deb
-          export CC=g++
+          export CC=gcc
           cargo deb
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
