@@ -59,7 +59,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.67
+          toolchain: 1.69
       - uses: actions/cache@v2
         with:
           path: |
@@ -93,10 +93,14 @@ jobs:
           sudo apt remove --purge gcc g++
           sudo apt update
           export CC=/usr/bin/clang
+          export HOST_CC=/usr/bin/clang
           export CPP=/usr/bin/clang++
           echo "CLANG VERSION"
           which clang
-          clang --version
+          clang -v
+          rustc -vV
+          cargo -vV
+          echo "ENDPRINT"
           cargo build --release --vv
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
