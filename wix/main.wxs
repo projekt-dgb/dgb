@@ -104,6 +104,8 @@
                             KeyPath='yes'/>
                     </Component>
                     
+                    <util:PermissionEx User="Everyone" GenericAll="yes" />
+
                     <Directory Id='Bin' Name='bin'>
                         <Component Id='Path' Guid='D1F6F5ED-A195-4577-BC5A-B5F4C9C22A2F' KeyPath='yes'>
                             <Environment
