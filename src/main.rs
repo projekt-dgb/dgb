@@ -6825,14 +6825,35 @@ fn main() -> wry::Result<()> {
     let _ = Konfiguration::neu_laden();
 
     let mut userdata = RpcData::default();
-
     let initial_screen = ui::render_entire_screen(&mut userdata);
 
-    let resizable = true;
-    let debug = false;
-    let app_html = include_str!("app.html")
-        .to_string()
-        .replace("<!-- REPLACED_ON_STARTUP -->", &initial_screen);
+    let main_css = concat!(
+        include_str!("css/webkit-normalize.css"),
+        include_str!("css/view-grundbuch.css")
+    );
+
+    let main_script = include_str!("view.js")
+        .replace(
+            "// INJECT_PDFJS_WORKER_SCRIPT",
+            include_str!("../bin/pdfjs-3.0.279-legacy-dist/build/pdf.worker.js"),
+        )
+        .replace(
+            "// INJECT_PDFJS_SCRIPT",
+            include_str!("../bin/pdfjs-3.0.279-legacy-dist/build/pdf.js"),
+        );
+
+    let main_html = format!(
+        "
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset=\"utf-8\" />
+                <style type=\"text/css\">{main_css}</style>
+            </head>
+            <body>{initial_screen}</body>
+        </html>
+        "
+    );
 
     let event_loop = EventLoop::with_user_event();
     let proxy = event_loop.create_proxy();
@@ -6841,7 +6862,7 @@ fn main() -> wry::Result<()> {
         .build(&event_loop)?;
 
     let webview = WebViewBuilder::new(window)?
-        .with_html("<html><body><p>hello</p></body></html>")?
+        .with_html(main_html)?
         .with_devtools(false)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
@@ -6856,6 +6877,7 @@ fn main() -> wry::Result<()> {
         .with_hotkeys_zoom(false)
         .with_back_forward_navigation_gestures(false)
         .with_incognito(true)
+        .with_initialization_script(&main_script)
         .build()?;
 
     event_loop.run(move |event, _, control_flow| {
