@@ -71,7 +71,7 @@ package = "wasmer-vfs"
 
 [profile.release]
 opt-level = 3
-lto = true
+lto = false
 panic = "abort"
 codegen-units = 1
 debug = false
