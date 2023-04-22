@@ -85,14 +85,18 @@ jobs:
         shell: bash
         run: |
           sudo apt install pkg-config libgtk-3-dev libssl-dev clang cmake libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libayatana-appindicator3-dev
-          sudo apt install -y --allow-downgrades libstdc++6
           sudo update-alternatives --set cc /usr/bin/clang
           sudo update-alternatives --set c++ /usr/bin/clang++
           sudo update-alternatives --config clang
           sudo update-alternatives --config clang++
           sudo apt remove --purge gcc g++
-          sudo apt update
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install -y gcc-4.9
+          sudo apt install -y libstdc++6
           sudo apt upgrade
+          sudo apt dist-upgrade
+          export LD_LIBRARY_PATH=/usr/local/lib64:$LD_LIBRARY_PATH
           export CC=/usr/bin/clang
           export HOST_CC=/usr/bin/clang
           export CXX=/usr/bin/clang++
