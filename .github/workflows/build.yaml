@@ -104,6 +104,17 @@ jobs:
           rustc -vV
           cargo -vV
           echo "ENDPRINT"
+          strings `which clang` | grep GLIBC
+          echo "END2"
+          echo "LDD VERSION"
+          ldd --version
+          echo "APT"
+          sudo apt-cache policy libc6
+          echo "UPDATE"
+          sudo apt-get install libc6
+          echo "NOW"
+          ldd --version
+          echo "END4"
           cargo build --release -vv
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
