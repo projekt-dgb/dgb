@@ -92,6 +92,8 @@ jobs:
           sudo update-alternatives --config clang++
           sudo apt remove --purge gcc g++
           sudo apt update
+          sudo rm -rf /usr/lib/gcc/x86_64-linux-gnu
+          sudo apt upgrade
           export CC=/usr/bin/clang
           export HOST_CC=/usr/bin/clang
           export CPP=/usr/bin/clang++
@@ -101,7 +103,7 @@ jobs:
           rustc -vV
           cargo -vV
           echo "ENDPRINT"
-          cargo build --release --vv
+          cargo build --release -vv
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
         shell: bash
