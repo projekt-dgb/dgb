@@ -97,7 +97,7 @@ jobs:
           echo "CLANG VERSION"
           which clang
           clang --version
-          cargo build --release
+          cargo build --release --vv
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
         shell: bash
