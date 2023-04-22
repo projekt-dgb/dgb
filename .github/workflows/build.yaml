@@ -90,8 +90,6 @@ jobs:
           sudo update-alternatives --set c++ /usr/bin/clang++
           sudo update-alternatives --config clang
           sudo update-alternatives --config clang++
-          sudo update-alternatives --remove-all gcc 
-          sudo update-alternatives --remove-all g++
           sudo apt remove --purge gcc g++
           sudo apt update
           export CC=/usr/bin/clang
