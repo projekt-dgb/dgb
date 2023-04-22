@@ -88,10 +88,10 @@ jobs:
           sudo apt remove --purge gcc g++
           sudo apt update
           sudo apt install -y --allow-downgrades libstdc++6
-          sudo update-alternatives --remove-all gcc 
-          sudo update-alternatives --remove-all g++
           sudo update-alternatives --set cc /usr/bin/clang
           sudo update-alternatives --set c++ /usr/bin/clang++
+          sudo update-alternatives --remove-all gcc 
+          sudo update-alternatives --remove-all g++
           sudo update-alternatives --config clang
           sudo update-alternatives --config clang++
           export CC=/usr/bin/clang
