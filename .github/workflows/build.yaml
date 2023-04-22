@@ -95,7 +95,7 @@ jobs:
           sudo apt upgrade
           export CC=/usr/bin/clang
           export HOST_CC=/usr/bin/clang
-          export CPP=/usr/bin/clang++
+          export CXX=/usr/bin/clang++
           echo "CLANG VERSION"
           which clang
           clang -v
