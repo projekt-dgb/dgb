@@ -57,7 +57,7 @@
     <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
 <?endif ?>
 
-<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi' xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
     <Product
         Id='*'
@@ -103,9 +103,6 @@
                             Source='wix/License.rtf'
                             KeyPath='yes'/>
                     </Component>
-                    
-                    <util:PermissionEx User="Everyone" GenericAll="yes" />
-
                     <Directory Id='Bin' Name='bin'>
                         <Component Id='Path' Guid='D1F6F5ED-A195-4577-BC5A-B5F4C9C22A2F' KeyPath='yes'>
                             <Environment
@@ -118,12 +115,16 @@
                                 System='yes'/>
                         </Component>
                         <Component Id='binary0' Guid='*'>
+                        <CreateFolder>
+                            <util:PermissionEx User="Users" GenericAll="yes" />
                             <File
                                 Id='exe0'
                                 Name='dgb.exe'
                                 DiskId='1'
                                 Source='$(var.CargoTargetBinDir)/dgb.exe'
-                                KeyPath='yes'/>
+                                KeyPath='yes'>
+                            </File>
+                        </CreateFolder>
                         </Component>
                     </Directory>
                 </Directory>
