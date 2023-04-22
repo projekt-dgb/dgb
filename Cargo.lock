@@ -4619,7 +4619,7 @@ dependencies = [
 [[package]]
 name = "tesseract-static"
 version = "0.1.0"
-source = "git+https://github.com/fschutt/tesseract-static-rs?rev=4af219bfa142cd710408cd0411b96a83c680e319#4af219bfa142cd710408cd0411b96a83c680e319"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=2027ec3630d51b4c2b04893a908a625da7f011f6#2027ec3630d51b4c2b04893a908a625da7f011f6"
 dependencies = [
  "libc",
  "link-cplusplus",
@@ -4630,7 +4630,7 @@ dependencies = [
 [[package]]
 name = "tesseract-static-build"
 version = "0.1.0"
-source = "git+https://github.com/fschutt/tesseract-static-rs?rev=4af219bfa142cd710408cd0411b96a83c680e319#4af219bfa142cd710408cd0411b96a83c680e319"
+source = "git+https://github.com/fschutt/tesseract-static-rs?rev=2027ec3630d51b4c2b04893a908a625da7f011f6#2027ec3630d51b4c2b04893a908a625da7f011f6"
 dependencies = [
  "cmake",
  "flate2",

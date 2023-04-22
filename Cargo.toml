@@ -49,11 +49,11 @@ wry = "0.28.0"
 
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
-rev = "4af219bfa142cd710408cd0411b96a83c680e319"
+rev = "2027ec3630d51b4c2b04893a908a625da7f011f6"
 
 [build-dependencies.tesseract-static-build]
 git = "https://github.com/fschutt/tesseract-static-rs"
-rev = "4af219bfa142cd710408cd0411b96a83c680e319"
+rev = "2027ec3630d51b4c2b04893a908a625da7f011f6"
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"
