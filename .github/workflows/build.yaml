@@ -134,7 +134,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/dgb-windows-amd64/dgb-${{ github.event.inputs.release }}-x86_64.msi
+          asset_path: artifacts/dgb-windows-amd64/dgb-1.0.0-x86_64.msi
           asset_name: dgb.msi
           asset_content_type: application/octet-stream
       - name: Upload Release Asset Mac amd64
