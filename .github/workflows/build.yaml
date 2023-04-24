@@ -45,9 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - build: linux-x64
-            os: ubuntu-22.04
-            artifact_name: 'dgb-linux-amd64'
           - build: macos-x64
             os: macos-11
             artifact_name: 'dgb-darwin-amd64'
@@ -80,45 +77,6 @@ jobs:
         run: |
           cargo wix --no-build
           find target -type f -name "*"
-      - name: Bundle Linux
-        if: matrix.build == 'linux-x64'
-        shell: bash
-        run: |
-          sudo apt install pkg-config libgtk-3-dev libssl-dev clang cmake libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libayatana-appindicator3-dev
-          sudo update-alternatives --set cc /usr/bin/clang
-          sudo update-alternatives --set c++ /usr/bin/clang++
-          sudo update-alternatives --config clang
-          sudo update-alternatives --config clang++
-          echo "OLD GCC VERSION"
-          gcc --version
-          echo "END"
-          sudo apt install -y libstdc++6
-          sudo apt upgrade
-          sudo apt dist-upgrade
-          export LD_LIBRARY_PATH=/usr/local/lib64:$LD_LIBRARY_PATH
-          export CC=/usr/bin/clang
-          export HOST_CC=/usr/bin/clang
-          export CXX=/usr/bin/clang++
-          # https://zhangboyi.gitlab.io/post/2020-09-14-resolve-dso-missing-from-command-line-error/
-          export LDFLAGS="-Wl,--copy-dt-needed-entries"
-          echo "CLANG VERSION"
-          which clang
-          clang -v
-          rustc -vV
-          cargo -vV
-          echo "ENDPRINT"
-          strings `which clang` | grep GLIBC
-          echo "END2"
-          echo "LDD VERSION"
-          ldd --version
-          echo "APT"
-          sudo apt-cache policy libc6
-          echo "UPDATE"
-          sudo apt-get install libc6
-          echo "NOW"
-          ldd --version
-          echo "END4"
-          cargo build --release -vv
       - name: Bundle Mac
         if: matrix.build == 'macos-x64'
         shell: bash
@@ -128,12 +86,6 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: macbuild/DigitalesGrundbuch.dmg
-          retention-days: 2
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: target/release/dgb.deb
           retention-days: 2
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
@@ -151,7 +103,7 @@ jobs:
   release:
     needs: [setup, build]
     runs-on: ubuntu-22.04
-    if: needs.setup.outputs.DOING_RELEASE == '1' || github.event.inputs.release != ''
+    if: github.event.inputs.release != ''
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v2
@@ -163,7 +115,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.setup.outputs.VERSION }}
-          release_name: Release ${{ needs.setup.outputs.VERSION }}
+          tag_name: ${{ github.event.inputs.release }}
+          release_name: Release ${{ github.event.inputs.release }}
           draft: true
           prerelease: false
+      - name: Upload Release Asset Windows .exe
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/dgb-windows-amd64-exe/dgb.exe
+          asset_name: dgb.exe
+          asset_content_type: application/octet-stream
+      - name: Upload Release Asset Windows .msi
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/dgb-windows-amd64/dgb.msi
+          asset_name: dgb.msi
+          asset_content_type: application/octet-stream
+      - name: Upload Release Asset Mac amd64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/dgb-darwin-amd64/DigitalesGrundbuch.dmg
+          asset_name: dgb.dmg
+          asset_content_type: application/octet-stream
