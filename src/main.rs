@@ -148,7 +148,6 @@ fn untranslate_stringorlines(s: &gbx::StringOrLines) -> StringOrLines {
 fn untranslate_gbx(f: &gbx::PdfFile) -> PdfFile {
     PdfFile {
         cache: GrundbuchAnalysiertCache::default(),
-        land: None,
         icon: None,
         next_state: None,
         nebenbeteiligte_dateipfade: Vec::new(),
@@ -1074,12 +1073,17 @@ impl GbxAenderungen {
     }
 }
 
-#[derive(Debug, Copy, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum PopoverState {
     ContextMenu(ContextMenuData),
     Info,
     ExportPdf,
     CreateNewGrundbuch,
+    GrundbuchMetaAendern {
+        grundbuch_von: String,
+        amtsgericht: String,
+        blatt: String,
+    },
     GrundbuchSuchenDialog,
     GrundbuchUploadDialog(usize),
     Configuration(ConfigurationView),
@@ -1186,9 +1190,6 @@ pub struct PdfFile {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     gbx_datei_pfad: Option<String>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    land: Option<String>,
     #[serde(skip_serializing_if = "HocrLayout::is_empty")]
     #[serde(default)]
     hocr: HocrLayout,
@@ -1755,8 +1756,8 @@ impl Konfiguration {
     }
 
     pub fn get_authtoken(&self) -> Option<String> {
+        let _ = std::fs::create_dir_all(std::env::temp_dir().join("dgb"));
         let pw_file_path = std::env::temp_dir().join("dgb").join("auth.json");
-
         loop {
             let authtoken_json = std::fs::read_to_string(&pw_file_path)
                 .ok()
@@ -2255,7 +2256,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                         datei: Some(d.to_string()),
                         gbx_datei_pfad: None,
                         icon: None,
-                        land: None,
                         hocr: HocrLayout::init_from_dimensionen(&seiten_dimensionen),
                         anpassungen_seite: BTreeMap::new(),
                         analysiert: Grundbuch::new(titelblatt),
@@ -2344,6 +2344,40 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             render_pdf_seiten(webview, &mut pdf_zu_laden);
         }
+        Cmd::GrundbuchMetaAendern { amtsgericht, grundbuch_von, blatt } => {
+            data.open_page = Some((format!("{grundbuch_von}_{blatt}"), 2));
+            data.popover_state = Some(PopoverState::GrundbuchMetaAendern { 
+                amtsgericht: amtsgericht.clone(), 
+                grundbuch_von: grundbuch_von.clone(), 
+                blatt: blatt.clone(), 
+            });
+            let _ = webview.evaluate_script(&format!(
+                "replacePopOver(`{}`)",
+                ui::render_popover_content(data)
+            ));
+        },
+        Cmd::GrundbuchMetaAendernFinished { amtsgericht, grundbuch_von, blatt } => {
+
+            data.popover_state = None;
+            let _ = webview.evaluate_script(&format!(
+                "replacePopOver(`{}`)",
+                ui::render_popover_content(data)
+            ));
+            let of = match data.open_page.clone().map(|s| s.0.clone()) {
+                Some(s) => s,
+                None => return,
+            };
+            if let Some(s) = data.loaded_files.get_mut(&of) {
+                s.analysiert.titelblatt.amtsgericht = amtsgericht.to_string();
+                s.analysiert.titelblatt.grundbuch_von = grundbuch_von.to_string();
+                s.analysiert.titelblatt.blatt = blatt.to_string();
+                s.speichern();
+            }
+            let _ = webview.evaluate_script(&format!(
+                "replaceEntireScreen(`{}`)",
+                ui::render_entire_screen(data)
+            ));
+        },
         Cmd::CreateNewGrundbuch => {
             data.popover_state = Some(PopoverState::CreateNewGrundbuch);
             let _ = webview.evaluate_script(&format!(
@@ -2425,7 +2459,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             ));
         }
         Cmd::GrundbuchAnlegen {
-            land,
             grundbuch_von,
             amtsgericht,
             blatt,
@@ -2444,7 +2477,6 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 datei: None,
                 gbx_datei_pfad: Some(gbx_folder),
                 icon: None,
-                land: Some(land.trim().to_string()),
                 hocr: HocrLayout::default(),
                 analysiert: Grundbuch {
                     titelblatt: Titelblatt {
@@ -5035,6 +5067,15 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
 
+            if !translate_gbx(open_file).digitalisiert {
+                tinyfiledialogs::message_box_ok(
+                    "Grundbuch kann nicht neu geladen werden",
+                    "Dieses Grundbuch wurde digital angelegt und kann nicht neu digitalisiert werden.",
+                    MessageBoxIcon::Error,
+                );
+                return; 
+            }
+
             if tinyfiledialogs::message_box_yes_no(
                 "Grundbuch neu laden?",
                 &format!("Wenn das Grundbuch neu analysiert wird, werden alle manuell eingegebenen Daten überschrieben.\r\nFortfahren?"),
@@ -5879,15 +5920,9 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 None => return,
             };
 
-            let titelblatt = open_file.analysiert.titelblatt.clone();
-
             let _ = webview.evaluate_script(&format!(
-                "replacePageList(`{}`);",
-                ui::render_page_list(&data)
-            ));
-            let _ = webview.evaluate_script(&format!(
-                "replaceMainNoFiles(`{}`);",
-                ui::render_application_main_no_files(data)
+                "replaceEntireScreen(`{}`)",
+                ui::render_entire_screen(data)
             ));
         }
         Cmd::SetOpenPage { active_page } => {
@@ -6763,6 +6798,12 @@ pub enum TesseractMode {
     Numbers,
 }
 
+#[cfg(not(feature = "tesseract"))]
+pub fn tesseract_get_hocr(image: &[u8]) -> Result<ParsedHocr, String> {
+    Ok(ParsedHocr::default())
+}
+
+#[cfg(feature = "tesseract")]
 pub fn tesseract_get_hocr(image: &[u8]) -> Result<ParsedHocr, String> {
     use tesseract_static::tesseract::Tesseract;
 
@@ -6863,7 +6904,7 @@ fn main() -> wry::Result<()> {
 
     let webview = WebViewBuilder::new(window)?
         .with_html(main_html)?
-        .with_devtools(false)
+        .with_devtools(true)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
             Ok(o) => {
@@ -6879,6 +6920,9 @@ fn main() -> wry::Result<()> {
         .with_incognito(true)
         .with_initialization_script(&main_script)
         .build()?;
+
+    let _ = webview.clear_all_browsing_data();
+    webview.open_devtools();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

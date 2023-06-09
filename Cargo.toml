@@ -45,15 +45,21 @@ url = "2.3.1"
 html-escape = "0.2.13"
 gbx = "1.0.1"
 similar = "2.2.1"
-wry = "0.28.0"
+wry = { version = "0.28.0", features = ["devtools"] }
+
+[features]
+default = ["tesseract"]
+tesseract = ["tesseract-static", "tesseract-static-build"]
 
 [dependencies.tesseract-static]
 git = "https://github.com/fschutt/tesseract-static-rs"
 rev = "2027ec3630d51b4c2b04893a908a625da7f011f6"
+optional = true
 
 [build-dependencies.tesseract-static-build]
 git = "https://github.com/fschutt/tesseract-static-rs"
 rev = "2027ec3630d51b4c2b04893a908a625da7f011f6"
+optional = true
 
 [dependencies.wasmer]
 git = "https://github.com/wasmerio/wasmer"

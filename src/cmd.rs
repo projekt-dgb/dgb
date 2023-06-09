@@ -12,7 +12,18 @@ pub enum Cmd {
     CreateNewGrundbuch,
     #[serde(rename = "grundbuch_anlegen")]
     GrundbuchAnlegen {
-        land: String,
+        grundbuch_von: String,
+        amtsgericht: String,
+        blatt: String,
+    },
+    #[serde(rename = "grundbuch_meta_aendern")]
+    GrundbuchMetaAendern {
+        grundbuch_von: String,
+        amtsgericht: String,
+        blatt: String,
+    },
+    #[serde(rename = "grundbuch_meta_aendern_finished")]
+    GrundbuchMetaAendernFinished {
         grundbuch_von: String,
         amtsgericht: String,
         blatt: String,

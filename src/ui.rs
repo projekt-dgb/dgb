@@ -211,7 +211,7 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
         <img src='data:image/png;base64,{icon_close_base64}' style='width:50px;height:50px;cursor:pointer;' />
     </div>");
 
-    let pc = match rpc_data.popover_state {
+    let pc = match &rpc_data.popover_state {
         None => return String::new(),
         Some(PopoverState::GrundbuchUploadDialog(i)) => {
             let upload = match RpcData::get_aenderungen(
@@ -221,8 +221,8 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 Ok(o) => o,
                 Err(e) => return String::new(),
             };
-            let dateien = render_aenderungen_dateien(&upload, i);
-            let diff = render_aenderung_diff(&upload, i);
+            let dateien = render_aenderungen_dateien(&upload, *i);
+            let diff = render_aenderung_diff(&upload, *i);
 
             let commit_title = if rpc_data.commit_title.is_empty() {
                 String::new()
@@ -314,27 +314,6 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                 <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
                     <form onsubmit='grundbuchAnlegen(event)' action=''>
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
-                        <label style='font-size:20px;font-style:italic;'>Land</label>
-                        <select id='__application_grundbuch_anlegen_land' style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:pointer;'>
-                            <option value='Baden-Württemberg'>Baden-Württemberg</option>
-                            <option value='Bayern'>Bayern</option>
-                            <option value='Berlin'>Berlin</option>
-                            <option value='Brandenburg' selected='selected'>Brandenburg</option>
-                            <option value='Bremen'>Bremen</option>
-                            <option value='Hamburg'>Hamburg</option>
-                            <option value='Hessen'>Hessen</option>
-                            <option value='Mecklenburg-Vorpommern'>Mecklenburg-Vorpommern</option>
-                            <option value='Niedersachsen'>Niedersachsen</option>
-                            <option value='Nordrhein-Westfalen'>Nordrhein-Westfalen</option>
-                            <option value='Rheinland-Pfalz'>Rheinland-Pfalz</option>
-                            <option value='Saarland'>Saarland</option>
-                            <option value='Sachsen'>Sachsen</option>
-                            <option value='Sachsen-Anhalt'>Sachsen-Anhalt</option>
-                            <option value='Schleswig-Holstein'>Schleswig-Holstein</option>
-                            <option value='Thüringen'>Thüringen</option>
-                        </select>
-                    </div>
-                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Amtsgericht</label>
                         <input type='text' id='__application_grundbuch_anlegen_amtsgericht' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
                     </div>
@@ -345,6 +324,35 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
                     <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
                         <label style='font-size:20px;font-style:italic;'>Blatt-Nr.</label>
                         <input type='number' id='__application_grundbuch_anlegen_blatt_nr' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;'></input>
+                    </div>
+                    <br/>
+                    <input type='submit' value='Speichern' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
+                    </form>
+                </div>
+            </div>
+            ")
+        },
+        Some(PopoverState::GrundbuchMetaAendern { amtsgericht, grundbuch_von, blatt }) => {
+            format!("
+            <div style='box-shadow:0px 0px 100px #22222288;pointer-events:initial;width:800px;display:flex;flex-direction:column;position:relative;margin:10px auto;border:1px solid grey;background:white;padding:100px;border-radius:5px;' onmousedown='event.stopPropagation();' onmouseup='event.stopPropagation();'>
+                
+                {close_button}
+
+                <h2 style='font-size:24px;font-family:sans-serif;margin-bottom:25px;'>Neues Grundbuchblatt anlegen</h2>
+                
+                <div style='padding:5px 0px;display:flex;flex-grow:1;flex-direction:column;'>
+                    <form onsubmit='grundbuchMetaAendernFinished(event)' action=''>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Amtsgericht</label>
+                        <input type='text' id='__application_grundbuch_anlegen_amtsgericht' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;' value='{amtsgericht}'></input>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Grundbuch von</label>
+                        <input type='text' id='__application_grundbuch_anlegen_grundbuch_von' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;' value='{grundbuch_von}'></input>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;padding:10px 0px;font-size:16px;'>
+                        <label style='font-size:20px;font-style:italic;'>Blatt-Nr.</label>
+                        <input type='number' id='__application_grundbuch_anlegen_blatt_nr' required style='font-size:20px;font-weight:bold;border-bottom:1px solid black;cursor:text;' value='{blatt}'></input>
                     </div>
                     <br/>
                     <input type='submit' value='Speichern' class='btn btn_neu' style='cursor:pointer;font-size:20px;height:unset;display:inline-block;flex-grow:0;max-width:320px;margin-top:20px;' />
@@ -484,43 +492,43 @@ pub fn render_popover_content(rpc_data: &RpcData) -> String {
             static IMG_FX: &[u8] = include_bytes!("./img/icons8-formula-fx-96.png");
             let img_fx = base64::encode(IMG_FX);
 
-            let active_allgemein = if cw == Allgemein { " active" } else { "" };
-            let active_regex = if cw == RegEx { " active" } else { "" };
-            let active_text_saubern = if cw == TextSaubern { " active" } else { "" };
-            let active_abkuerzungen = if cw == Abkuerzungen { " active" } else { "" };
-            let active_flst_auslesen = if cw == FlstAuslesen { " active" } else { "" };
-            let active_klassifizierung_rechteart = if cw == KlassifizierungRechteArt {
+            let active_allgemein = if *cw == Allgemein { " active" } else { "" };
+            let active_regex = if *cw == RegEx { " active" } else { "" };
+            let active_text_saubern = if *cw == TextSaubern { " active" } else { "" };
+            let active_abkuerzungen = if *cw == Abkuerzungen { " active" } else { "" };
+            let active_flst_auslesen = if *cw == FlstAuslesen { " active" } else { "" };
+            let active_klassifizierung_rechteart = if *cw == KlassifizierungRechteArt {
                 " active"
             } else {
                 ""
             };
-            let active_rechtsinhaber_auslesen_abt2 = if cw == RechtsinhaberAuslesenAbt2 {
+            let active_rechtsinhaber_auslesen_abt2 = if *cw == RechtsinhaberAuslesenAbt2 {
                 " active"
             } else {
                 ""
             };
-            let active_rangvermerk_auslesen_abt2 = if cw == RangvermerkAuslesenAbt2 {
+            let active_rangvermerk_auslesen_abt2 = if *cw == RangvermerkAuslesenAbt2 {
                 " active"
             } else {
                 ""
             };
-            let active_text_kuerzen_abt2 = if cw == TextKuerzenAbt2 { " active" } else { "" };
-            let active_betrag_auslesen_abt3 = if cw == BetragAuslesenAbt3 {
+            let active_text_kuerzen_abt2 = if *cw == TextKuerzenAbt2 { " active" } else { "" };
+            let active_betrag_auslesen_abt3 = if *cw == BetragAuslesenAbt3 {
                 " active"
             } else {
                 ""
             };
-            let active_klassifizierung_schuldenart_abt3 = if cw == KlassifizierungSchuldenArtAbt3 {
+            let active_klassifizierung_schuldenart_abt3 = if *cw == KlassifizierungSchuldenArtAbt3 {
                 " active"
             } else {
                 ""
             };
-            let active_rechtsinhaber_auslesen_abt3 = if cw == RechtsinhaberAuslesenAbt3 {
+            let active_rechtsinhaber_auslesen_abt3 = if *cw == RechtsinhaberAuslesenAbt3 {
                 " active"
             } else {
                 ""
             };
-            let active_text_kuerzen_abt3 = if cw == TextKuerzenAbt3 { " active" } else { "" };
+            let active_text_kuerzen_abt3 = if *cw == TextKuerzenAbt3 { " active" } else { "" };
 
             let sidebar = format!("
                 <div class='__application_configuration_sidebar' style='display:flex;flex-direction:column;width:160px;min-height:750px;'>
@@ -1061,13 +1069,13 @@ pub fn render_suchergebnisse_liste(data: &GrundbuchSucheResponse) -> String {
                     "abt1-veraenderungen" => "Abteilung 1 Veränderung",
                     "abt1-loeschungen" => "Abteilung 1 Löschung",
                     
-                    "abt1" => "Abteilung 1",
-                    "abt1-veraenderungen" => "Abteilung 1 Veränderung",
-                    "abt1-loeschungen" => "Abteilung 1 Löschung",
+                    "abt2" => "Abteilung 2",
+                    "abt2-veraenderungen" => "Abteilung 2 Veränderung",
+                    "abt2-loeschungen" => "Abteilung 2 Löschung",
                     
-                    "abt1" => "Abteilung 1",
-                    "abt1-veraenderungen" => "Abteilung 1 Veränderung",
-                    "abt1-loeschungen" => "Abteilung 1 Löschung",
+                    "abt3" => "Abteilung 3",
+                    "abt3-veraenderungen" => "Abteilung 3 Veränderung",
+                    "abt3-loeschungen" => "Abteilung 3 Löschung",
                     _ => ""
                 };
                 
@@ -1773,13 +1781,17 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
         let datei_ausgewaehlt = rpc_data.open_page.as_ref().map(|s| s.0.as_str()) == Some(filename.as_str());
         
         let datei = rpc_data.loaded_files.get(filename)?;
+        
+        let amtsgericht = &datei.analysiert.titelblatt.amtsgericht;
+        let grundbuch_von = &datei.analysiert.titelblatt.grundbuch_von;
+        let blatt = &datei.analysiert.titelblatt.blatt;
 
         let check = match datei.icon {
-            None => format!("<div id='__application_file_icon-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'></div>"),
+            None => format!("<div id='__application_file_icon-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'  data-amtsgericht='{amtsgericht}' data-grundbuchVon='{grundbuch_von}' data-blatt='{blatt}' ></div>"),
             Some(i) => {
                 format!(
                     "<div id='__application_file_icon-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;'>
-                        <img id='__application_file_icon-inner-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' src='{check}'>
+                        <img id='__application_file_icon-inner-{filename}' style='width: 16px;height: 16px;margin-right:5px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'  data-amtsgericht='{amtsgericht}' data-grundbuchVon='{grundbuch_von}' data-blatt='{blatt}'  src='{check}'>
                         </img>
                     </div>", 
                     filename = filename, 
@@ -1787,11 +1799,11 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
                 ) 
             }
         };
-        
-        Some(format!("<div title='{filename}' class='__application-data-file-div {file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}' onmouseup='activateSelectedFile(event);'>
+
+        Some(format!("<div title='{filename}' class='__application-data-file-div {file_active}' style='user-select:none;display:flex;flex-direction:row;' data-fileName='{filename}'  data-amtsgericht='{amtsgericht}' data-grundbuchVon='{grundbuch_von}' data-blatt='{blatt}'  onmouseup='activateSelectedFile(event);' ondblclick='grundbuchMetaAendern(event);'>
             {check}
-            <p style='flex-grow:0;user-select:none;' data-fileName='{filename}' >{filename}</p>
-            <div style='display:flex;flex-grow:1;' data-fileName='{filename}' ></div>
+            <p style='flex-grow:0;user-select:none;' data-fileName='{filename}'  data-amtsgericht='{amtsgericht}' data-grundbuchVon='{grundbuch_von}' data-blatt='{blatt}'  >{filename}</p>
+            <div style='display:flex;flex-grow:1;' data-fileName='{filename}'  data-amtsgericht='{amtsgericht}' data-grundbuchVon='{grundbuch_von}' data-blatt='{blatt}'  ></div>
             {close_btn}
             </div>", 
             check = check,
@@ -1799,7 +1811,7 @@ pub fn render_file_list(rpc_data: &RpcData) -> String {
             filename = filename, 
             close_btn = if datei_ausgewaehlt { 
                 format!(
-                    "<img style='width: 16px;height: 16px;padding: 2px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}' onmouseup='closeFile(event);' src='{close_str}'></img>", 
+                    "<img style='width: 16px;height: 16px;padding: 2px;flex-grow: 0;cursor: pointer;' data-fileName='{filename}'  data-amtsgericht='{amtsgericht}' data-grundbuchVon='{grundbuch_von}' data-blatt='{blatt}'  onmouseup='closeFile(event);' src='{close_str}'></img>", 
                     filename = filename, 
                     close_str = close_str
                 ) 

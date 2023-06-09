@@ -1,3 +1,4 @@
+#[cfg(feature = "tesseract")]
 fn main() {
     let (leptonica_lib, _leptonica_includes) =
         tesseract_static_build::compile_leptonica(&tesseract_static_build::download_leptonica());
@@ -7,3 +8,6 @@ fn main() {
     #[cfg(target_os = "linux")]
     println!("cargo:rustc-link-search=/usr/lib64");
 }
+
+#[cfg(not(feature = "tesseract"))]
+fn main() { }

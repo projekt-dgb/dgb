@@ -11,7 +11,9 @@ let rpc = {
   
   load_pdf: function() { rpc.invoke({ cmd : 'load_pdf' }); },
   create_new_grundbuch: function() { rpc.invoke({ cmd : 'create_new_grundbuch' }); },
-  grundbuch_anlegen: function(land, grundbuch_von, amtsgericht, blatt) { rpc.invoke({ cmd : 'grundbuch_anlegen', land: land, grundbuch_von: grundbuch_von, amtsgericht: amtsgericht, blatt: blatt }); },
+  grundbuch_anlegen: function(grundbuch_von, amtsgericht, blatt) { rpc.invoke({ cmd : 'grundbuch_anlegen', grundbuch_von: grundbuch_von, amtsgericht: amtsgericht, blatt: blatt }); },
+  grundbuch_meta_aendern: function(grundbuch_von, amtsgericht, blatt) { rpc.invoke({ cmd : 'grundbuch_meta_aendern', grundbuch_von: grundbuch_von, amtsgericht: amtsgericht, blatt: blatt }); },
+  grundbuch_meta_aendern_finished: function(grundbuch_von, amtsgericht, blatt) { rpc.invoke({ cmd : 'grundbuch_meta_aendern_finished', grundbuch_von: grundbuch_von, amtsgericht: amtsgericht, blatt: blatt }); },
   undo:  function() { rpc.invoke({ cmd : 'undo' }); },
   redo:  function() { rpc.invoke({ cmd : 'redo' }); },
   export_nb:  function() { rpc.invoke({ cmd : 'export_nb' }); },
@@ -1520,12 +1522,36 @@ function activateConfigurationView(event, section_id) {
     rpc.set_configuration_view(section_id);
 }
 
-function grundbuchAnlegen(event) {
+function grundbuchMetaAendern(event) {
+    event.stopPropagation();
     event.preventDefault();
-    
-    var land = document.getElementById("__application_grundbuch_anlegen_land");
-    if (!land)
+
+    console.log("grundbuchMetaAendern");
+    console.log(event.target.dataset);
+
+    var amtsgericht = event.target.dataset.amtsgericht;
+    if (!amtsgericht)
         return;
+    
+    var grundbuch_von = event.target.dataset.grundbuchvon;
+    if (!grundbuch_von)
+        return;
+    
+    console.log(grundbuch_von);
+
+    var blatt = event.target.dataset.blatt;
+    if (!blatt)
+        return;
+    
+    console.log("grundbuch_meta_aendern");
+
+    rpc.grundbuch_meta_aendern(grundbuch_von, amtsgericht, blatt);
+    
+    return false;
+}
+
+function grundbuchMetaAendernFinished(event) {
+    event.preventDefault();
     
     var amtsgericht = document.getElementById("__application_grundbuch_anlegen_amtsgericht");
     if (!amtsgericht)
@@ -1539,7 +1565,27 @@ function grundbuchAnlegen(event) {
     if (!blatt)
         return;
     
-    rpc.grundbuch_anlegen(land.value, grundbuch_von.value, amtsgericht.value, blatt.value);
+    rpc.grundbuch_meta_aendern_finished(grundbuch_von.value, amtsgericht.value, blatt.value);
+    
+    return false;
+}
+
+function grundbuchAnlegen(event) {
+    event.preventDefault();
+    
+    var amtsgericht = document.getElementById("__application_grundbuch_anlegen_amtsgericht");
+    if (!amtsgericht)
+        return;
+    
+    var grundbuch_von = document.getElementById("__application_grundbuch_anlegen_grundbuch_von");
+    if (!grundbuch_von)
+        return;
+    
+    var blatt = document.getElementById("__application_grundbuch_anlegen_blatt_nr");
+    if (!blatt)
+        return;
+    
+    rpc.grundbuch_anlegen(grundbuch_von.value, amtsgericht.value, blatt.value);
     
     return false;
 }
