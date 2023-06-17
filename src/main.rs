@@ -1883,6 +1883,12 @@ impl Konfiguration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct AboNeuForm {
+    tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status")]
 pub enum AboNeuAnfrage {
     #[serde(rename = "ok")]
     Ok(AboNeuAnfrageOk),
@@ -1906,6 +1912,50 @@ pub enum GrundbuchSucheResponse {
     StatusOk(GrundbuchSucheOk),
     #[serde(rename = "error")]
     StatusErr(GrundbuchSucheError),
+}
+
+#[test]
+fn test2() {
+    let s: &str = r#"
+        {
+            "status": "ok",
+            "grundbuecher": [
+            {
+                "titelblatt": {
+                "amtsgericht": "Oranienburg",
+                "grundbuch_von": "Vehlefanz",
+                "blatt": "294"
+                },
+                "ergebnis": {
+                "land": "BRA",
+                "amtsgericht": "Oranienburg",
+                "grundbuch_von": "Vehlefanz",
+                "blatt": "294",
+                "abteilung": "bv",
+                "lfd_nr": "2",
+                "text": "BV lfd. Nr. 2, Gemarkung Vehlefanz Flur 1 Flurstück 13: Größe: 0 m²"
+                },
+                "abos": [
+                {
+                    "id": "3858ca0e-e6bd-4834-aa89-96fd8c1ae4a6",
+                    "amtsgericht": "Oranienburg",
+                    "grundbuchbezirk": "Vehlefanz",
+                    "blatt": {
+                    "Exakt": 294
+                    },
+                    "text": "felixschuett@outlook.de",
+                    "aktenzeichen": "abc"
+                }
+                ]
+            }
+            ],
+            "aenderungen": []
+        }
+    "#.trim();
+
+    let s = serde_json::from_str::<GrundbuchSucheResponse>(s).unwrap();
+
+    println!("{s:#?}");
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1950,11 +2000,18 @@ pub struct SuchErgebnisGrundbuch {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct AbonnementInfo {
+    pub id: String,
     pub amtsgericht: String,
     pub grundbuchbezirk: String,
-    pub blatt: i32,
+    pub blatt: AbonnementInfoBlattNr,
     pub text: String,
     pub aktenzeichen: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum AbonnementInfoBlattNr {
+    Alle,
+    Exakt(i32),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2550,7 +2607,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            let json = match resp.json::<GrundbuchSucheResponse>() {
+            let response = resp.text().unwrap_or_default();
+            println!("suche response {}", response);
+
+            let json = match serde_json::from_str(&response) {
                 Ok(s) => s,
                 Err(e) => {
                     let _ = webview.evaluate_script(&format!(
@@ -2591,19 +2651,17 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 "",
             );
 
-            let tag = match tag {
-                Some(s) => s.trim().to_string(),
-                None => return,
-            };
+            let tag = tag.map(|s| s.trim().to_string());
+            let url = format!("{server_url}/abo-neu/email/{download_id}");
 
-            let tag = urlencoding::encode(&tag);
-            let url = format!("{server_url}/abo-neu/email/{download_id}/{tag}");
+            println!("url {url}");
 
             let client = reqwest::blocking::Client::new();
             let res = client
                 .get(&url)
+                .body(serde_json::to_string_pretty(&AboNeuForm { tag: tag.clone() }).unwrap_or_default().as_bytes().to_vec())
                 .bearer_auth(authtoken)
-                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Content-Type", "application/json")
                 .send();
 
             let resp = match res {
@@ -2620,13 +2678,17 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             };
 
-            let json = match resp.json::<AboNeuAnfrage>() {
+            let text = resp.text().unwrap_or_default();
+
+            println!("response text {}", text);
+
+            let json = match serde_json::from_str::<AboNeuAnfrage>(&text) {
                 Ok(s) => s,
                 Err(e) => {
                     let e = format!("{e}").replace("\"", "").replace("'", "");
                     tinyfiledialogs::message_box_ok(
                         "Fehler beim Abonnieren des Grundbuchs", 
-                        &format!("Grundbuch konnte nicht abonniert werden: Antwort von Server ist im falschen Format: {e}"), 
+                        &format!("Grundbuch konnte nicht abonniert werden: Antwort von Server ist im falschen Format: {text}: {e}"), 
                         MessageBoxIcon::Error
                     );
                     let _ =
@@ -2637,9 +2699,10 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
 
             match json {
                 AboNeuAnfrage::Ok(_) => {
+                    let tag_msg = tag.as_ref().map(|s| format!(" mit dem Aktenzeichen {s}")).unwrap_or_default();
                     tinyfiledialogs::message_box_ok(
                         "Grundbuch wurde erfolgreich abonniert", 
-                        &format!("Sie haben das Grundbuch {download_id} mit dem Aktenzeichen {tag} abonniert.\r\nIn Zukunft werden Sie bei Änderungen an diesem Grundbuch per E-Mail benachrichtigt werden."), 
+                        &format!("Sie haben das Grundbuch {download_id}{tag_msg} abonniert.\r\nIn Zukunft werden Sie bei Änderungen an diesem Grundbuch per E-Mail benachrichtigt werden."), 
                         MessageBoxIcon::Info
                     );
                 }
