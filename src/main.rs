@@ -6977,7 +6977,7 @@ fn main() -> wry::Result<()> {
 
     let webview = WebViewBuilder::new(window)?
         .with_html(main_html)?
-        .with_devtools(true)
+        .with_devtools(false)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
             Ok(o) => {
@@ -6988,14 +6988,8 @@ fn main() -> wry::Result<()> {
             }
         })
         .with_clipboard(true)
-        .with_hotkeys_zoom(false)
-        .with_back_forward_navigation_gestures(false)
-        .with_incognito(true)
         .with_initialization_script(&main_script)
         .build()?;
-
-    let _ = webview.clear_all_browsing_data();
-    webview.open_devtools();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
