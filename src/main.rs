@@ -2027,6 +2027,9 @@ pub struct LefisDateiExport {
 }
 
 fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
+
+    println!("webview_cb {arg:#?}");
+
     match &arg {
         Cmd::OpenScript { lines } => {
             let lines = lines
@@ -2192,6 +2195,8 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                             return;
                         }
                     };
+
+                    println!("writing hocr {}", target_path.display());
 
                     let _ = std::fs::write(
                         &target_path,
@@ -2371,6 +2376,8 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 }
             }
 
+            println!("pdf zu laden {:#?}", pdf_zu_laden);
+
             let html_inner = ui::render_entire_screen(data);
             let _ = webview.evaluate_script(&format!("replaceEntireScreen(`{}`)", html_inner));
             let _ = webview.evaluate_script("startCheckingForPdfErrors()");
@@ -2399,6 +2406,7 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
                 ));
             }
 
+            println!("render pdf seiten...");
             render_pdf_seiten(webview, &mut pdf_zu_laden);
         }
         Cmd::GrundbuchMetaAendern { amtsgericht, grundbuch_von, blatt } => {
@@ -6886,6 +6894,8 @@ pub fn tesseract_get_hocr(image: &[u8]) -> Result<ParsedHocr, String> {
     .get_hocr_text(1)
     .map_err(|e| format!("{e}"))?
     .to_string();
+
+    println!("ParsedHocr::new \r\n{hocr}");
 
     ParsedHocr::new(&hocr).map_err(|e| format!("{e}"))
 }
