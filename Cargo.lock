@@ -4765,6 +4765,7 @@ dependencies = [
 [[package]]
 name = "tinyfiledialogs"
 version = "3.9.1"
+source = "git+https://github.com/projekt-dgb/tinyfiledialogs-rs?rev=aad206425d783c3ec82e32f0cbac64f84e03ad90#aad206425d783c3ec82e32f0cbac64f84e03ad90"
 dependencies = [
  "cc",
  "libc",
