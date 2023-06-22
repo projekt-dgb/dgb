@@ -6962,7 +6962,7 @@ fn main() -> wry::Result<()> {
         <html>
             <head>
                 <meta charset=\"utf-8\" />
-                <style type=\"text/css\">{main_css}</style>
+                <style id='global-css' type=\"text/css\">{main_css}</style>
             </head>
             <body>{initial_screen}</body>
         </html>

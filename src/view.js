@@ -466,74 +466,98 @@ function logInfo(info) {
 
 // Function called from Rust on init to initialize the entire screen
 function replaceEntireScreen(html) {
+    var style = document.getElementById('global-css').innerHTML;
     document.body.innerHTML = html;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceMainContainer(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let ribbon = document.getElementById("__application-main-container");
     if (ribbon)
          ribbon.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceRibbon(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let ribbon = document.getElementById("__application-ribbon");
     if (ribbon)
          ribbon.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceMain(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let ribbon = document.getElementById("__application-main");
     if (ribbon)
          ribbon.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceFileList(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let file_list = document.getElementById("__application-file-list");
     if (file_list)
          file_list.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 
 }
 
 function replacePageImage(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let page_list = document.getElementById("__application-pdf-page-image");
     if (page_list)
          page_list.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replacePageList(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let page_list = document.getElementById("__application-page-list");
     if (page_list)
          page_list.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceBestandsverzeichnis(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-bestandsverzeichnis");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceMainNoFiles(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-main-no-files");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceBestandsverzeichnisZuschreibungen(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-bestandsverzeichnis-veraenderungen");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceBestandsverzeichnisAbschreibungen(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-bestandsverzeichnis-loeschungen");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceAbt1(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-abteilung-1");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function editKonfigurationTextField(event) {
@@ -545,21 +569,27 @@ function editKonfigurationTextField(event) {
 }
 
 function replaceAenderungDateien(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application_aenderung_dateien");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceAenderungDiff(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application_aenderungen_diff");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceAbt1GrundlagenEintragungen(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-abteilung-1-grundlagen-eintragungen");
     if (e)
         e.innerHTML = s;    
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function grundbuchSuchen(e) {
@@ -571,10 +601,12 @@ function grundbuchSuchen(e) {
 }
 
 function replaceSuchergebnisse(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application_grundbuch_suchen_suchergebnisse");
     if (e) {
         e.innerHTML = s;
     }
+    document.getElementById('global-css').innerHTML = style;
 }
 
 function grundbuchHochladen(e) {
@@ -654,9 +686,11 @@ function replaceAbt3Loeschungen(s) {
 }
 
 function replaceAnalyseGrundbuch(s) {
+    var style = document.getElementById('global-css').innerHTML;
     let e = document.getElementById("__application-analyse-grundbuch");
     if (e)
         e.innerHTML = s;
+    document.getElementById('global-css').innerHTML = style;
 }
 
 
