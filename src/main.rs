@@ -3032,6 +3032,26 @@ fn webview_cb(webview: &WebView, arg: &Cmd, data: &mut RpcData) {
             }
 
             let _ = webview.evaluate_script(&format!("stopCheckingForPageLoaded(`{}`)", file_name));
+
+            if *reload_hocr {
+                pdf_parsed = reload_hocr_files(&pdf_parsed);
+                if !pdf_parsed.ist_geladen() {
+                    crate::digital::insert_zeilen_automatisch(&mut pdf_parsed);
+                }
+            }
+
+            let _ = std::fs::write(
+                &cache_output_path,
+                serde_json::to_string_pretty(&pdf_parsed).unwrap_or_default(),
+            );
+
+            data.loaded_files
+                .insert(file_name.clone(), pdf_parsed.clone());
+
+            let _ = webview.evaluate_script(&format!(
+                "replaceEntireScreen(`{}`)",
+                ui::render_entire_screen(data)
+            ));
         }
         Cmd::EditText { path, new_value } => {
             fn get_mut_or_insert_last<'a, T>(
