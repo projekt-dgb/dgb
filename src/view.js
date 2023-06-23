@@ -238,6 +238,8 @@ async function renderPdfPage(
     await delay(100);
   }
 
+  console.log(dataUrl);
+
   return dataUrl;
 }
 

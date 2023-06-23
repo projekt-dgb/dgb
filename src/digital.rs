@@ -715,6 +715,8 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
         .join(&titelblatt.grundbuch_von)
         .join(&titelblatt.blatt.to_string());
 
+    println!("temp ordner {}", temp_ordner.display());
+
     let _ = fs::create_dir_all(temp_ordner.clone())
         .map_err(|e| Fehler::Io(format!("{}", temp_ordner.clone().display()), e))?;
 
@@ -731,100 +733,93 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
     let pdf_amtsgericht = &titelblatt.amtsgericht;
     let pdf_grundbuch_von = &titelblatt.grundbuch_von;
     let pdf_blatt = titelblatt.blatt.clone();
-
-
-    /*
-
-    let pdf_grundbuch_von = pdf_grundbuch_von.clone();
-    let pdf_blatt = pdf_blatt.clone();
-    let image_data_base64 = image_data_base64.clone();
     let seite = seite.clone();
     let image_filename = format!("page-clean-{seite}.png");
     let render_hocr = render_hocr.clone();
 
-
-
-    // PNG IMAGE -> PNM IMAGE
-    use image::io::Reader as ImageReader;
-    use std::io::Cursor;
-    const DATA_START: &str = "data:image/png;base64,";
-    if !image_data_base64.starts_with(DATA_START) {
-        return;
-    }
-
-    let output_image = match base64::decode(&image_data_base64[DATA_START.len()..]) {
-        Ok(o) => o,
-        Err(_) => {
-            return;
-        }
-    };
-
-    let reader = match ImageReader::new(Cursor::new(output_image)).with_guessed_format()
-    {
-        Ok(o) => o,
-        Err(_) => {
-            return;
-        }
-    };
-
-    let decoded = match reader.decode() {
-        Ok(o) => o,
-        Err(_) => {
-            return;
-        }
-    };
-
-    let flipped = decoded.flipv();
-    let grayscale = flipped.grayscale();
-
-    let mut bytes: Vec<u8> = Vec::new();
-    let _ =
-        grayscale.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
-
-    let tempdir = std::env::temp_dir()
-        .join(&pdf_grundbuch_von)
-        .join(&pdf_blatt);
-    let _ = std::fs::create_dir_all(&tempdir);
-    let _ = std::fs::write(tempdir.join(&image_filename), &bytes);
-    let pnm_bytes = match crate::digital::read_png_and_convert_to_bmp(
-        &tempdir.join(&image_filename),
-    ) {
-        Some(b) => b,
-        None => return,
-    };
-
-
-
-
-    // HOCR RENDERING
-    let target_path = tempdir.join(format!("{seite}.hocr.json"));
-    if !target_path.exists() && render_hocr {
-        let hocr = match tesseract_get_hocr(&pnm_bytes) {
-            Ok(o) => o,
-            Err(e) => {
-                tinyfiledialogs::message_box_ok(
-                    &format!("Fehler beim OCR von {image_filename}"),
-                    &format!("{e}"),
-                    MessageBoxIcon::Error,
-                );
-                return;
-            }
-        };
-
-        println!("writing hocr {}", target_path.display());
-
-        let _ = std::fs::write(
-            &target_path,
-            serde_json::to_string_pretty(&hocr).unwrap_or_default(),
-        );
-    }
-
-
-    */
-
     let _ = webview.evaluate_script_with_callback(
         &format!("renderPdfPage(`{pdf_base64}`, `{pdf_amtsgericht}`, `{pdf_grundbuch_von}`, `{pdf_blatt}`, {seite}, {render_hocr:?})"),
-        |png_base64| { println!("png base64 returned from renderPdfPage: {:?}", png_base64); }
+        |image_data_base64| {
+
+            println!("rendering PNG -> PNM");
+
+            // PNG IMAGE -> PNM IMAGE
+            use image::io::Reader as ImageReader;
+            use std::io::Cursor;
+            const DATA_START: &str = "data:image/png;base64,";
+            if !image_data_base64.starts_with(DATA_START) {
+                return;
+            }
+
+            let output_image = match base64::decode(&image_data_base64[DATA_START.len()..]) {
+                Ok(o) => o,
+                Err(_) => {
+                    return;
+                }
+            };
+
+            let reader = match ImageReader::new(Cursor::new(output_image)).with_guessed_format()
+            {
+                Ok(o) => o,
+                Err(_) => {
+                    return;
+                }
+            };
+
+            let decoded = match reader.decode() {
+                Ok(o) => o,
+                Err(_) => {
+                    return;
+                }
+            };
+
+            let flipped = decoded.flipv();
+            let grayscale = flipped.grayscale();
+
+            let mut bytes: Vec<u8> = Vec::new();
+            let _ =
+                grayscale.write_to(&mut Cursor::new(&mut bytes), image::ImageOutputFormat::Png);
+
+            let tempdir = std::env::temp_dir()
+                .join(&pdf_grundbuch_von)
+                .join(&pdf_blatt);
+            let _ = std::fs::create_dir_all(&tempdir);
+            let _ = std::fs::write(tempdir.join(&image_filename), &bytes);
+            let pnm_bytes = match crate::digital::read_png_and_convert_to_bmp(
+                &tempdir.join(&image_filename),
+            ) {
+                Some(b) => b,
+                None => return,
+            };
+
+
+            println!("rendering HOCR!");
+
+            // HOCR RENDERING
+            let target_path = tempdir.join(format!("{seite}.hocr.json"));
+            if !target_path.exists() && render_hocr {
+                let hocr = match tesseract_get_hocr(&pnm_bytes) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        tinyfiledialogs::message_box_ok(
+                            &format!("Fehler beim OCR von {image_filename}"),
+                            &format!("{e}"),
+                            MessageBoxIcon::Error,
+                        );
+                        return;
+                    }
+                };
+
+                println!("writing hocr {}", target_path.display());
+
+                let _ = std::fs::write(
+                    &target_path,
+                    serde_json::to_string_pretty(&hocr).unwrap_or_default(),
+                );
+            }
+
+            println!("ok, hocr + image rendered!");
+        }
     );
 
     Ok(())
