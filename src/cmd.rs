@@ -229,15 +229,6 @@ pub enum Cmd {
     SetOpenFile { new_file: String },
     #[serde(rename = "set_open_page")]
     SetOpenPage { active_page: u32 },
-    #[serde(rename = "signal_pdf_page_rendered")]
-    SignalPdfPageRendered {
-        pdf_amtsgericht: String,
-        pdf_grundbuch_von: String,
-        pdf_blatt: String,
-        seite: usize,
-        image_data_base64: String,
-        render_hocr: bool,
-    },
     #[serde(rename = "check_for_grundbuch_loaded")]
     CheckForGrundbuchLoaded,
     #[serde(rename = "open_script")]
