@@ -134,6 +134,24 @@ let rpc = {
   set_active_ribbon_tab: function(arg) { rpc.invoke({ cmd : 'set_active_ribbon_tab', new_tab: arg }); },
   set_open_file: function(arg) { rpc.invoke({ cmd : 'set_open_file', new_file: arg }); },
   set_open_page: function(arg) { rpc.invoke({ cmd : 'set_open_page', active_page: arg }); },
+  signal_pdf_page_rendered: function(
+    pdf_amtsgericht,
+    pdf_grundbuch_von,
+    pdf_blatt,
+    seite,
+    image_data_base64,
+    render_hocr,
+    ) {
+        rpc.invoke({
+        cmd : 'signal_pdf_page_rendered',
+        pdf_amtsgericht: pdf_amtsgericht,
+        pdf_grundbuch_von: pdf_grundbuch_von,
+        pdf_blatt: pdf_blatt,
+        seite: seite,
+        image_data_base64: image_data_base64,
+        render_hocr: render_hocr,
+        });
+    },
 };
 
 let tab_functions = {
@@ -192,12 +210,6 @@ setInterval(function(){
     }
 }, 100);
 
-function delay(milliseconds){
-    return new Promise(resolve => {
-        setTimeout(resolve, milliseconds);
-    });
-}
-
 // Renders a PDF page to an image using PdfJS, returns a String
 async function renderPdfPage(
     pdf_base64,
@@ -210,7 +222,6 @@ async function renderPdfPage(
   
   var pdf_bytes = atob(pdf_base64);
   var loadingTask = pdfjsLib.getDocument({data: pdf_bytes});
-  var dataUrl = null;
 
   await loadingTask.promise.then(function(pdf) {
 
@@ -229,18 +240,18 @@ async function renderPdfPage(
             transform: [resolution, 0, 0, resolution, 0, 0]
         });
         rendertask.promise.then(function() {
-            dataUrl = canvasorig.toDataURL("image/png");
+            var dataURL = canvasorig.toDataURL("image/png");
+            rpc.signal_pdf_page_rendered(
+                pdf_amtsgericht,
+                pdf_grundbuch_von,
+                pdf_blatt,
+                seite,
+                dataURL,
+                skip_hocr,
+            );
         });
     });
   });
-
-  while(!dataUrl) {
-    await delay(100);
-  }
-
-  console.log(dataUrl);
-
-  return dataUrl;
 }
 
 function openScript(script) {
