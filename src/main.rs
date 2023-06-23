@@ -6945,6 +6945,7 @@ fn main() -> wry::Result<()> {
         include_str!("css/webkit-normalize.css"),
         include_str!("css/view-grundbuch.css")
     );
+    let main_css_base64 = base64::encode(main_css.as_bytes());
 
     let main_script = include_str!("view.js")
         .replace(
@@ -6954,7 +6955,8 @@ fn main() -> wry::Result<()> {
         .replace(
             "// INJECT_PDFJS_SCRIPT",
             include_str!("../bin/pdfjs-3.0.279-legacy-dist/build/pdf.js"),
-        );
+        )
+        .replacen("INJECT_CSS_SCRIPT", &main_css_base64, 1);
 
     let main_html = format!(
         "
@@ -6977,7 +6979,7 @@ fn main() -> wry::Result<()> {
 
     let webview = WebViewBuilder::new(window)?
         .with_html(main_html)?
-        .with_devtools(false)
+        .with_devtools(true)
         .with_navigation_handler(|s| s != "http://localhost/?") // ??? - bug?
         .with_ipc_handler(move |_window, cmd| match serde_json::from_str(&cmd) {
             Ok(o) => {
@@ -6990,6 +6992,8 @@ fn main() -> wry::Result<()> {
         .with_clipboard(true)
         .with_initialization_script(&main_script)
         .build()?;
+
+    webview.open_devtools();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

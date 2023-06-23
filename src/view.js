@@ -3,6 +3,7 @@
 
 // INJECT_PDFJS_WORKER_SCRIPT
 // INJECT_PDFJS_SCRIPT
+let main_css = "INJECT_CSS_SCRIPT";
 
 let rpc = {
     
@@ -466,13 +467,13 @@ function logInfo(info) {
 
 // Function called from Rust on init to initialize the entire screen
 function replaceEntireScreen(html) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     document.body.innerHTML = html;
     document.getElementById('global-css').innerHTML = style;
 }
 
 function replaceMainContainer(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let ribbon = document.getElementById("__application-main-container");
     if (ribbon)
          ribbon.innerHTML = s;
@@ -480,7 +481,7 @@ function replaceMainContainer(s) {
 }
 
 function replaceRibbon(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let ribbon = document.getElementById("__application-ribbon");
     if (ribbon)
          ribbon.innerHTML = s;
@@ -488,7 +489,7 @@ function replaceRibbon(s) {
 }
 
 function replaceMain(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let ribbon = document.getElementById("__application-main");
     if (ribbon)
          ribbon.innerHTML = s;
@@ -496,7 +497,7 @@ function replaceMain(s) {
 }
 
 function replaceFileList(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let file_list = document.getElementById("__application-file-list");
     if (file_list)
          file_list.innerHTML = s;
@@ -505,7 +506,7 @@ function replaceFileList(s) {
 }
 
 function replacePageImage(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let page_list = document.getElementById("__application-pdf-page-image");
     if (page_list)
          page_list.innerHTML = s;
@@ -513,7 +514,7 @@ function replacePageImage(s) {
 }
 
 function replacePageList(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let page_list = document.getElementById("__application-page-list");
     if (page_list)
          page_list.innerHTML = s;
@@ -521,7 +522,7 @@ function replacePageList(s) {
 }
 
 function replaceBestandsverzeichnis(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-bestandsverzeichnis");
     if (e)
         e.innerHTML = s;
@@ -529,7 +530,7 @@ function replaceBestandsverzeichnis(s) {
 }
 
 function replaceMainNoFiles(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-main-no-files");
     if (e)
         e.innerHTML = s;
@@ -537,7 +538,7 @@ function replaceMainNoFiles(s) {
 }
 
 function replaceBestandsverzeichnisZuschreibungen(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-bestandsverzeichnis-veraenderungen");
     if (e)
         e.innerHTML = s;
@@ -545,7 +546,7 @@ function replaceBestandsverzeichnisZuschreibungen(s) {
 }
 
 function replaceBestandsverzeichnisAbschreibungen(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-bestandsverzeichnis-loeschungen");
     if (e)
         e.innerHTML = s;
@@ -553,7 +554,7 @@ function replaceBestandsverzeichnisAbschreibungen(s) {
 }
 
 function replaceAbt1(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-abteilung-1");
     if (e)
         e.innerHTML = s;
@@ -569,7 +570,7 @@ function editKonfigurationTextField(event) {
 }
 
 function replaceAenderungDateien(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application_aenderung_dateien");
     if (e)
         e.innerHTML = s;
@@ -577,7 +578,7 @@ function replaceAenderungDateien(s) {
 }
 
 function replaceAenderungDiff(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application_aenderungen_diff");
     if (e)
         e.innerHTML = s;
@@ -585,7 +586,7 @@ function replaceAenderungDiff(s) {
 }
 
 function replaceAbt1GrundlagenEintragungen(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-abteilung-1-grundlagen-eintragungen");
     if (e)
         e.innerHTML = s;    
@@ -601,7 +602,7 @@ function grundbuchSuchen(e) {
 }
 
 function replaceSuchergebnisse(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application_grundbuch_suchen_suchergebnisse");
     if (e) {
         e.innerHTML = s;
@@ -686,7 +687,7 @@ function replaceAbt3Loeschungen(s) {
 }
 
 function replaceAnalyseGrundbuch(s) {
-    var style = document.getElementById('global-css').innerHTML;
+    var style = atob(main_css);
     let e = document.getElementById("__application-analyse-grundbuch");
     if (e)
         e.innerHTML = s;
