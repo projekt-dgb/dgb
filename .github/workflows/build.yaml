@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'master'
+      - 'test'
     tags:
       # this is _not_ a regex, see: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
       - '[0-9]+.[0-9]+.[0-9]+*'

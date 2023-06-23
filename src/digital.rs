@@ -798,13 +798,13 @@ pub fn konvertiere_pdf_seite_zu_png_prioritaet(
             // HOCR RENDERING
             let target_path = tempdir.join(format!("{seite}.hocr.json"));
             if !target_path.exists() && render_hocr {
-                let hocr = match tesseract_get_hocr(&pnm_bytes) {
+                let hocr = match crate::tesseract_get_hocr(&pnm_bytes) {
                     Ok(o) => o,
                     Err(e) => {
                         tinyfiledialogs::message_box_ok(
                             &format!("Fehler beim OCR von {image_filename}"),
                             &format!("{e}"),
-                            MessageBoxIcon::Error,
+                            tinyfiledialogs::MessageBoxIcon::Error,
                         );
                         return;
                     }
